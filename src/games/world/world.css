@@ -1206,27 +1206,6 @@
 .result-overlay {
   overflow: hidden;
 }
-.confetti {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-.confetti span {
-  position: absolute;
-  top: -20px;
-  animation-name: confetti-fall;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-}
-@keyframes confetti-fall {
-  0% {
-    transform: translate(0, -20px) rotate(0deg);
-  }
-  100% {
-    transform: translate(var(--drift), 105vh) rotate(var(--spin));
-  }
-}
 .world-result {
   position: relative;
   text-align: center;
@@ -1271,9 +1250,6 @@
 }
 
 /* ---------------------------------------------------------------- 설정 화면 */
-.setup-back {
-  align-self: flex-start;
-}
 .world-hero {
   position: relative;
   overflow: hidden;
@@ -1327,22 +1303,12 @@
   color: var(--text-muted);
   font-size: 14px;
 }
-.world-options select,
-.inline-select {
+.world-options select {
   padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface-2);
   color: var(--text);
-}
-.inline-select {
-  margin-left: 8px;
-  padding: 2px 6px;
-  font-size: 14px;
-}
-.sub-title {
-  margin: 20px 0 10px;
-  font-size: 16px;
 }
 .rule-grid.end-modes {
   grid-template-columns: 1fr;
@@ -1397,8 +1363,7 @@
   .cp-globe,
   .world-hero-globe,
   .btn-roll-big:not(:disabled),
-  .tile-festival,
-  .confetti span {
+  .tile-festival {
     animation: none;
   }
 }

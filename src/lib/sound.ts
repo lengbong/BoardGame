@@ -137,4 +137,38 @@ export const sfx = {
   bankrupt() {
     [392, 370, 349, 262].forEach((f, i) => tone(f, i * 0.22, i === 3 ? 0.6 : 0.24, 'sawtooth', 0.06));
   },
+  /** 카드를 탁 내려놓는 소리 */
+  cardPlay() {
+    burst(0, 0.06, 2600, 1.4, 0.32);
+    tone(196, 0, 0.07, 'triangle', 0.1, 120);
+  },
+  /** 카드를 스르륵 뽑는 소리. n장이면 n번 */
+  cardDraw(n = 1) {
+    for (let i = 0; i < Math.min(n, 6); i++) burst(i * 0.07, 0.11, 900, 1.1, 0.16, 2800);
+  },
+  shuffle() {
+    for (let i = 0; i < 12; i++) burst(i * 0.035 + Math.random() * 0.01, 0.045, 1800 + Math.random() * 1800, 3, 0.18);
+  },
+  /** '한 장 남았다!' 외치는 소리 */
+  shout() {
+    [784, 988, 1175].forEach((f, i) => tone(f, i * 0.07, 0.12, 'square', 0.045));
+    tone(1568, 0.21, 0.3, 'triangle', 0.1);
+  },
+  skip() {
+    tone(587, 0, 0.1, 'square', 0.04);
+    tone(392, 0.1, 0.2, 'square', 0.04);
+  },
+  reverse() {
+    tone(380, 0, 0.22, 'sine', 0.1, 900);
+    tone(900, 0.18, 0.22, 'sine', 0.08, 380);
+  },
+  /** 색 바꾸기 */
+  wild() {
+    [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, i * 0.05, 0.16, 'sine', 0.08));
+  },
+  /** 카드를 여러 장 받거나 벌칙을 받을 때 */
+  penalty() {
+    tone(330, 0, 0.16, 'sawtooth', 0.05, 250);
+    tone(250, 0.15, 0.3, 'sawtooth', 0.05, 160);
+  },
 };

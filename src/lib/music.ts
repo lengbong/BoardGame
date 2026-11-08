@@ -1,15 +1,27 @@
 import { getAudioContext, noiseBuffer } from './sound';
 
 /**
- * 직접 작곡한 짧은 여행풍 배경음악 (16마디 반복, 다장조, 112 BPM).
+ * 직접 작곡한 짧은 배경음악들 (각 16마디 반복).
+ * - travel: 여행풍 (다장조, 112 BPM) — 지구 한 바퀴
+ * - party: 통통 튀는 카드놀이풍 (사장조, 128 BPM) — 한 장 남았다!
  * WebAudio로 실시간 합성하므로 음원 파일이 필요 없다.
  */
 
-const BPM = 112;
-const EIGHTH = 60 / BPM / 2;
 const STEPS_PER_BAR = 8;
 
 type Bar = { chord: number[]; bass: number; melody: (number | null)[]; chord2?: number[]; bass2?: number };
+
+export type SongId = 'travel' | 'party';
+
+interface Song {
+  bpm: number;
+  bars: Bar[];
+  /** 멜로디 음색과 크기 */
+  lead: OscillatorType;
+  leadVolume: number;
+  /** 멜로디 음 길이 (8분음표 배수) */
+  leadLength: number;
+}
 
 const C = [60, 64, 67];
 const Am = [57, 60, 64];
@@ -19,7 +31,7 @@ const Em = [55, 59, 64];
 const Dm = [57, 62, 65];
 const _ = null;
 
-const SONG: Bar[] = [
+const TRAVEL: Bar[] = [
   { chord: C, bass: 48, melody: [76, _, 79, _, 81, 79, 76, _] },
   { chord: Am, bass: 45, melody: [72, _, 76, _, 74, 72, 69, _] },
   { chord: F, bass: 41, melody: [69, _, 72, _, 77, 76, 72, _] },
@@ -38,6 +50,35 @@ const SONG: Bar[] = [
   { chord: G, bass: 43, melody: [74, _, 67, _, 71, _, 74, _] },
 ];
 
+// 사장조에서 더 쓰는 화음 (G, Em, Am은 위와 같다)
+const C2 = [55, 60, 64];
+const D = [54, 57, 62];
+const Bm = [54, 59, 62];
+
+const PARTY: Bar[] = [
+  { chord: G, bass: 43, melody: [74, _, 71, 74, 79, _, 78, 76] },
+  { chord: Em, bass: 40, melody: [76, _, 71, 76, 79, _, 76, _] },
+  { chord: C2, bass: 48, melody: [72, 74, 76, _, 79, _, 76, 74] },
+  { chord: D, bass: 38, melody: [74, _, _, 69, 74, _, _, _] },
+  { chord: G, bass: 43, melody: [74, _, 71, 74, 79, _, 81, 83] },
+  { chord: Em, bass: 40, melody: [83, _, 81, 79, 76, _, 79, _] },
+  { chord: C2, bass: 48, chord2: D, bass2: 38, melody: [76, 74, 72, 74, 76, _, 78, _] },
+  { chord: G, bass: 43, melody: [79, _, 74, _, 67, _, _, _] },
+  { chord: C2, bass: 48, melody: [76, _, 76, 74, 72, _, 76, _] },
+  { chord: D, bass: 38, melody: [78, _, 78, 76, 74, _, 78, _] },
+  { chord: Bm, bass: 47, melody: [78, _, 74, _, 71, _, 74, 78] },
+  { chord: Em, bass: 40, melody: [79, _, 76, _, 71, _, 76, 79] },
+  { chord: Am, bass: 45, melody: [81, _, 79, 76, 72, _, 76, _] },
+  { chord: D, bass: 38, melody: [78, _, 81, _, 86, _, 81, 78] },
+  { chord: G, bass: 43, chord2: Em, bass2: 40, melody: [79, 78, 76, 74, 76, _, 79, _] },
+  { chord: D, bass: 38, melody: [74, _, 78, _, 81, _, 78, 74] },
+];
+
+const SONGS: Record<SongId, Song> = {
+  travel: { bpm: 112, bars: TRAVEL, lead: 'triangle', leadVolume: 0.32, leadLength: 1.8 },
+  party: { bpm: 128, bars: PARTY, lead: 'square', leadVolume: 0.09, leadLength: 0.9 },
+};
+
 const ARP = [0, 2, 1, 2, 0, 2, 1, 2];
 
 function freq(midi: number): number {
@@ -45,6 +86,7 @@ function freq(midi: number): number {
 }
 
 let master: GainNode | null = null;
+let playing: SongId | null = null;
 let timer: number | null = null;
 let step = 0;
 let nextTime = 0;
@@ -87,8 +129,9 @@ function kick(ac: AudioContext, out: AudioNode, t: number): void {
   osc.stop(t + 0.2);
 }
 
-function scheduleStep(ac: AudioContext, out: AudioNode, s: number, t: number): void {
-  const bar = SONG[Math.floor(s / STEPS_PER_BAR) % SONG.length];
+function scheduleStep(ac: AudioContext, out: AudioNode, song: Song, s: number, t: number): void {
+  const EIGHTH = 60 / song.bpm / 2;
+  const bar = song.bars[Math.floor(s / STEPS_PER_BAR) % song.bars.length];
   const i = s % STEPS_PER_BAR;
   const secondHalf = i >= 4 && bar.chord2;
   const chord = secondHalf ? bar.chord2! : bar.chord;
@@ -97,7 +140,7 @@ function scheduleStep(ac: AudioContext, out: AudioNode, s: number, t: number): v
   // 멜로디 (마림바 느낌)
   const m = bar.melody[i];
   if (m !== null) {
-    note(ac, out, m, t, EIGHTH * 1.8, 'triangle', 0.32);
+    note(ac, out, m, t, EIGHTH * song.leadLength, song.lead, song.leadVolume);
     note(ac, out, m + 12, t, EIGHTH * 0.9, 'sine', 0.06);
   }
   // 분산화음
@@ -114,9 +157,17 @@ function scheduleStep(ac: AudioContext, out: AudioNode, s: number, t: number): v
   }
 }
 
-export function startMusic(volume = 0.16): void {
+export function startMusic(songId: SongId = 'travel', volume = 0.16): void {
   const ac = getAudioContext();
-  if (!ac || timer !== null) return;
+  if (!ac) return;
+  if (timer !== null) {
+    if (playing === songId) return;
+    stopMusic();
+  }
+  if (playing !== songId) step = 0;
+  playing = songId;
+  const song = SONGS[songId];
+  const EIGHTH = 60 / song.bpm / 2;
   master = ac.createGain();
   master.gain.setValueAtTime(0.0001, ac.currentTime);
   master.gain.exponentialRampToValueAtTime(volume, ac.currentTime + 1.2);
@@ -127,7 +178,7 @@ export function startMusic(volume = 0.16): void {
     // 탭이 백그라운드였다가 돌아오면 밀린 음을 한꺼번에 내지 않고 건너뛴다.
     if (nextTime < ac.currentTime - 0.05) nextTime = ac.currentTime + 0.05;
     while (nextTime < ac.currentTime + 0.2) {
-      scheduleStep(ac, out, step, nextTime);
+      scheduleStep(ac, out, song, step, nextTime);
       step += 1;
       nextTime += EIGHTH;
     }

@@ -10,6 +10,7 @@ const SETTINGS_KEY = 'family-boardgame.world.settings.v1';
 export interface WorldSettings {
   speed: Speed;
   muted: boolean;
+  music: boolean;
 }
 
 export interface SavedWorldGame {
@@ -73,15 +74,15 @@ export function saveLastWorldSetup(setup: WorldSetup): void {
 
 export function loadWorldSettings(): WorldSettings {
   const s = loadJson<Partial<WorldSettings>>(SETTINGS_KEY);
-  return { speed: parseSpeed(s?.speed), muted: s?.muted === true };
+  return { speed: parseSpeed(s?.speed), muted: s?.muted === true, music: s?.music !== false };
 }
 
 export function saveWorldSettings(settings: WorldSettings): void {
   saveJson(SETTINGS_KEY, settings);
 }
 
-export const WORLD_DELAYS: Record<Speed, { dice: number; think: number; step: number }> = {
-  normal: { dice: 600, think: 900, step: 150 },
-  fast: { dice: 300, think: 350, step: 70 },
-  turbo: { dice: 40, think: 30, step: 10 },
+export const WORLD_DELAYS: Record<Speed, { dice: number; think: number; step: number; banner: boolean }> = {
+  normal: { dice: 950, think: 900, step: 210, banner: true },
+  fast: { dice: 480, think: 380, step: 110, banner: true },
+  turbo: { dice: 40, think: 30, step: 12, banner: false },
 };

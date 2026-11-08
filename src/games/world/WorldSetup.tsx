@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { SeatPicker } from '../../components/SeatPicker';
 import { activeSeatCount } from '../common/players';
 import { SPEEDS, SPEED_LABELS, type Speed } from '../common/speed';
+import { CityArt } from './art/cities';
+import { GlobeLogo } from './art/tiles';
 import type { SavedWorldGame, WorldSettings } from './storage';
 import type { EndMode, WorldSetup as Setup } from './types';
 
@@ -14,6 +16,8 @@ interface WorldSetupProps {
   onResume: () => void;
   onBack: () => void;
 }
+
+const HERO_CITIES = ['seoul', 'paris', 'cairo', 'tokyo', 'newyork', 'sydney'];
 
 const END_MODES: { value: EndMode; title: string; desc: string }[] = [
   { value: 'rounds', title: '정해진 라운드까지', desc: '라운드가 끝나면 총자산(돈 + 땅 + 건물)이 많은 순서로 순위를 정해요.' },
@@ -29,13 +33,21 @@ export function WorldSetup({ initialSetup, saved, settings, onSettings, onStart,
 
   return (
     <div className="setup">
-      <header className="setup-header">
-        <button type="button" className="btn btn-ghost" onClick={onBack}>
-          ← 게임 목록
-        </button>
-        <div>
-          <h1>🌏 지구 한 바퀴</h1>
-          <p>세계 22개 도시를 여행하며 땅을 사고 건물을 지어요. 다른 사람이 내 도시에 오면 통행료를 받아요!</p>
+      <button type="button" className="btn btn-ghost setup-back" onClick={onBack}>
+        ← 게임 목록
+      </button>
+      <header className="world-hero">
+        <div className="world-hero-strip" aria-hidden="true">
+          {HERO_CITIES.map((id) => (
+            <CityArt key={id} id={id} className="world-hero-art" />
+          ))}
+        </div>
+        <div className="world-hero-title">
+          <GlobeLogo className="world-hero-globe" />
+          <div>
+            <h1>지구 한 바퀴</h1>
+            <p>세계 22개 도시를 여행하며 땅을 사고 건물을 지어요. 다른 사람이 내 도시에 오면 통행료를 받아요!</p>
+          </div>
         </div>
       </header>
 

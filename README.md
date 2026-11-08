@@ -44,16 +44,15 @@
 - 돈이 모자라면 건물·땅을 반값에 자동으로 팔고, 그래도 모자라면 파산
 - 끝내는 방법 선택: 정해진 라운드 / 한 명 파산하면 끝 / 끝까지
 - 조작: 주사위는 버튼 또는 `Space`, 카드 확인은 `Enter`, 도시 칸을 클릭하면 자세한 정보
+- 📖 도시 도감: 22개 도시의 그림·땅값·주인을 한눈에
 
-## 이미지 출처
+**그림과 소리**
 
-"지구 한 바퀴"의 도시 사진은 모두 [위키미디어 공용](https://commons.wikimedia.org/)의 자유 라이선스 이미지
-(퍼블릭 도메인, CC0, CC BY, CC BY-SA, 공공누리 제1유형)를 판에 맞게 잘라 크기를 줄인 것입니다.
-
-- 사진마다 저작자·라이선스·원본 주소는 게임 안 **🖼️ 이미지 출처** 버튼과
-  [`src/games/world/imageCredits.ts`](src/games/world/imageCredits.ts)에 있습니다.
-- `src/games/world/assets/cities/`의 사진은 이 저장소의 코드와 별개로 **각 원본의 라이선스**를 따릅니다.
-- 사진을 바꾸려면 `scripts/fetch-city-images.py`의 `CITIES`를 고치고 `python3 scripts/fetch-city-images.py`를 실행합니다. (Pillow 필요)
+- 도시 명소·특수 칸·말·건물은 모두 이 프로젝트에서 직접 그린 SVG 일러스트입니다. (`src/games/world/art/`)
+- 배경음악은 직접 작곡한 곡을 WebAudio로 실시간 합성하고(`src/lib/music.ts`), 효과음도 모두 합성음입니다.
+  음악과 효과음은 각각 켜고 끌 수 있습니다.
+- 3D로 굴러가는 주사위, 칸마다 깡충 뛰는 말, 돈이 오갈 때 떠오르는 숫자, 건물이 올라가는 연출,
+  뒤집히는 여행 카드, 차례 알림, 우승 꽃가루 효과가 있습니다. (속도 '아주 빠르게'에서는 일부 생략)
 
 ## 자동 빌드와 배포
 
@@ -101,10 +100,9 @@ src/
     ai.ts                 컴퓨터 플레이어
     board.ts              판 좌표
     RaceGame.tsx …        화면
-  games/world/            지구 한 바퀴 (같은 구조 + 도시 사진)
-  components/             공용 화면 조각 (주사위, 자리 선택)
-  lib/                    공용 도구 (저장, 효과음, 타이머)
-scripts/                  도시 사진 받기 스크립트
+  games/world/            지구 한 바퀴 (같은 구조, art/ 에 일러스트)
+  components/             공용 화면 조각 (주사위, 3D 주사위, 자리 선택)
+  lib/                    공용 도구 (저장, 효과음, 배경음악, 타이머)
 ```
 
 새 게임 추가: `src/games/<게임>/`에 컴포넌트를 만들고 `src/games/registry.ts`의 `GAMES`에 등록하면 처음 화면에 나타납니다.

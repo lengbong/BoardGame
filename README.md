@@ -34,6 +34,27 @@
 | 정확한 수로만 골인 | ✅ | ❌ |
 | 1등이 나오면 끝 | ❌ | ❌ |
 
+### 지구 한 바퀴 (2~4명)
+
+세계 22개 도시를 여행하며 땅을 사고 건물을 지어 통행료를 받는 부자 되기 게임입니다.
+
+- 주사위 2개, 더블이면 한 번 더 (세 번 연속이면 🛂 여권 분실)
+- 도시를 사면서 🏠 집 → 🏢 빌딩 → 🏨 호텔까지 지을 수 있고, 내 도시에 다시 오면 더 올릴 수 있음
+- 🧳 여행 카드 16종, 🎉 세계 축제(통행료 2배), ✈️ 비행기(원하는 칸으로 이동)
+- 돈이 모자라면 건물·땅을 반값에 자동으로 팔고, 그래도 모자라면 파산
+- 끝내는 방법 선택: 정해진 라운드 / 한 명 파산하면 끝 / 끝까지
+- 조작: 주사위는 버튼 또는 `Space`, 카드 확인은 `Enter`, 도시 칸을 클릭하면 자세한 정보
+
+## 이미지 출처
+
+"지구 한 바퀴"의 도시 사진은 모두 [위키미디어 공용](https://commons.wikimedia.org/)의 자유 라이선스 이미지
+(퍼블릭 도메인, CC0, CC BY, CC BY-SA, 공공누리 제1유형)를 판에 맞게 잘라 크기를 줄인 것입니다.
+
+- 사진마다 저작자·라이선스·원본 주소는 게임 안 **🖼️ 이미지 출처** 버튼과
+  [`src/games/world/imageCredits.ts`](src/games/world/imageCredits.ts)에 있습니다.
+- `src/games/world/assets/cities/`의 사진은 이 저장소의 코드와 별개로 **각 원본의 라이선스**를 따릅니다.
+- 사진을 바꾸려면 `scripts/fetch-city-images.py`의 `CITIES`를 고치고 `python3 scripts/fetch-city-images.py`를 실행합니다. (Pillow 필요)
+
 ## 자동 빌드와 배포
 
 `.github/workflows/build.yml`이 push할 때마다 실행됩니다.
@@ -74,12 +95,16 @@ npm run build      # dist/index.html 한 파일로 빌드
 src/
   App.tsx                 처음 화면 (게임 선택)
   games/registry.ts       게임 목록 — 새 게임은 여기에 추가
+  games/common/           여러 게임이 함께 쓰는 자리·속도 정의
   games/race/             말판 경주
     rules.ts              규칙 (순수 함수, UI와 분리)
     ai.ts                 컴퓨터 플레이어
     board.ts              판 좌표
     RaceGame.tsx …        화면
+  games/world/            지구 한 바퀴 (같은 구조 + 도시 사진)
+  components/             공용 화면 조각 (주사위, 자리 선택)
   lib/                    공용 도구 (저장, 효과음, 타이머)
+scripts/                  도시 사진 받기 스크립트
 ```
 
 새 게임 추가: `src/games/<게임>/`에 컴포넌트를 만들고 `src/games/registry.ts`의 `GAMES`에 등록하면 처음 화면에 나타납니다.

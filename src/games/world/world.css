@@ -1,0 +1,516 @@
+/* ---------- 지구 한 바퀴: 게임 화면 ---------- */
+.world-game {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+  height: calc(100vh - 32px);
+  max-width: 1440px;
+  margin: 0 auto;
+}
+.world-board-wrap {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 판: 9×9 칸. 칸 경계가 정확히 1/9 지점에 오도록 padding·gap 없이 칸 테두리로 구분 */
+.wb {
+  --wb-text: #2b2724;
+  --wb-muted: #6f675e;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  grid-template-rows: repeat(9, 1fr);
+  width: min(100%, calc(100vh - 32px));
+  aspect-ratio: 1;
+  background: #f3ead6;
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 3px #8b7f6a,
+    0 6px 20px rgba(60, 45, 20, 0.18);
+  overflow: hidden;
+  color: var(--wb-text);
+  user-select: none;
+}
+
+.sq {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #cfc6b4;
+  color: var(--wb-text);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.sq:disabled {
+  cursor: default;
+  color: var(--wb-text);
+  opacity: 1;
+}
+.sq:not(:disabled):hover {
+  z-index: 2;
+  transform: scale(1.04);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+.sq-owned {
+  border-width: 3px;
+}
+.sq-corner {
+  background: #fff6dc;
+}
+.sq-band {
+  width: 100%;
+  height: 5px;
+  flex: none;
+}
+.sq-img {
+  display: block;
+  width: 100%;
+  height: 46%;
+  object-fit: cover;
+  flex: none;
+}
+.sq-name {
+  max-width: 100%;
+  padding: 0 3px;
+  margin-top: 2px;
+  font-weight: 800;
+  font-size: clamp(10px, 1.35vh, 14px);
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sq-sub {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: clamp(9px, 1.2vh, 12px);
+  color: var(--wb-muted);
+  line-height: 1.2;
+}
+.sq-level {
+  font-size: clamp(11px, 1.5vh, 15px);
+}
+.sq-festival {
+  position: absolute;
+  top: 7px;
+  right: 3px;
+  font-size: clamp(12px, 1.8vh, 18px);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.4));
+}
+.sq-special {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+.sq-emoji {
+  font-size: clamp(18px, 3vh, 28px);
+  line-height: 1;
+}
+.sq-emoji.big {
+  font-size: clamp(22px, 4vh, 38px);
+}
+.sq-desc {
+  font-size: clamp(8px, 1.1vh, 11px);
+  color: var(--wb-muted);
+  line-height: 1.2;
+  padding: 0 4px;
+  text-align: center;
+}
+.sq-selectable {
+  z-index: 1;
+  outline: 3px solid #d9622b;
+  outline-offset: -3px;
+  animation: sq-pulse 1s ease-in-out infinite;
+}
+@keyframes sq-pulse {
+  50% {
+    outline-color: rgba(217, 98, 43, 0.3);
+  }
+}
+/* .sq:disabled 보다 뒤에 같은 우선순위로 두어 흐리게 보이도록 */
+.sq.sq-dim {
+  opacity: 0.4;
+}
+
+/* 가운데 영역 */
+.wb-center {
+  grid-row: 2 / 9;
+  grid-column: 2 / 9;
+  min-height: 0;
+  overflow-y: auto;
+  padding: clamp(8px, 1.6vh, 16px);
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 60%),
+    linear-gradient(160deg, #e9f4fb, #fdf6e7);
+}
+.center-panel {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(6px, 1.1vh, 10px);
+}
+.cp-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.cp-header h2 {
+  font-size: clamp(18px, 2.8vh, 26px);
+}
+.cp-round {
+  font-weight: 700;
+  color: var(--wb-muted);
+}
+.cp-turn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 3px solid;
+  border-radius: 12px;
+  font-size: clamp(15px, 2vh, 19px);
+}
+.cp-turn .tag {
+  background: rgba(0, 0, 0, 0.08);
+  color: #6f675e;
+}
+.cp-dice-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cp-dice-row .dice {
+  width: clamp(44px, 7vh, 66px);
+  height: clamp(44px, 7vh, 66px);
+}
+.cp-dice-row .btn-roll {
+  margin-left: 6px;
+}
+.cp-hint {
+  margin: 0;
+  font-weight: 700;
+  color: #4a433c;
+}
+.cp-recent {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: clamp(11px, 1.4vh, 14px);
+  color: #4a433c;
+}
+.cp-recent li {
+  padding: 1px 0;
+}
+.cp-recent li:first-child {
+  font-weight: 700;
+}
+
+.action-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e2d9c8;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(60, 45, 20, 0.08);
+}
+.action-title {
+  margin: 0;
+  font-weight: 800;
+}
+.select-title {
+  font-size: 17px;
+  color: #b34c1d;
+}
+.action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.action-buttons .btn {
+  flex-direction: column;
+  gap: 0;
+  min-width: 96px;
+}
+.action-buttons .btn small {
+  font-weight: 400;
+  font-size: 12px;
+}
+
+.city-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.city-card img {
+  width: clamp(120px, 20vh, 180px);
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  flex: none;
+}
+.city-card-body {
+  min-width: 0;
+}
+.city-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.city-card-title strong {
+  font-size: 20px;
+}
+.region-chip {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+.rent-table {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.rent-table td {
+  padding: 1px 8px 1px 0;
+}
+.rent-table tr.current {
+  font-weight: 800;
+  background: #fff3d6;
+}
+
+.travel-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 14px;
+  border: 3px dashed #d9622b;
+  border-radius: 16px;
+  background: #fffaf0;
+}
+.travel-card-emoji {
+  font-size: 44px;
+  line-height: 1.1;
+}
+.travel-card strong {
+  font-size: 20px;
+}
+.travel-card p {
+  margin: 6px 0 0;
+}
+
+/* 말 */
+.wb-tokens {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.wb-token {
+  position: absolute;
+  width: 3.4%;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid;
+  border-radius: 50%;
+  font-size: 10px;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+  transition:
+    left 0.14s ease-out,
+    top 0.14s ease-out;
+}
+.wb-token::after {
+  content: '';
+  position: absolute;
+  inset: 22%;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.75);
+}
+.wb-token-current {
+  z-index: 3;
+  animation: token-bounce 0.9s ease-in-out infinite;
+}
+@keyframes token-bounce {
+  50% {
+    transform: translate(-50%, -70%);
+  }
+}
+
+/* 오른쪽 패널 */
+.world-panel .players li {
+  align-items: flex-start;
+}
+.wp-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.wp-money {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+}
+.wp-money small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.is-bankrupt {
+  opacity: 0.5;
+}
+.is-bankrupt .player-name {
+  text-decoration: line-through;
+}
+
+/* 모달 */
+.modal-card {
+  width: 100%;
+  max-width: 520px;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 20px 24px;
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+.modal-wide {
+  max-width: 900px;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.modal-header h2 {
+  font-size: 22px;
+}
+.detail-img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 12px;
+}
+.detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.detail-credit {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.detail-credit a,
+.credits-list a {
+  color: inherit;
+}
+.credits-intro {
+  margin-top: 0;
+  color: var(--text-muted);
+}
+.credits-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.credits-list li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.credits-list img {
+  width: 96px;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 6px;
+  flex: none;
+}
+.credits-list div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+}
+.credits-list a {
+  word-break: break-all;
+}
+.result-assets {
+  margin-left: auto;
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+/* 설정 화면 */
+.world-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+.world-options label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.world-options select,
+.inline-select {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+.inline-select {
+  margin-left: 8px;
+  padding: 2px 6px;
+  font-size: 14px;
+}
+.sub-title {
+  margin: 20px 0 10px;
+  font-size: 16px;
+}
+.end-modes {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 1000px) {
+  .world-game {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .wb {
+    width: 100%;
+  }
+  .credits-list {
+    grid-template-columns: 1fr;
+  }
+}

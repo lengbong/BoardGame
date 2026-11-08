@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import { RaceApp } from './race/RaceApp';
+import { WorldApp } from './world/WorldApp';
 
 export interface GameEntry {
   id: string;
@@ -22,5 +23,14 @@ export const GAMES: GameEntry[] = [
     playTime: '20~40분',
     icon: '🎲',
     component: RaceApp,
+  },
+  {
+    id: 'world',
+    title: '지구 한 바퀴',
+    description: '세계 22개 도시를 여행하며 땅을 사고 건물을 지어요. 내 도시에 온 사람에게 통행료를 받는 부자 되기 게임!',
+    players: '2~4명 (컴퓨터 참가 가능)',
+    playTime: '30~60분',
+    icon: '🌏',
+    component: WorldApp,
   },
 ];

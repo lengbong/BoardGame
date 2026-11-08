@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import { LastCardApp } from './lastcard/LastCardApp';
 import { RaceApp } from './race/RaceApp';
 import { WorldApp } from './world/WorldApp';
 
@@ -32,5 +33,14 @@ export const GAMES: GameEntry[] = [
     playTime: '30~60분',
     icon: '🌏',
     component: WorldApp,
+  },
+  {
+    id: 'lastcard',
+    title: '한 장 남았다!',
+    description: '같은 색이나 같은 숫자 카드를 내려놓아 손에 든 카드를 먼저 다 내면 이겨요. 한 장 남으면 "한 장!"을 외치세요!',
+    players: '2~4명 (컴퓨터 참가 가능)',
+    playTime: '10~30분',
+    icon: '🃏',
+    component: LastCardApp,
   },
 ];

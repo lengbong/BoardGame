@@ -36,10 +36,6 @@
 
 ## 자동 빌드와 배포
 
-> **워크플로 활성화 (처음 한 번)**: 워크플로 파일은 권한 문제로 `ci/build.yml`에 들어 있습니다.
-> GitHub 웹에서 `ci/build.yml`을 열고 연필(✏️ Edit) 버튼 → 파일 이름 칸을 `.github/workflows/build.yml`로 바꿔 커밋하면
-> 그때부터 자동 빌드가 시작됩니다.
-
 `.github/workflows/build.yml`이 push할 때마다 실행됩니다.
 
 1. **모든 브랜치·PR**: 타입 검사 → 테스트 → 빌드 → zip을 Actions 아티팩트로 보관
@@ -48,8 +44,7 @@
    - GitHub Pages에 배포
 3. **`v*` 태그 push** (예: `v1.0.0`): 그 버전의 릴리스를 따로 만들어 보관
 
-> **처음 한 번만 설정**: 저장소 **Settings → Pages → Build and deployment → Source**를
-> **GitHub Actions**로 바꿔야 Pages 배포가 동작합니다. (설정 전에도 Releases 업로드는 정상 동작)
+> Pages 배포는 저장소 **Settings → Pages → Source**가 **GitHub Actions**로 되어 있어야 동작합니다. (설정 완료됨)
 
 ## 개발
 

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { SEAT_COLORS } from './board';
-import { CLASSIC_RULES, EASY_RULES, activeSeatCount } from './rules';
+import { SeatPicker } from '../../components/SeatPicker';
+import { activeSeatCount } from '../common/players';
+import { CLASSIC_RULES, EASY_RULES } from './rules';
 import { SPEED_LABELS, type SavedGame, type Settings, type Speed } from './storage';
-import type { GameSetup, RuleOptions, SeatIndex, SeatKind } from './types';
+import type { GameSetup, RuleOptions } from './types';
 
 interface SetupProps {
   initialSetup: GameSetup;
@@ -14,12 +15,6 @@ interface SetupProps {
   onBack: () => void;
 }
 
-const KIND_OPTIONS: { value: SeatKind; label: string }[] = [
-  { value: 'human', label: '사람' },
-  { value: 'ai-easy', label: '컴퓨터 (쉬움)' },
-  { value: 'ai-normal', label: '컴퓨터 (보통)' },
-  { value: 'empty', label: '비움' },
-];
 
 const RULE_TEXT: { key: keyof RuleOptions; title: string; desc: string }[] = [
   { key: 'needSixToEnter', title: '6이 나와야 출발', desc: '끄면 아무 수나 나와도 대기실에서 말을 꺼낼 수 있어요.' },
@@ -31,7 +26,6 @@ const RULE_TEXT: { key: keyof RuleOptions; title: string; desc: string }[] = [
   { key: 'stopAtFirstWinner', title: '1등이 나오면 끝', desc: '켜면 1등이 나오는 순간 게임이 끝나요. 끄면 끝까지 순위를 정해요.' },
 ];
 
-const SEATS: SeatIndex[] = [0, 1, 2, 3];
 
 function sameRules(a: RuleOptions, b: RuleOptions): boolean {
   return (Object.keys(a) as (keyof RuleOptions)[]).every((k) => a[k] === b[k]);
@@ -39,12 +33,8 @@ function sameRules(a: RuleOptions, b: RuleOptions): boolean {
 
 export function Setup({ initialSetup, saved, settings, onSettings, onStart, onResume, onBack }: SetupProps) {
   const [setup, setSetup] = useState<GameSetup>(initialSetup);
-  const count = activeSeatCount(setup);
+  const count = activeSeatCount(setup.seats);
 
-  const updateSeat = (i: SeatIndex, patch: Partial<GameSetup['seats'][number]>) => {
-    const seats = setup.seats.map((s, k) => (k === i ? { ...s, ...patch } : s)) as GameSetup['seats'];
-    setSetup({ ...setup, seats });
-  };
   const setRule = (key: keyof RuleOptions, value: boolean) => setSetup({ ...setup, rules: { ...setup.rules, [key]: value } });
 
   return (
@@ -76,45 +66,7 @@ export function Setup({ initialSetup, saved, settings, onSettings, onStart, onRe
 
       <section className="setup-section">
         <h2>누가 할까요?</h2>
-        <div className="seat-grid">
-          {SEATS.map((i) => {
-            const seat = setup.seats[i];
-            const c = SEAT_COLORS[i];
-            return (
-              <div key={i} className={`seat-card${seat.kind === 'empty' ? ' seat-empty' : ''}`} style={{ borderColor: c.main }}>
-                <div className="seat-head" style={{ background: c.main }}>
-                  {c.name}
-                </div>
-                <label>
-                  <span>참가</span>
-                  <select
-                    value={seat.kind}
-                    onChange={(e) => updateSeat(i, { kind: e.target.value as SeatKind })}
-                    data-testid={`seat-kind-${i}`}
-                  >
-                    {KIND_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>이름</span>
-                  <input
-                    type="text"
-                    value={seat.name}
-                    maxLength={8}
-                    placeholder={c.name}
-                    disabled={seat.kind === 'empty'}
-                    onChange={(e) => updateSeat(i, { name: e.target.value })}
-                  />
-                </label>
-              </div>
-            );
-          })}
-        </div>
-        {count < 2 && <p className="warn">2명 이상 참가해야 시작할 수 있어요.</p>}
+        <SeatPicker seats={setup.seats} onChange={(seats) => setSetup({ ...setup, seats })} />
       </section>
 
       <section className="setup-section">

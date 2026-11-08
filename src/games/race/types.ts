@@ -1,11 +1,6 @@
-export type SeatIndex = 0 | 1 | 2 | 3;
+import type { SeatIndex, SeatKind, Seats } from '../common/players';
 
-export type SeatKind = 'human' | 'ai-easy' | 'ai-normal' | 'empty';
-
-export interface SeatConfig {
-  kind: SeatKind;
-  name: string;
-}
+export type { SeatConfig, SeatIndex, SeatKind } from '../common/players';
 
 export interface RuleOptions {
   /** 6이 나와야 대기실에서 출발할 수 있다. 끄면 아무 수나 출발. */
@@ -25,7 +20,7 @@ export interface RuleOptions {
 }
 
 export interface GameSetup {
-  seats: [SeatConfig, SeatConfig, SeatConfig, SeatConfig];
+  seats: Seats;
   rules: RuleOptions;
 }
 

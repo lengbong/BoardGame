@@ -14,12 +14,7 @@ export interface Point {
   y: number;
 }
 
-export const SEAT_COLORS: Record<SeatIndex, { name: string; main: string; dark: string; light: string }> = {
-  0: { name: '빨강', main: '#e5484d', dark: '#a52a2f', light: '#fde8e8' },
-  1: { name: '초록', main: '#30a46c', dark: '#1d6b45', light: '#e3f6ec' },
-  2: { name: '노랑', main: '#f5b400', dark: '#9a6f00', light: '#fff6d6' },
-  3: { name: '파랑', main: '#3e63dd', dark: '#25409a', light: '#e6ecfd' },
-};
+export { SEAT_COLORS } from '../common/players';
 
 const center = (col: number, row: number): Point => ({ x: col + 0.5, y: row + 0.5 });
 

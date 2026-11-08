@@ -65,4 +65,18 @@ export const sfx = {
   noMove() {
     tone(220, 0, 0.18, 'sine', 0.1, 180);
   },
+  coin() {
+    tone(988, 0, 0.08, 'square', 0.06);
+    tone(1319, 0.07, 0.16, 'square', 0.06);
+  },
+  pay() {
+    tone(523, 0, 0.1, 'triangle', 0.1);
+    tone(392, 0.09, 0.18, 'triangle', 0.1);
+  },
+  card() {
+    tone(660, 0, 0.08, 'sine', 0.1);
+    tone(880, 0.08, 0.08, 'sine', 0.1);
+    tone(1175, 0.16, 0.14, 'sine', 0.1);
+  },
 };
+

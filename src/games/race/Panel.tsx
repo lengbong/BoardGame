@@ -1,9 +1,9 @@
 import { GOAL, SEAT_COLORS } from './board';
-import { Dice } from './Dice';
+import { Dice } from '../../components/Dice';
+import { KIND_LABEL } from '../common/players';
 import { SPEED_LABELS, type Speed } from './storage';
 import type { GameState } from './types';
 
-const KIND_LABEL = { human: '사람', 'ai-easy': '컴퓨터 · 쉬움', 'ai-normal': '컴퓨터 · 보통' } as const;
 const MEDALS = ['🥇', '🥈', '🥉', '4등'];
 
 interface PanelProps {

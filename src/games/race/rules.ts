@@ -43,10 +43,6 @@ export const EASY_RULES: RuleOptions = {
 
 const MAX_LOG = 60;
 
-export function activeSeatCount(setup: GameSetup): number {
-  return setup.seats.filter((s) => s.kind !== 'empty').length;
-}
-
 export function playerLabel(player: Player): string {
   return player.name || SEAT_COLORS[player.seat].name;
 }

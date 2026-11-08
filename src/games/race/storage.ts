@@ -6,7 +6,10 @@ const SAVE_KEY = 'family-boardgame.race.save.v1';
 const SETUP_KEY = 'family-boardgame.race.setup.v1';
 const SETTINGS_KEY = 'family-boardgame.race.settings.v1';
 
-export type Speed = 'normal' | 'fast' | 'turbo';
+import { parseSpeed, type Speed } from '../common/speed';
+
+export type { Speed } from '../common/speed';
+export { SPEED_LABELS } from '../common/speed';
 
 export interface Settings {
   speed: Speed;
@@ -75,7 +78,7 @@ export function saveLastSetup(setup: GameSetup): void {
 export function loadSettings(): Settings {
   const s = loadJson<Partial<Settings>>(SETTINGS_KEY);
   return {
-    speed: s?.speed === 'fast' || s?.speed === 'turbo' ? s.speed : 'normal',
+    speed: parseSpeed(s?.speed),
     muted: s?.muted === true,
   };
 }
@@ -88,10 +91,4 @@ export const SPEED_DELAYS: Record<Speed, { dice: number; think: number; step: nu
   normal: { dice: 600, think: 700, step: 170, pass: 1200 },
   fast: { dice: 300, think: 300, step: 80, pass: 600 },
   turbo: { dice: 40, think: 30, step: 12, pass: 60 },
-};
-
-export const SPEED_LABELS: Record<Speed, string> = {
-  normal: '보통',
-  fast: '빠르게',
-  turbo: '아주 빠르게',
 };

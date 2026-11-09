@@ -1,5 +1,5 @@
-import type { ReactElement } from 'react';
-import { CARD_COLORS, COLOR_INFO, cardLabel, type ColorShape } from './cards';
+import { shapeElement } from '../../components/shapes';
+import { CARD_COLORS, COLOR_INFO, cardLabel } from './cards';
 import type { Card, CardColor, CardKind } from './types';
 
 /**
@@ -11,33 +11,6 @@ import type { Card, CardColor, CardKind } from './types';
 
 const WILD_BG = '#262b3d';
 const WILD_EDGE = '#11141e';
-
-/** (cx, cy)를 가운데로 하는 반지름 r짜리 색 모양 */
-export function shapeElement(shape: ColorShape, cx: number, cy: number, r: number, fill: string, extra?: object): ReactElement {
-  switch (shape) {
-    case 'circle':
-      return <circle cx={cx} cy={cy} r={r * 0.85} fill={fill} {...extra} />;
-    case 'star': {
-      const pts = Array.from({ length: 10 }, (_, i) => {
-        const a = ((-90 + i * 36) * Math.PI) / 180;
-        const rr = i % 2 === 0 ? r : r * 0.45;
-        return `${(cx + rr * Math.cos(a)).toFixed(2)},${(cy + rr * Math.sin(a)).toFixed(2)}`;
-      });
-      return <polygon points={pts.join(' ')} fill={fill} {...extra} />;
-    }
-    case 'leaf':
-      return (
-        <path
-          d={`M0 ${-r} C${r * 0.95} ${-r * 0.45} ${r * 0.95} ${r * 0.45} 0 ${r} C${-r * 0.95} ${r * 0.45} ${-r * 0.95} ${-r * 0.45} 0 ${-r}Z`}
-          transform={`translate(${cx} ${cy}) rotate(35)`}
-          fill={fill}
-          {...extra}
-        />
-      );
-    case 'diamond':
-      return <polygon points={`${cx},${cy - r} ${cx + r * 0.75},${cy} ${cx},${cy + r} ${cx - r * 0.75},${cy}`} fill={fill} {...extra} />;
-  }
-}
 
 /** 네 가지 색 바람개비 (색 바꾸기 카드) */
 function Pinwheel({ cx, cy, r }: { cx: number; cy: number; r: number }) {

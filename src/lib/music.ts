@@ -4,6 +4,7 @@ import { getAudioContext, noiseBuffer } from './sound';
  * 직접 작곡한 짧은 배경음악들 (각 16마디 반복).
  * - travel: 여행풍 (다장조, 112 BPM) — 지구 한 바퀴
  * - party: 통통 튀는 카드놀이풍 (사장조, 128 BPM) — 한 장 남았다!
+ * - puzzle: 차분한 퍼즐풍 (바장조, 100 BPM) — 숫자 타일 줄세우기
  * WebAudio로 실시간 합성하므로 음원 파일이 필요 없다.
  */
 
@@ -11,7 +12,7 @@ const STEPS_PER_BAR = 8;
 
 type Bar = { chord: number[]; bass: number; melody: (number | null)[]; chord2?: number[]; bass2?: number };
 
-export type SongId = 'travel' | 'party';
+export type SongId = 'travel' | 'party' | 'puzzle';
 
 interface Song {
   bpm: number;
@@ -74,9 +75,35 @@ const PARTY: Bar[] = [
   { chord: D, bass: 38, melody: [74, _, 78, _, 81, _, 78, 74] },
 ];
 
+// 바장조 화음
+const FM = [53, 57, 60];
+const Dm2 = [53, 57, 62];
+const Bb = [53, 58, 62];
+const Gm = [55, 58, 62];
+
+const PUZZLE: Bar[] = [
+  { chord: FM, bass: 41, melody: [72, _, 69, _, 65, _, 69, 72] },
+  { chord: Dm2, bass: 38, melody: [74, _, 72, _, 69, _, 65, _] },
+  { chord: Bb, bass: 46, melody: [70, _, 74, _, 77, _, 74, 72] },
+  { chord: C2, bass: 48, melody: [72, _, _, _, 67, _, _, _] },
+  { chord: FM, bass: 41, melody: [72, _, 69, 72, 77, _, 76, 74] },
+  { chord: Am, bass: 45, melody: [72, _, 69, _, 64, _, 69, _] },
+  { chord: Bb, bass: 46, chord2: C2, bass2: 48, melody: [70, 69, 67, 69, 70, _, 72, _] },
+  { chord: FM, bass: 41, melody: [69, _, 65, _, _, _, _, _] },
+  { chord: Dm2, bass: 38, melody: [74, _, 74, 76, 77, _, 74, _] },
+  { chord: Gm, bass: 43, melody: [74, _, 70, _, 67, _, 70, 74] },
+  { chord: C2, bass: 48, melody: [76, _, 72, _, 67, _, 72, 76] },
+  { chord: FM, bass: 41, melody: [77, _, 72, _, 69, _, 72, _] },
+  { chord: Bb, bass: 46, melody: [74, _, 77, _, 81, _, 77, 74] },
+  { chord: Am, bass: 45, melody: [76, _, 72, _, 69, _, 72, _] },
+  { chord: Gm, bass: 43, chord2: C2, bass2: 48, melody: [70, 72, 74, 72, 70, _, 67, _] },
+  { chord: FM, bass: 41, melody: [65, _, 69, _, 72, _, _, _] },
+];
+
 const SONGS: Record<SongId, Song> = {
   travel: { bpm: 112, bars: TRAVEL, lead: 'triangle', leadVolume: 0.32, leadLength: 1.8 },
   party: { bpm: 128, bars: PARTY, lead: 'square', leadVolume: 0.09, leadLength: 0.9 },
+  puzzle: { bpm: 100, bars: PUZZLE, lead: 'triangle', leadVolume: 0.26, leadLength: 1.6 },
 };
 
 const ARP = [0, 2, 1, 2, 0, 2, 1, 2];

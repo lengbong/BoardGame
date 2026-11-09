@@ -1,9 +1,10 @@
+import type { ShapeKind } from '../../components/shapes';
 import type { Card, CardColor, CardKind, Rng } from './types';
 
 export const CARD_COLORS: CardColor[] = ['red', 'yellow', 'green', 'blue'];
 
 /** 색마다 모양을 하나씩 붙여서 색을 구별하기 어려운 사람도 알아볼 수 있게 한다. */
-export type ColorShape = 'circle' | 'star' | 'leaf' | 'diamond';
+export type ColorShape = ShapeKind;
 
 export const COLOR_INFO: Record<CardColor, { name: string; main: string; dark: string; light: string; shape: ColorShape }> = {
   red: { name: '빨강', main: '#e0463e', dark: '#9e2620', light: '#fde6e3', shape: 'circle' },

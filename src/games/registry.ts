@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import { LastCardApp } from './lastcard/LastCardApp';
 import { RaceApp } from './race/RaceApp';
+import { TilesApp } from './tiles/TilesApp';
 import { WorldApp } from './world/WorldApp';
 
 export interface GameEntry {
@@ -42,5 +43,14 @@ export const GAMES: GameEntry[] = [
     playTime: '10~30분',
     icon: '🃏',
     component: LastCardApp,
+  },
+  {
+    id: 'tiles',
+    title: '숫자 타일 줄세우기',
+    description: '같은 색 연속 숫자나 같은 숫자 다른 색으로 줄을 만들어요. 판의 타일을 뜯어 다시 조합하며 내 타일을 먼저 다 내면 이겨요!',
+    players: '2~4명 (컴퓨터 참가 가능)',
+    playTime: '20~40분',
+    icon: '🔢',
+    component: TilesApp,
   },
 ];

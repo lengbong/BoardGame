@@ -1,8 +1,33 @@
-import type { ComponentType } from 'react';
+import type { ComponentType, ReactNode } from 'react';
+import { createElement } from 'react';
+import { BoxesApp } from './boxes/BoxesApp';
+import { DominoApp } from './domino/DominoApp';
+import { DominoIcon } from './domino/DominoIcon';
+import { FourLineApp } from './fourline/FourLineApp';
 import { LastCardApp } from './lastcard/LastCardApp';
+import { MancalaApp } from './mancala/MancalaApp';
+import { MancalaIcon } from './mancala/MancalaIcon';
+import { MemoryApp } from './memory/MemoryApp';
+import { OldMaidApp } from './oldmaid/OldMaidApp';
 import { RaceApp } from './race/RaceApp';
+import { ReversiApp } from './reversi/ReversiApp';
+import { ReversiIcon } from './reversi/ReversiIcon';
+import { SevensApp } from './sevens/SevensApp';
+import { ShipsApp } from './ships/ShipsApp';
+import { SudokuApp } from './sudoku/SudokuApp';
 import { TilesApp } from './tiles/TilesApp';
 import { WorldApp } from './world/WorldApp';
+
+export type GameCategory = 'board' | 'cards' | 'duel' | 'paper' | 'puzzle';
+
+/** 처음 화면에서 게임을 묶어 보여 주는 순서와 제목 */
+export const CATEGORIES: { id: GameCategory; title: string }[] = [
+  { id: 'board', title: '🎲 말판·주사위' },
+  { id: 'cards', title: '🃏 카드·타일' },
+  { id: 'duel', title: '♟️ 둘이서 수 싸움' },
+  { id: 'paper', title: '✏️ 종이·연필 놀이' },
+  { id: 'puzzle', title: '🧩 혼자 푸는 퍼즐' },
+];
 
 export interface GameEntry {
   id: string;
@@ -10,8 +35,9 @@ export interface GameEntry {
   description: string;
   players: string;
   playTime: string;
-  /** 카드에 보여줄 그림 (이모지) */
-  icon: string;
+  category: GameCategory;
+  /** 카드에 보여줄 그림 (이모지, 또는 이모지가 없는 게임은 직접 그린 SVG) */
+  icon: ReactNode;
   component: ComponentType<{ onExit: () => void }>;
 }
 
@@ -23,6 +49,7 @@ export const GAMES: GameEntry[] = [
     description: '주사위를 굴려 말 4개를 먼저 골인시키는 가족 경주 게임. 상대 말을 잡아 대기실로 돌려보낼 수 있어요!',
     players: '2~4명 (컴퓨터 참가 가능)',
     playTime: '20~40분',
+    category: 'board',
     icon: '🎲',
     component: RaceApp,
   },
@@ -32,6 +59,7 @@ export const GAMES: GameEntry[] = [
     description: '세계 22개 도시를 여행하며 땅을 사고 건물을 지어요. 내 도시에 온 사람에게 통행료를 받는 부자 되기 게임!',
     players: '2~4명 (컴퓨터 참가 가능)',
     playTime: '30~60분',
+    category: 'board',
     icon: '🌏',
     component: WorldApp,
   },
@@ -41,6 +69,7 @@ export const GAMES: GameEntry[] = [
     description: '같은 색이나 같은 숫자 카드를 내려놓아 손에 든 카드를 먼저 다 내면 이겨요. 한 장 남으면 "한 장!"을 외치세요!',
     players: '2~4명 (컴퓨터 참가 가능)',
     playTime: '10~30분',
+    category: 'cards',
     icon: '🃏',
     component: LastCardApp,
   },
@@ -50,7 +79,108 @@ export const GAMES: GameEntry[] = [
     description: '같은 색 연속 숫자나 같은 숫자 다른 색으로 줄을 만들어요. 판의 타일을 뜯어 다시 조합하며 내 타일을 먼저 다 내면 이겨요!',
     players: '2~4명 (컴퓨터 참가 가능)',
     playTime: '20~40분',
+    category: 'cards',
     icon: '🔢',
     component: TilesApp,
+  },
+  {
+    id: 'memory',
+    title: '짝 맞추기',
+    description: '뒤집힌 그림 카드를 두 장씩 뒤집어 같은 그림을 찾아요. 짝을 맞히면 한 번 더! 기억력 좋은 사람이 이겨요.',
+    players: '2~4명 (컴퓨터 참가 가능)',
+    playTime: '5~15분',
+    category: 'cards',
+    icon: '🧠',
+    component: MemoryApp,
+  },
+  {
+    id: 'oldmaid',
+    title: '도둑잡기',
+    description: '옆 사람 카드를 한 장씩 뽑아 같은 숫자 두 장을 버려요. 마지막까지 도둑(조커)을 들고 있는 사람이 져요!',
+    players: '2~4명 (컴퓨터 참가 가능)',
+    playTime: '5~15분',
+    category: 'cards',
+    icon: '🤡',
+    component: OldMaidApp,
+  },
+  {
+    id: 'sevens',
+    title: '칠 이어놓기',
+    description: '7을 가운데 놓고 같은 무늬로 위아래 숫자를 이어 내요. 낼 카드가 없으면 통과! 손에 든 카드를 먼저 다 내면 이겨요.',
+    players: '2~4명 (컴퓨터 참가 가능)',
+    playTime: '10~20분',
+    category: 'cards',
+    icon: '7️⃣',
+    component: SevensApp,
+  },
+  {
+    id: 'domino',
+    title: '도미노',
+    description: '끝 숫자가 같은 도미노 패를 이어 붙여요. 내 패를 먼저 다 내면 이기고, 다른 사람 손에 남은 점이 내 점수가 돼요!',
+    players: '2~4명 (컴퓨터 참가 가능)',
+    playTime: '10~30분',
+    category: 'cards',
+    icon: createElement(DominoIcon),
+    component: DominoApp,
+  },
+  {
+    id: 'reversi',
+    title: '뒤집기',
+    description: '상대 돌을 내 돌 사이에 끼우면 내 색으로 뒤집혀요. 판이 다 찼을 때 돌이 많은 쪽이 이겨요!',
+    players: '2명 (컴퓨터 상대 가능)',
+    playTime: '10~20분',
+    category: 'duel',
+    icon: createElement(ReversiIcon),
+    component: ReversiApp,
+  },
+  {
+    id: 'fourline',
+    title: '사목',
+    description: '세워진 판에 돌을 떨어뜨려 가로·세로·대각선으로 4개를 먼저 이으면 이겨요!',
+    players: '2명 (컴퓨터 상대 가능)',
+    playTime: '5~15분',
+    category: 'duel',
+    icon: '🔴',
+    component: FourLineApp,
+  },
+  {
+    id: 'mancala',
+    title: '만칼라',
+    description: '구멍의 씨앗을 한 알씩 뿌려 내 창고에 더 많이 모아요. 창고에서 끝나면 한 번 더, 빈 구멍에서 끝나면 건너편 씨앗을 가져와요!',
+    players: '2명 (컴퓨터 상대 가능)',
+    playTime: '10~20분',
+    category: 'duel',
+    icon: createElement(MancalaIcon),
+    component: MancalaApp,
+  },
+  {
+    id: 'boxes',
+    title: '점과 상자',
+    description: '점 사이에 선을 하나씩 그어요. 네 번째 선을 그어 상자를 완성하면 내 것이 되고 한 번 더! 상자가 많은 사람이 이겨요.',
+    players: '2~4명 (컴퓨터 참가 가능)',
+    playTime: '5~20분',
+    category: 'paper',
+    icon: '✏️',
+    component: BoxesApp,
+  },
+  {
+    id: 'ships',
+    title: '배 찾기',
+    description: '바다에 배를 숨기고 번갈아 좌표를 불러 상대 배를 찾아요. 상대 배를 먼저 모두 가라앉히면 이겨요!',
+    players: '2명 (컴퓨터 상대 가능)',
+    playTime: '15~30분',
+    category: 'paper',
+    icon: '🚢',
+    component: ShipsApp,
+  },
+  {
+    id: 'sudoku',
+    title: '스도쿠',
+    description: '가로줄·세로줄·3×3 칸마다 1~9를 겹치지 않게 채우는 숫자 퍼즐. 화면에서 풀거나 문제지를 인쇄해서 풀어요!',
+    players: '1명 (같이 풀어도 좋아요)',
+    playTime: '10~40분',
+    category: 'puzzle',
+    icon: '📝',
+    component: SudokuApp,
   },
 ];

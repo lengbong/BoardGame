@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useGameSettings } from '../common/settings';
 import { CheatGame } from './CheatGame';
 import { CheatSetupScreen } from './CheatSetup';
@@ -14,6 +14,11 @@ export function CheatApp({ onExit }: { onExit: () => void }) {
   const [saved, setSaved] = useState<SavedCheatGame | null>(loadSavedCheatGame);
   const [lastSetup, setLastSetup] = useState<CheatSetup>(loadCheatSetup);
   const [screen, setScreen] = useState<Screen>({ type: 'setup' });
+
+  // 설정 화면 맨 아래에서 시작해도 게임은 맨 위부터 보이게 (좁은 화면에서 판이 가려지지 않게)
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [screen]);
 
   const start = (setup: CheatSetup) => {
     saveCheatSetup(setup);

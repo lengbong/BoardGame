@@ -13,6 +13,8 @@ import { MancalaApp } from './mancala/MancalaApp';
 import { MancalaIcon } from './mancala/MancalaIcon';
 import { MemoryApp } from './memory/MemoryApp';
 import { OldMaidApp } from './oldmaid/OldMaidApp';
+import { OmokApp } from './omok/OmokApp';
+import { OmokIcon } from './omok/StoneArt';
 import { RaceApp } from './race/RaceApp';
 import { ReversiApp } from './reversi/ReversiApp';
 import { ReversiIcon } from './reversi/ReversiIcon';
@@ -167,6 +169,16 @@ export const GAMES: GameEntry[] = [
     category: 'duel',
     icon: createElement(MancalaIcon),
     component: MancalaApp,
+  },
+  {
+    id: 'omok',
+    title: '오목',
+    description: '흑과 백이 번갈아 바둑판에 돌을 놓아 가로·세로·대각선으로 다섯 개를 먼저 이으면 이겨요. 쌍삼 금지·렌주 규칙도 골라요!',
+    players: '2명 (컴퓨터 상대 가능)',
+    playTime: '5~20분',
+    category: 'duel',
+    icon: createElement(OmokIcon),
+    component: OmokApp,
   },
   {
     id: 'malang',

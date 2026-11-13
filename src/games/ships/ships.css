@@ -1,0 +1,1229 @@
+/* ================================================================
+   배 찾기 — 모든 클래스는 sh- 로 시작한다 (다른 게임과 겹치지 않게)
+   ================================================================ */
+
+.sh-scope {
+  --sh-sea-1: #c6e7f8;
+  --sh-sea-2: #8fc6e9;
+  --sh-wave: rgba(255, 255, 255, 0.6);
+  --sh-grid: rgba(22, 78, 120, 0.28);
+  --sh-frame: rgba(22, 78, 120, 0.6);
+  --sh-hull: #8f9aa7;
+  --sh-sub: #6d7886;
+  --sh-hull-edge: #2f3843;
+  --sh-deck: #c7d0d9;
+  --sh-dark: #46505c;
+  --sh-gun: #66717e;
+  --sh-wreck: rgba(32, 35, 40, 0.62);
+  --sh-zone: rgba(200, 40, 40, 0.38);
+  --sh-cursor: #d9622b;
+  --sh-last: #f08c00;
+  --sh-bad: #c92a2a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .sh-scope {
+    --sh-sea-1: #1f557a;
+    --sh-sea-2: #123852;
+    --sh-wave: rgba(255, 255, 255, 0.14);
+    --sh-grid: rgba(170, 215, 245, 0.2);
+    --sh-frame: rgba(170, 215, 245, 0.45);
+    --sh-hull: #9ba7b4;
+    --sh-sub: #7c8896;
+    --sh-hull-edge: #1b222b;
+    --sh-deck: #d0d8e0;
+    --sh-cursor: #ffa26b;
+    --sh-last: #ffd43b;
+    --sh-bad: #ff8787;
+  }
+}
+:root[data-theme='dark'] .sh-scope {
+  --sh-sea-1: #1f557a;
+  --sh-sea-2: #123852;
+  --sh-wave: rgba(255, 255, 255, 0.14);
+  --sh-grid: rgba(170, 215, 245, 0.2);
+  --sh-frame: rgba(170, 215, 245, 0.45);
+  --sh-hull: #9ba7b4;
+  --sh-sub: #7c8896;
+  --sh-hull-edge: #1b222b;
+  --sh-deck: #d0d8e0;
+  --sh-cursor: #ffa26b;
+  --sh-last: #ffd43b;
+  --sh-bad: #ff8787;
+}
+
+.sh-game kbd,
+.sh-result kbd,
+.sh-scope .how-to kbd {
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+.sh-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------- 게임 화면 배치 */
+.sh-game {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  height: calc(100vh - 32px);
+  min-height: 620px;
+}
+.sh-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  border-radius: var(--radius);
+}
+.sh-boards {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+/* ---------------------------------------------------------------- 판 카드 */
+.sh-board-card {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: calc(100vh - 170px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 3px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  transition: box-shadow 0.25s;
+}
+.sh-boards-target .sh-role-mine {
+  flex-grow: 0.72;
+  max-width: calc((100vh - 170px) * 0.72);
+}
+.sh-board-active {
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--side) 30%, transparent),
+    var(--shadow);
+}
+.sh-board-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  color: #fff;
+  background: var(--surface-2);
+  font-size: 15px;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
+  min-height: 34px;
+}
+.sh-role-blank .sh-board-head {
+  color: var(--text-muted);
+  text-shadow: none;
+}
+.sh-board-head strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sh-board-head span {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+.sh-board-body {
+  position: relative;
+  padding: 4px 8px 4px 2px;
+}
+.sh-board-foot {
+  padding: 2px 12px 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  min-height: 28px;
+}
+.sh-aim-name {
+  display: inline-block;
+  min-width: 2.4em;
+  color: var(--text);
+  font-size: 15px;
+}
+.sh-notice {
+  color: var(--sh-bad);
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------- 바다 (SVG) */
+.sh-board-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  overflow: hidden;
+}
+.sh-interactive {
+  cursor: crosshair;
+}
+.sh-sea-stop1 {
+  stop-color: var(--sh-sea-1);
+}
+.sh-sea-stop2 {
+  stop-color: var(--sh-sea-2);
+}
+.sh-wave {
+  fill: none;
+  stroke: var(--sh-wave);
+  stroke-width: 0.5;
+  stroke-linecap: round;
+}
+.sh-grid {
+  fill: none;
+  stroke: var(--sh-grid);
+  stroke-width: 0.35;
+}
+.sh-frame {
+  fill: none;
+  stroke: var(--sh-frame);
+  stroke-width: 0.6;
+}
+.sh-label text {
+  font-size: 4.2px;
+  font-weight: 700;
+  fill: var(--text-muted);
+  font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, sans-serif;
+}
+.sh-label .sh-label-on {
+  fill: var(--sh-cursor);
+  font-weight: 900;
+}
+.sh-hatch-line {
+  stroke: var(--sh-zone);
+  stroke-width: 1.1;
+}
+.sh-hit-area {
+  fill: transparent;
+}
+
+/* 배 */
+.sh-hull-body {
+  fill: var(--sh-hull);
+  stroke: var(--sh-hull-edge);
+  stroke-width: 0.55;
+  stroke-linejoin: round;
+}
+.sh-ship-submarine .sh-hull-body {
+  fill: var(--sh-sub);
+}
+.sh-hull-deck {
+  fill: var(--sh-deck);
+  stroke: var(--sh-hull-edge);
+  stroke-width: 0.3;
+}
+.sh-hull-dark {
+  fill: var(--sh-dark);
+}
+.sh-hull-gun circle {
+  fill: var(--sh-gun);
+  stroke: var(--sh-hull-edge);
+  stroke-width: 0.3;
+}
+.sh-hull-gun line {
+  stroke: var(--sh-hull-edge);
+  stroke-width: 0.45;
+  stroke-linecap: round;
+}
+.sh-hull-line {
+  fill: none;
+  stroke: var(--sh-deck);
+  stroke-width: 0.45;
+  stroke-linecap: round;
+}
+.sh-hull-dash {
+  stroke-dasharray: 2 1.5;
+}
+.sh-hull-plane {
+  fill: var(--sh-deck);
+  stroke: var(--sh-hull-edge);
+  stroke-width: 0.2;
+}
+.sh-ship {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.sh-ship-sunk {
+  filter: grayscale(1) brightness(0.62);
+  opacity: 0.85;
+}
+.sh-ship-sinking {
+  animation: sh-sink var(--impact, 800ms) ease-in var(--fly, 0ms) both;
+}
+@keyframes sh-sink {
+  0% {
+    filter: none;
+    opacity: 1;
+    transform: rotate(0deg);
+  }
+  30% {
+    transform: rotate(-2.5deg) scale(0.98);
+  }
+  60% {
+    transform: rotate(2deg) scale(0.96);
+  }
+  100% {
+    filter: grayscale(1) brightness(0.62);
+    opacity: 0.85;
+    transform: rotate(0deg);
+  }
+}
+.sh-ship-wreck .sh-hull-body {
+  fill: var(--sh-wreck);
+  stroke: #ff4d3d;
+  stroke-width: 0.8;
+  stroke-dasharray: 2.2 1.2;
+}
+.sh-ship-wreck > :not(.sh-hull-body) {
+  opacity: 0.4;
+}
+.sh-wreck-new {
+  animation: sh-wreck-in 700ms ease-out var(--fly, 0ms) both;
+}
+@keyframes sh-wreck-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+}
+.sh-ship-ghost {
+  opacity: 0.33;
+}
+.sh-ship-ghost .sh-hull-body {
+  stroke-dasharray: 1.5 1;
+}
+.sh-preview-box {
+  fill: rgba(47, 158, 68, 0.2);
+  stroke: #2f9e44;
+  stroke-width: 0.8;
+  stroke-dasharray: 2 1.2;
+}
+.sh-preview-bad .sh-preview-box {
+  fill: rgba(224, 49, 49, 0.25);
+  stroke: #e03131;
+}
+.sh-ship-preview {
+  opacity: 0.8;
+  pointer-events: none;
+}
+.sh-preview-bad .sh-ship-preview {
+  opacity: 0.45;
+}
+
+/* 포탄 자국 */
+.sh-miss-ring {
+  fill: rgba(255, 255, 255, 0.35);
+  stroke: rgba(255, 255, 255, 0.8);
+  stroke-width: 0.35;
+}
+.sh-miss-dot {
+  fill: #fff;
+  stroke: #4f8fc0;
+  stroke-width: 0.45;
+}
+.sh-hit-flame {
+  fill: #ff8a1f;
+  stroke: #c81d25;
+  stroke-width: 0.5;
+  stroke-linejoin: round;
+  transform-box: fill-box;
+  transform-origin: 50% 90%;
+  animation: sh-flicker 1.3s ease-in-out infinite alternate;
+}
+.sh-hit-core {
+  fill: #ffe066;
+}
+.sh-hit-x {
+  fill: none;
+  stroke: #5a0b0b;
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+@keyframes sh-flicker {
+  0% {
+    transform: scale(1, 1);
+  }
+  50% {
+    transform: scale(0.94, 1.06);
+  }
+  100% {
+    transform: scale(1.04, 0.95);
+  }
+}
+.sh-sunk-mark circle {
+  fill: rgba(28, 30, 34, 0.75);
+}
+.sh-sunk-mark path {
+  stroke: #ff6b4a;
+  stroke-width: 0.9;
+  stroke-linecap: round;
+}
+.sh-mark-new {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sh-pop 280ms cubic-bezier(0.3, 1.6, 0.5, 1) var(--fly, 0ms) both;
+}
+@keyframes sh-pop {
+  0% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+}
+.sh-last {
+  fill: none;
+  stroke: var(--sh-last);
+  stroke-width: 0.8;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation:
+    sh-last-in 200ms ease-out var(--fly, 0ms) both,
+    sh-last-pulse 1.6s ease-in-out calc(var(--fly, 0ms) + 200ms) infinite;
+}
+@keyframes sh-last-in {
+  0% {
+    opacity: 0;
+  }
+}
+@keyframes sh-last-pulse {
+  50% {
+    transform: scale(0.88);
+    opacity: 0.55;
+  }
+}
+
+/* 조준점 */
+.sh-cursor circle,
+.sh-cursor path,
+.sh-cursor rect {
+  fill: none;
+  stroke: var(--sh-cursor);
+  stroke-width: 0.85;
+  stroke-linecap: round;
+}
+.sh-cursor circle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sh-aim 1.1s ease-in-out infinite;
+}
+@keyframes sh-aim {
+  50% {
+    transform: scale(0.82);
+  }
+}
+.sh-cursor-used circle,
+.sh-cursor-used path {
+  stroke: #868e96;
+  stroke-dasharray: 1 1;
+}
+.sh-cursor-place rect {
+  stroke-dasharray: 2 1.2;
+  stroke-width: 0.7;
+}
+
+/* 포탄 연출 */
+.sh-shell {
+  fill: #2b2f36;
+  stroke: #fff;
+  stroke-width: 0.35;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sh-shell var(--fly) ease-in both;
+}
+@keyframes sh-shell {
+  0% {
+    transform: translate(0, -26px) scale(2.4);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  99% {
+    transform: translate(0, 0) scale(0.9);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(0, 0) scale(0.9);
+    opacity: 0;
+  }
+}
+.sh-shell-shadow {
+  fill: rgba(0, 0, 0, 0.28);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sh-shadow var(--fly) ease-in both;
+}
+@keyframes sh-shadow {
+  0% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  99% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.sh-ripple {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sh-ripple calc(var(--impact) + 280ms) ease-out both;
+}
+@keyframes sh-ripple {
+  0% {
+    transform: scale(0.15);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+    stroke-width: 0.2;
+  }
+}
+.sh-drop {
+  fill: #fff;
+  animation: sh-drop calc(var(--impact) + 160ms) ease-out var(--fly) both;
+}
+@keyframes sh-drop {
+  0% {
+    transform: translate(0, 0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--dx), var(--dy));
+    opacity: 0;
+  }
+}
+.sh-boom {
+  fill: #ffb02e;
+  stroke: #e03b24;
+  stroke-width: 0.7;
+  stroke-linejoin: round;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sh-boom calc(var(--impact) + 220ms) ease-out var(--fly) both;
+}
+@keyframes sh-boom {
+  0% {
+    transform: scale(0.1) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  35% {
+    transform: scale(1.15) rotate(12deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.4) rotate(22deg);
+    opacity: 0;
+  }
+}
+.sh-boom-core {
+  fill: #fff6c2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sh-boom-core calc(var(--impact) + 120ms) ease-out var(--fly) both;
+}
+@keyframes sh-boom-core {
+  0% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+.sh-spark {
+  stroke: #ffd43b;
+  stroke-width: 0.8;
+  stroke-linecap: round;
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: sh-spark calc(var(--impact) * 0.8 + 160ms) ease-out var(--fly) both;
+}
+@keyframes sh-spark {
+  0% {
+    transform: rotate(var(--rot)) translateY(-2px);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--rot)) translateY(-11px);
+    opacity: 0;
+  }
+}
+.sh-smoke {
+  fill: rgba(70, 70, 70, 0.38);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sh-smoke calc(var(--impact) + 500ms) ease-out var(--fly) both;
+}
+@keyframes sh-smoke {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateY(-6px) scale(1.7);
+    opacity: 0;
+  }
+}
+
+/* 큰 글씨 알림 */
+.sh-banner {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 18px;
+  border: 3px solid;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.95);
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1.1;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+  z-index: 3;
+  animation: sh-banner var(--life, 1200ms) ease-out var(--fly, 0ms) both;
+}
+.sh-banner small {
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  opacity: 0.7;
+}
+.sh-banner-icon {
+  font-size: 30px;
+}
+.sh-banner-miss {
+  border-color: #4f8fc0;
+  color: #1d5f91;
+}
+.sh-banner-hit {
+  border-color: #e8590c;
+  color: #c2410c;
+}
+.sh-banner-sunk {
+  border-color: #c81d25;
+  background: #fff1f0;
+  color: #b91c1c;
+  font-size: 28px;
+}
+.sh-banner-extra {
+  font-size: 14px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #2f9e44;
+  color: #fff;
+}
+@keyframes sh-banner {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+  22% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -58%) scale(1);
+  }
+}
+
+/* 그림 설명 */
+.sh-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 18px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.sh-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sh-legend svg {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--sh-sea-2);
+}
+.sh-legend-ring {
+  fill: rgba(255, 255, 255, 0.4);
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 0.35;
+}
+
+/* ---------------------------------------------------------------- 배 놓기 */
+.sh-place {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: center;
+}
+.sh-place-board {
+  max-width: calc(100vh - 120px);
+}
+.sh-dock {
+  flex: none;
+  width: 292px;
+  max-height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.sh-dock h2 {
+  font-size: 18px;
+}
+.sh-dock-guide {
+  margin: 0;
+  min-height: 3em;
+  font-weight: 600;
+}
+.sh-dock-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sh-dock-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: left;
+  cursor: grab;
+  touch-action: none;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.sh-dock-item:hover {
+  border-color: var(--accent);
+}
+.sh-dock-item:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.sh-dock-held {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+}
+.sh-dock-placed {
+  cursor: pointer;
+  opacity: 0.62;
+}
+.sh-dock-art {
+  width: 92px;
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+.sh-dock-name {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.sh-dock-name small {
+  color: var(--text-muted);
+}
+.sh-dock-state {
+  width: 22px;
+  text-align: center;
+  font-weight: 900;
+  color: #2f9e44;
+}
+.sh-dock-msg {
+  margin: 0;
+  min-height: 2.6em;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.sh-dock-msg-bad {
+  color: var(--sh-bad);
+  font-weight: 700;
+}
+.sh-dock-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sh-dock-tools .btn {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.sh-ready {
+  width: 100%;
+}
+.sh-dock-keys {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--text-muted);
+}
+.sh-drag-ghost {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  transform: translate(-15px, -15px);
+  opacity: 0.85;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.35));
+}
+
+/* ---------------------------------------------------------------- 패널 */
+.sh-panel {
+  gap: 10px;
+}
+.sh-panel > section {
+  padding: 12px 14px;
+}
+.sh-panel .log {
+  min-height: 90px;
+}
+.sh-rule-line {
+  margin: 2px 0 6px;
+  font-size: 13px;
+  color: #6f675e;
+}
+.sh-show-result {
+  margin-top: 10px;
+  width: 100%;
+}
+.sh-fleets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sh-fleets h2 {
+  margin-bottom: 0;
+}
+.sh-fleet {
+  padding: 6px 8px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.sh-fleet-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sh-fleet-count {
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.sh-chips {
+  list-style: none;
+  margin: 6px 0 4px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.sh-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 12px;
+}
+.sh-chip-sunk {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  background: transparent;
+  border-style: dashed;
+}
+.sh-chip-sunk svg {
+  filter: grayscale(1) brightness(0.7);
+  opacity: 0.7;
+}
+.sh-chip-x {
+  color: #e03131;
+  font-weight: 900;
+  text-decoration: none;
+}
+.sh-stats {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.sh-stats b {
+  color: var(--text);
+}
+
+/* ---------------------------------------------------------------- 결과 */
+.sh-result-overlay {
+  overflow: hidden;
+}
+.sh-result {
+  position: relative;
+  max-width: min(760px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 22px 26px;
+  animation: sh-result-in 0.35s cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+@keyframes sh-result-in {
+  0% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+}
+.sh-result h2 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.sh-trophy {
+  font-size: 56px;
+  line-height: 1;
+  animation: sh-trophy 0.9s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+@keyframes sh-trophy {
+  0% {
+    transform: scale(0) rotate(-30deg);
+  }
+}
+.sh-result-sub {
+  margin: 0 0 14px;
+  color: var(--text-muted);
+}
+.sh-result-boards {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+}
+.sh-result-board {
+  flex: 1 1 0;
+  max-width: 300px;
+  margin: 0;
+  border: 3px solid;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.sh-result-board figcaption {
+  padding: 4px 10px;
+  color: #fff;
+  font-weight: 800;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
+}
+.sh-result-board .sh-board-svg {
+  padding: 4px 6px 0 2px;
+}
+.sh-result-board p {
+  margin: 0;
+  padding: 2px 8px 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.sh-result-win {
+  box-shadow: 0 0 0 4px rgba(255, 196, 0, 0.45);
+}
+.sh-result-table {
+  margin: 14px auto 18px;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+.sh-result-table th,
+.sh-result-table td {
+  padding: 4px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.sh-result-table th {
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 13px;
+}
+.sh-result-table td:first-child {
+  text-align: left;
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------- 설정 화면 */
+.sh-hero {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 18px 24px;
+  border-radius: 20px;
+  border: 6px solid #0c2d48;
+  background: linear-gradient(135deg, #0f3b5f, #1f74ab);
+  color: #fff;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.sh-hero h1 {
+  font-size: 38px;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.sh-hero p {
+  margin: 4px 0 0;
+  opacity: 0.95;
+}
+.sh-hero-art {
+  flex: none;
+  width: 260px;
+  height: 150px;
+  border-radius: 14px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  /* 기본 색 (설정 화면은 밝은 배 색) */
+  --sh-hull: #a7b2be;
+  --sh-sub: #7d8996;
+  --sh-hull-edge: #1f2730;
+  --sh-deck: #dbe2e8;
+}
+.sh-hero-waves {
+  animation: sh-hero-waves 5s linear infinite;
+}
+@keyframes sh-hero-waves {
+  to {
+    transform: translateX(26px);
+  }
+}
+.sh-hero-ship .sh-ship {
+  animation: sh-bob 3s ease-in-out infinite;
+}
+.sh-hero-ship2 .sh-ship {
+  animation-delay: -1s;
+}
+.sh-hero-ship3 .sh-ship {
+  animation-delay: -2s;
+}
+@keyframes sh-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-0.8px) rotate(-1.5deg);
+  }
+}
+.sh-hero-ripple {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.4;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sh-hero-ripple 2.4s ease-out infinite;
+}
+.sh-hero-ripple2 {
+  animation-delay: 1.2s;
+}
+@keyframes sh-hero-ripple {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+.sh-hero-boom polygon {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sh-hero-boom 1.6s ease-in-out infinite alternate;
+}
+@keyframes sh-hero-boom {
+  0% {
+    transform: scale(0.9) rotate(0deg);
+  }
+  100% {
+    transform: scale(1.08) rotate(14deg);
+  }
+}
+.sh-note {
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.sh-fleet-preview {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+/* ---------------------------------------------------------------- 좁은 화면 */
+@media (max-height: 760px) {
+  .sh-board-card {
+    max-width: calc(100vh - 140px);
+  }
+  .sh-boards-target .sh-role-mine {
+    max-width: calc((100vh - 140px) * 0.72);
+  }
+  .sh-legend {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 1000px) {
+  .sh-game {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+  .sh-board-card,
+  .sh-boards-target .sh-role-mine {
+    max-width: none;
+  }
+  .sh-place-board {
+    max-width: 620px;
+  }
+}
+
+@media (max-width: 720px) {
+  .sh-boards,
+  .sh-place {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sh-dock {
+    width: auto;
+  }
+  .sh-board-card {
+    flex: none;
+    width: 100%;
+    max-width: 560px;
+    align-self: center;
+  }
+  .sh-boards-target .sh-role-mine {
+    order: 2;
+  }
+  .sh-result-boards {
+    flex-direction: column;
+    align-items: center;
+  }
+  .sh-result-board {
+    width: 100%;
+  }
+  .sh-hero {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .sh-hero h1 {
+    font-size: 30px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sh-hit-flame,
+  .sh-last,
+  .sh-cursor circle,
+  .sh-hero-waves,
+  .sh-hero-ship .sh-ship,
+  .sh-hero-ripple,
+  .sh-hero-boom polygon {
+    animation: none;
+  }
+  .sh-shell,
+  .sh-shell-shadow,
+  .sh-ripple,
+  .sh-drop,
+  .sh-spark,
+  .sh-smoke {
+    display: none;
+  }
+  .sh-boom,
+  .sh-boom-core,
+  .sh-mark-new,
+  .sh-ship-sinking,
+  .sh-wreck-new {
+    animation-duration: 1ms;
+  }
+  .sh-banner {
+    animation: none;
+    transform: translate(-50%, -50%);
+  }
+}

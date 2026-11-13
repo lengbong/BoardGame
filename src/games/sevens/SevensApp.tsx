@@ -1,11 +1,55 @@
-/** 임시 화면: 이 게임을 만드는 동안 게임 목록에서 열 수 있게 둔다. */
+import { useState } from 'react';
+import { useGameSettings } from '../common/settings';
+import { createGame } from './rules';
+import { SevensGame } from './SevensGame';
+import { SevensSetupScreen } from './SevensSetup';
+import { SEVENS_SETTINGS_KEY, loadSavedSevensGame, loadSevensSetup, saveSevensSetup, type SavedSevensGame } from './storage';
+import type { SevensSetup, SevensState } from './types';
+import './sevens.css';
+
+type Screen = { type: 'setup' } | { type: 'game'; setup: SevensSetup; state: SevensState; key: number };
+
 export function SevensApp({ onExit }: { onExit: () => void }) {
+  const [settings, setSettings] = useGameSettings(SEVENS_SETTINGS_KEY);
+  const [saved, setSaved] = useState<SavedSevensGame | null>(loadSavedSevensGame);
+  const [lastSetup, setLastSetup] = useState<SevensSetup>(loadSevensSetup);
+  const [screen, setScreen] = useState<Screen>({ type: 'setup' });
+
+  const start = (setup: SevensSetup) => {
+    saveSevensSetup(setup);
+    setLastSetup(setup);
+    setScreen({ type: 'game', setup, state: createGame(setup), key: Date.now() });
+  };
+
+  const backToSetup = () => {
+    setSaved(loadSavedSevensGame());
+    setScreen({ type: 'setup' });
+  };
+
+  if (screen.type === 'game') {
+    return (
+      <SevensGame
+        key={screen.key}
+        setup={screen.setup}
+        initialState={screen.state}
+        settings={settings}
+        onSettings={setSettings}
+        onRestart={() => start(screen.setup)}
+        onChangeSetup={backToSetup}
+        onExit={onExit}
+      />
+    );
+  }
+
   return (
-    <div className="setup">
-      <button type="button" className="btn btn-ghost setup-back" onClick={onExit}>
-        ← 게임 목록
-      </button>
-      <p>준비 중이에요.</p>
-    </div>
+    <SevensSetupScreen
+      initialSetup={lastSetup}
+      saved={saved}
+      settings={settings}
+      onSettings={setSettings}
+      onStart={start}
+      onResume={() => saved && setScreen({ type: 'game', setup: saved.setup, state: saved.state, key: Date.now() })}
+      onBack={onExit}
+    />
   );
 }

@@ -19,11 +19,11 @@ export const SEAT_COLORS: Record<SeatIndex, { name: string; main: string; dark: 
   3: { name: '파랑', main: '#3e63dd', dark: '#25409a', light: '#e6ecfd' },
 };
 
-export const SEAT_KIND_OPTIONS: { value: SeatKind; label: string }[] = [
-  { value: 'human', label: '사람' },
-  { value: 'ai-easy', label: '컴퓨터 (쉬움)' },
-  { value: 'ai-normal', label: '컴퓨터 (보통)' },
-  { value: 'empty', label: '비움' },
+export const SEAT_KIND_OPTIONS: { value: SeatKind; label: string; short: string }[] = [
+  { value: 'human', label: '사람', short: '사람' },
+  { value: 'ai-easy', label: '컴퓨터 (쉬움)', short: '쉬움' },
+  { value: 'ai-normal', label: '컴퓨터 (보통)', short: '보통' },
+  { value: 'empty', label: '비움', short: '비움' },
 ];
 
 export const KIND_LABEL = { human: '사람', 'ai-easy': '컴퓨터 · 쉬움', 'ai-normal': '컴퓨터 · 보통' } as const;

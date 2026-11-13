@@ -26,11 +26,11 @@ export interface DuelSide {
   icon?: ReactNode;
 }
 
-export const DUEL_KIND_OPTIONS: { value: DuelKind; label: string }[] = [
-  { value: 'human', label: '사람' },
-  { value: 'ai-easy', label: '컴퓨터 (쉬움)' },
-  { value: 'ai-normal', label: '컴퓨터 (보통)' },
-  { value: 'ai-hard', label: '컴퓨터 (어려움)' },
+export const DUEL_KIND_OPTIONS: { value: DuelKind; label: string; short: string }[] = [
+  { value: 'human', label: '사람', short: '사람' },
+  { value: 'ai-easy', label: '컴퓨터 (쉬움)', short: '쉬움' },
+  { value: 'ai-normal', label: '컴퓨터 (보통)', short: '보통' },
+  { value: 'ai-hard', label: '컴퓨터 (어려움)', short: '어려움' },
 ];
 
 export const DUEL_KIND_LABEL: Record<DuelKind, string> = {

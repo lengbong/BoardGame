@@ -94,7 +94,7 @@ export function Panel(props: PanelProps) {
         </ol>
       </section>
 
-      <section className="controls">
+      <section className="controls game-controls">
         <label>
           속도
           <select value={props.speed} onChange={(e) => props.onSpeed(e.target.value as Speed)}>

@@ -1,0 +1,617 @@
+/* ================================================================
+   뒤집기 — 모든 클래스는 rv- 로 시작한다 (다른 게임과 겹치지 않게)
+   ================================================================ */
+
+.rv-game {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  height: calc(100vh - 32px);
+  min-height: 560px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.rv-game kbd,
+.rv-result kbd {
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  opacity: 0.65;
+}
+
+/* ---------------------------------------------------------------- 판 */
+.rv-board-area {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  container-type: size;
+}
+.rv-frame {
+  --side: min(100cqw, 100cqh);
+  --pad: calc(var(--side) * 0.058);
+  width: var(--side);
+  height: var(--side);
+  display: grid;
+  grid-template-columns: var(--pad) minmax(0, 1fr) var(--pad);
+  grid-template-rows: var(--pad) minmax(0, 1fr) var(--pad);
+  grid-template-areas:
+    '. top .'
+    'left felt right'
+    '. bottom .';
+  border-radius: calc(var(--side) * 0.03);
+  background:
+    repeating-linear-gradient(100deg, rgba(255, 255, 255, 0.035) 0 3px, transparent 3px 11px),
+    linear-gradient(140deg, #9a6a3f, #73492a 45%, #5b3820);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.08),
+    inset 0 -4px 0 rgba(0, 0, 0, 0.25),
+    0 10px 28px rgba(40, 25, 10, 0.3);
+  user-select: none;
+}
+.rv-coords {
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  color: #f6e6cc;
+  font-weight: 700;
+  font-size: calc(var(--pad) * 0.48);
+  opacity: 0.85;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4);
+}
+.rv-coords-top,
+.rv-coords-bottom {
+  grid-template-columns: repeat(var(--n), 1fr);
+}
+.rv-coords-left,
+.rv-coords-right {
+  grid-template-rows: repeat(var(--n), 1fr);
+}
+.rv-coords-top {
+  grid-area: top;
+}
+.rv-coords-bottom {
+  grid-area: bottom;
+}
+.rv-coords-left {
+  grid-area: left;
+}
+.rv-coords-right {
+  grid-area: right;
+}
+
+.rv-felt {
+  grid-area: felt;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--n), minmax(0, 1fr));
+  border-radius: 4px;
+  background:
+    repeating-radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 38% 30%, #3ca66e, #26804f 55%, #18603c);
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.35),
+    inset 0 3px 16px rgba(0, 0, 0, 0.35);
+}
+.rv-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.rv-lines line {
+  stroke: rgba(8, 38, 22, 0.7);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+.rv-star {
+  position: absolute;
+  width: 1.7%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(8, 38, 22, 0.85);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.rv-cell {
+  position: relative;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: default;
+  perspective: 600px;
+  outline: none;
+}
+.rv-felt-live .rv-cell-legal {
+  cursor: pointer;
+}
+.rv-disc,
+.rv-ghost {
+  position: absolute;
+  inset: 7%;
+  pointer-events: none;
+}
+.rv-disc {
+  transform-style: preserve-3d;
+}
+.rv-disc > svg,
+.rv-face > svg,
+.rv-ghost > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.rv-disc > svg,
+.rv-face > svg {
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.3));
+}
+.rv-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.rv-face-back {
+  transform: rotate3d(var(--ax), var(--ay), 0, 180deg);
+}
+.rv-disc-flip {
+  animation: rv-flip var(--flip) cubic-bezier(0.45, 0.05, 0.35, 1) var(--delay) both;
+}
+@keyframes rv-flip {
+  0% {
+    transform: translateZ(0) rotate3d(var(--ax), var(--ay), 0, 0deg);
+  }
+  50% {
+    transform: translateZ(16px) rotate3d(var(--ax), var(--ay), 0, 90deg);
+  }
+  100% {
+    transform: translateZ(0) rotate3d(var(--ax), var(--ay), 0, 180deg);
+  }
+}
+.rv-disc-drop {
+  animation: rv-drop var(--place) cubic-bezier(0.3, 1.45, 0.5, 1) both;
+}
+@keyframes rv-drop {
+  0% {
+    transform: translateY(-14%) scale(1.35);
+    opacity: 0;
+  }
+  55% {
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* 둘 수 있는 곳 점, 올려 본 돌 */
+.rv-hint {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  transition: opacity 0.12s;
+  animation: rv-fade 0.3s ease-out backwards;
+}
+.rv-hint-0 {
+  background: rgba(10, 10, 10, 0.5);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
+}
+.rv-hint-1 {
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.12);
+}
+.rv-ghost {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.rv-felt-live .rv-cell-legal:hover .rv-ghost,
+.rv-felt-live .rv-cell-legal.rv-cell-cursor .rv-ghost {
+  opacity: 0.55;
+}
+.rv-felt-live .rv-cell-legal:hover .rv-hint,
+.rv-felt-live .rv-cell-legal.rv-cell-cursor .rv-hint {
+  opacity: 0;
+}
+.rv-cell-cursor::after {
+  content: '';
+  position: absolute;
+  inset: 3%;
+  border-radius: 12%;
+  border: 3px solid #ffd166;
+  box-shadow:
+    0 0 0 2px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+  z-index: 4;
+}
+/* 고른 칸에 두면 뒤집힐 돌 */
+.rv-cell-preview::before {
+  content: '';
+  position: absolute;
+  inset: 3%;
+  border-radius: 50%;
+  border: 3px dashed #ffd166;
+  pointer-events: none;
+  z-index: 3;
+  animation: rv-pulse 0.9s ease-in-out infinite;
+}
+@keyframes rv-pulse {
+  50% {
+    transform: scale(0.9);
+    opacity: 0.55;
+  }
+}
+.rv-last {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 17%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: #e5484d;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.75);
+  pointer-events: none;
+  z-index: 2;
+  animation: rv-fade 0.3s 0.15s ease-out backwards;
+}
+.rv-last-on-1 {
+  box-shadow: 0 0 0 2px rgba(60, 40, 20, 0.35);
+}
+@keyframes rv-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* 넘김 알림 */
+.rv-banner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 10;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: max-content;
+  max-width: 86%;
+  padding: 16px 26px;
+  border-radius: 18px;
+  background: rgba(22, 26, 22, 0.9);
+  border: 2px solid rgba(255, 209, 102, 0.85);
+  color: #fff;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  animation: rv-banner-in 0.4s cubic-bezier(0.3, 1.4, 0.5, 1);
+  pointer-events: none;
+}
+.rv-banner strong {
+  font-size: clamp(17px, 3.2cqmin, 26px);
+}
+.rv-banner span {
+  font-size: clamp(14px, 2.3cqmin, 18px);
+  color: #ffe2a0;
+}
+@keyframes rv-banner-in {
+  from {
+    transform: translate(-50%, -50%) scale(0.6);
+    opacity: 0;
+  }
+}
+
+/* ---------------------------------------------------------------- 패널 */
+.rv-turn-disc {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex: none;
+}
+.rv-turn-disc svg,
+.rv-player-disc svg,
+.rv-log-disc svg,
+.rv-score-disc svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.rv-sub {
+  margin: 4px 0 6px;
+  font-size: 13px;
+  color: #6f675e;
+}
+.rv-thinking {
+  display: inline-block;
+  width: 26px;
+  height: 8px;
+  margin-left: 8px;
+  vertical-align: middle;
+  background:
+    radial-gradient(circle, #6f675e 3px, transparent 3.5px) 0 50% / 9px 8px repeat-x;
+  animation: rv-think 0.9s steps(3) infinite;
+}
+@keyframes rv-think {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 -10% 0 0);
+  }
+}
+.rv-player-disc {
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+.rv-count {
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+  min-width: 34px;
+  text-align: right;
+}
+.rv-tug {
+  display: flex;
+  height: 12px;
+  margin-top: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #2c8656;
+}
+.rv-tug span {
+  transition: flex-grow 0.5s ease;
+}
+.rv-tug-b {
+  flex: var(--b) 1 0;
+  background: linear-gradient(#444, #111);
+}
+.rv-tug-empty {
+  flex: calc(1 - var(--b) - var(--w)) 1 0;
+}
+.rv-tug-w {
+  flex: var(--w) 1 0;
+  background: linear-gradient(#fff, #ddd5c4);
+}
+.rv-log-disc {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+.rv-side-icon {
+  filter: drop-shadow(0 0 1.5px rgba(255, 255, 255, 0.8));
+}
+
+/* ---------------------------------------------------------------- 설정 화면 */
+.rv-hero {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 20px 28px;
+  border-radius: 20px;
+  border: 8px solid #73492a;
+  background: radial-gradient(ellipse at 30% 50%, #35a066, #18603c);
+  color: #fff;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.rv-hero h1 {
+  font-size: 38px;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.rv-hero p {
+  margin: 4px 0 0;
+  opacity: 0.95;
+}
+.rv-hero-board {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(4, 40px);
+  grid-template-rows: repeat(4, 40px);
+  border: 2px solid rgba(8, 38, 22, 0.7);
+  border-radius: 4px;
+  background:
+    linear-gradient(rgba(8, 38, 22, 0.6) 1.5px, transparent 1.5px) 0 -0.75px / 40px 40px,
+    linear-gradient(90deg, rgba(8, 38, 22, 0.6) 1.5px, transparent 1.5px) -0.75px 0 / 40px 40px,
+    #26804f;
+  transform: rotate(-6deg);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+.rv-hero-cell {
+  position: relative;
+  perspective: 300px;
+}
+.rv-hero-disc {
+  position: absolute;
+  inset: 4px;
+  animation: rv-fade 0.4s ease-out backwards;
+  animation-delay: calc(var(--i) * 50ms);
+}
+.rv-hero-disc svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.rv-hero-flip {
+  animation: rv-hero-flip 3.2s ease-in-out infinite;
+}
+@keyframes rv-hero-flip {
+  0%,
+  60% {
+    transform: rotateY(0deg);
+  }
+  80%,
+  100% {
+    transform: rotateY(360deg);
+  }
+}
+.rv-note {
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.rv-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------------- 결과 */
+.rv-result {
+  max-width: 520px;
+}
+.rv-result-icon {
+  font-size: 54px;
+  line-height: 1;
+  margin-bottom: 6px;
+  animation: rv-banner-pop 0.6s cubic-bezier(0.3, 1.5, 0.5, 1) backwards;
+}
+@keyframes rv-banner-pop {
+  from {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+}
+.rv-result h2 {
+  margin-bottom: 8px;
+}
+.rv-result-sub {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+}
+.rv-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 8px 0 14px;
+}
+.rv-score-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 110px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 2px solid var(--border);
+}
+.rv-score-win {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.rv-score-disc {
+  width: 40px;
+  height: 40px;
+}
+.rv-score-name {
+  font-weight: 700;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rv-score-side strong {
+  font-size: 34px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.rv-score-colon {
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+.rv-mini {
+  display: block;
+  width: 150px;
+  height: 150px;
+  margin: 0 auto 18px;
+}
+.rv-mini-felt {
+  fill: #26804f;
+  stroke: #73492a;
+  stroke-width: 0.12;
+}
+.rv-mini-b {
+  fill: #161616;
+}
+.rv-mini-w {
+  fill: #f4f0e6;
+  stroke: #b9b09c;
+  stroke-width: 0.04;
+}
+
+/* ---------------------------------------------------------------- 좁은 화면 */
+@media (max-width: 1000px) {
+  .rv-game {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+  .rv-board-area {
+    height: min(calc(100vw - 32px), 82vh);
+  }
+}
+@media (max-width: 640px) {
+  .rv-hero {
+    flex-direction: column;
+    gap: 14px;
+  }
+  .rv-hero h1 {
+    font-size: 30px;
+  }
+  .rv-score-side {
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv-disc-flip,
+  .rv-disc-drop {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+  }
+  .rv-hero-flip,
+  .rv-cell-preview::before,
+  .rv-thinking,
+  .rv-result-icon {
+    animation: none;
+  }
+}
+
+/* 설정·패널의 작은 켜기/끄기 */
+.rv-rules input {
+  flex: none;
+}
+.rv-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.rv-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}

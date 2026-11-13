@@ -2,6 +2,7 @@ import type { ComponentType, ReactNode } from 'react';
 import { createElement } from 'react';
 import { BaseballApp } from './baseball/BaseballApp';
 import { BoxesApp } from './boxes/BoxesApp';
+import { CheatApp } from './cheat/CheatApp';
 import { DominoApp } from './domino/DominoApp';
 import { DominoIcon } from './domino/DominoIcon';
 import { FourLineApp } from './fourline/FourLineApp';
@@ -123,6 +124,16 @@ export const GAMES: GameEntry[] = [
     category: 'cards',
     icon: createElement(DominoIcon),
     component: DominoApp,
+  },
+  {
+    id: 'cheat',
+    title: '거짓말쟁이',
+    description: 'A, 2, 3… 순서대로 그 숫자라고 말하며 카드를 뒷면으로 내요. 없으면 시치미 뚝! 거짓말 같으면 "거짓말이야!"를 외쳐요.',
+    players: '2~4명 (컴퓨터 참가 가능)',
+    playTime: '10~25분',
+    category: 'cards',
+    icon: '🤥',
+    component: CheatApp,
   },
   {
     id: 'reversi',

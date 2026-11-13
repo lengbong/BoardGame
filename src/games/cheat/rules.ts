@@ -254,7 +254,6 @@ function pass(state: CheatState, player: number): CheatState {
   }
   const claim = s.claim!;
   emit(s, { type: 'accepted', player: claim.player });
-  addLog(s, null, s.options.doubt === 'next' ? `${withJosa(nameOf(s, player), '이/가')} 믿고 넘어갔어요.` : '모두 믿고 넘어갔어요.');
   s.verdict = { claim, result: 'accepted', doubter: null, taker: null, taken: 0 };
   afterClaim(s, claim.player);
   return s;

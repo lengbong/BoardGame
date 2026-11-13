@@ -39,7 +39,11 @@ export function noiseBuffer(ac: AudioContext): AudioBuffer {
   return noise;
 }
 
-function tone(freq: number, start: number, duration: number, type: OscillatorType = 'sine', volume = 0.15, endFreq?: number): void {
+/**
+ * 효과음 재료 1: 음 하나. start초 뒤에 duration초 동안, endFreq가 있으면 그 높이로 미끄러진다.
+ * 게임 폴더에서 자기만의 효과음을 만들 때 써도 된다. (효과음 끄기를 따른다)
+ */
+export function tone(freq: number, start: number, duration: number, type: OscillatorType = 'sine', volume = 0.15, endFreq?: number): void {
   const ac = audio();
   if (!ac) return;
   const t0 = ac.currentTime + start;
@@ -56,8 +60,11 @@ function tone(freq: number, start: number, duration: number, type: OscillatorTyp
   osc.stop(t0 + duration + 0.02);
 }
 
-/** 짧은 잡음 (주사위 달그락, 카드 넘기는 소리) */
-function burst(start: number, duration: number, freq: number, q: number, volume: number, sweepTo?: number): void {
+/**
+ * 효과음 재료 2: 짧은 잡음 (주사위 달그락, 카드 넘기는 소리).
+ * freq 근처만 남기는 대역 필터, q가 클수록 좁다. sweepTo가 있으면 필터가 그 높이로 움직인다.
+ */
+export function burst(start: number, duration: number, freq: number, q: number, volume: number, sweepTo?: number): void {
   const ac = audio();
   if (!ac) return;
   const t0 = ac.currentTime + start;

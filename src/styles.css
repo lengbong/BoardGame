@@ -161,7 +161,7 @@ input:focus-visible {
 
 /* ---------- 허브 ---------- */
 .hub {
-  max-width: 880px;
+  max-width: 1120px;
   margin: 0 auto;
   padding-top: 48px;
 }
@@ -171,14 +171,14 @@ input:focus-visible {
 .hub-header p {
   color: var(--text-muted);
   font-size: 18px;
-  margin: 8px 0 32px;
+  margin: 8px 0 28px;
 }
 .game-list {
   list-style: none;
   padding: 0;
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 16px;
 }
 .game-card {
@@ -200,15 +200,27 @@ button.game-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 18px rgba(60, 45, 20, 0.14);
 }
-.game-card-soon {
-  cursor: default;
-  opacity: 0.6;
-  box-shadow: none;
-  border-style: dashed;
+.nowrap {
+  white-space: nowrap;
 }
 .game-icon {
   font-size: 44px;
   line-height: 1;
+  flex: none;
+  width: 52px;
+  text-align: center;
+}
+.game-icon svg {
+  display: block;
+  width: 52px;
+  height: 52px;
+}
+.hub-category + .hub-category {
+  margin-top: 32px;
+}
+.hub-category h2 {
+  font-size: 22px;
+  margin-bottom: 12px;
 }
 .game-info {
   display: flex;
@@ -388,6 +400,129 @@ button.game-card:hover {
 .how-to ol {
   margin: 12px 0 0;
   padding-left: 22px;
+}
+
+/* ---------- 두 사람 자리 선택 (components/DuelPicker.tsx) ---------- */
+.duel-grid {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.duel-card {
+  flex: 1;
+  min-width: 0;
+  border: 2px solid;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 12px;
+  background: var(--surface);
+}
+.duel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-weight: 700;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+.duel-icon {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+}
+.duel-icon svg {
+  width: 100%;
+  height: 100%;
+}
+.duel-first {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+}
+.duel-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 12px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.duel-card select,
+.duel-card input {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+.duel-swap {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 20px;
+}
+
+/* ---------- 차례 넘김 화면 (components/PassScreen.tsx) ---------- */
+.pass-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  border-radius: inherit;
+  background: rgba(30, 24, 18, 0.72);
+  backdrop-filter: blur(6px);
+  animation: fade-in 0.25s ease-out;
+}
+.pass-card {
+  background: var(--surface);
+  color: var(--text);
+  border: 4px solid;
+  border-radius: 20px;
+  padding: 24px 32px;
+  max-width: 440px;
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+.pass-eyes {
+  font-size: 52px;
+  line-height: 1;
+}
+.pass-card h2 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 10px 0 6px;
+  font-size: 24px;
+}
+.pass-card p {
+  margin: 0 0 16px;
+  color: var(--text-muted);
+}
+.pass-card .pass-note {
+  color: var(--text);
+  font-weight: 600;
+}
+.pass-card kbd {
+  font: inherit;
+  font-size: 11px;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  opacity: 0.7;
 }
 
 /* ---------- 게임 화면 ---------- */
@@ -750,6 +885,13 @@ button.game-card:hover {
 @media (max-width: 560px) {
   .seat-grid {
     grid-template-columns: 1fr;
+  }
+  .duel-grid {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .duel-swap {
+    align-self: center;
   }
   .setup-footer,
   .resume-card,

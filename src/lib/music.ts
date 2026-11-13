@@ -6,15 +6,21 @@ import { getAudioContext, noiseBuffer } from './sound';
  * - party: 통통 튀는 카드놀이풍 (사장조, 128 BPM) — 한 장 남았다!
  * - puzzle: 차분한 퍼즐풍 (바장조, 100 BPM) — 숫자 타일 줄세우기
  * WebAudio로 실시간 합성하므로 음원 파일이 필요 없다.
+ *
+ * 새 게임은 자기 폴더에 Song 객체를 만들어 startMusic(song)으로 틀 수 있다. (예: games/sudoku/song.ts)
  */
 
 const STEPS_PER_BAR = 8;
 
-type Bar = { chord: number[]; bass: number; melody: (number | null)[]; chord2?: number[]; bass2?: number };
+/**
+ * 한 마디 = 8분음표 8개. 음 높이는 MIDI 번호 (60 = 가운데 도).
+ * chord2/bass2가 있으면 마디 뒤쪽 절반(5~8번째 8분음표)은 그 화음으로 바뀐다.
+ */
+export type Bar = { chord: number[]; bass: number; melody: (number | null)[]; chord2?: number[]; bass2?: number };
 
 export type SongId = 'travel' | 'party' | 'puzzle';
 
-interface Song {
+export interface Song {
   bpm: number;
   bars: Bar[];
   /** 멜로디 음색과 크기 */
@@ -22,6 +28,10 @@ interface Song {
   leadVolume: number;
   /** 멜로디 음 길이 (8분음표 배수) */
   leadLength: number;
+  /** 북·하이햇: full(기본) / soft(작게, 킥은 마디 첫 박만) / none */
+  drums?: 'full' | 'soft' | 'none';
+  /** 분산화음 크기 (기본 0.09, 0이면 끔) */
+  arpVolume?: number;
 }
 
 const C = [60, 64, 67];
@@ -113,7 +123,7 @@ function freq(midi: number): number {
 }
 
 let master: GainNode | null = null;
-let playing: SongId | null = null;
+let playing: SongId | Song | null = null;
 let timer: number | null = null;
 let step = 0;
 let nextTime = 0;
@@ -171,20 +181,28 @@ function scheduleStep(ac: AudioContext, out: AudioNode, song: Song, s: number, t
     note(ac, out, m + 12, t, EIGHTH * 0.9, 'sine', 0.06);
   }
   // 분산화음
-  note(ac, out, chord[ARP[i]] + 12, t, EIGHTH * 0.9, 'sine', 0.09);
+  const arpVolume = song.arpVolume ?? 0.09;
+  if (arpVolume > 0) note(ac, out, chord[ARP[i] % chord.length] + 12, t, EIGHTH * 0.9, 'sine', arpVolume);
   // 베이스: 1, 3박 근음, 4박 5도
   if (i === 0 || i === 4) note(ac, out, bass, t, EIGHTH * 1.7, 'triangle', 0.34, 0.005);
   if (i === 6) note(ac, out, bass + 7, t, EIGHTH * 0.9, 'triangle', 0.22, 0.005);
   // 리듬
-  if (i === 0 || i === 4) kick(ac, out, t);
-  if (i % 2 === 1) hat(ac, out, t, 0.12);
+  const drums = song.drums ?? 'full';
+  if (drums === 'full') {
+    if (i === 0 || i === 4) kick(ac, out, t);
+    if (i % 2 === 1) hat(ac, out, t, 0.12);
+  } else if (drums === 'soft') {
+    if (i === 0) kick(ac, out, t);
+    if (i === 3 || i === 7) hat(ac, out, t, 0.05);
+  }
   // 마디 첫 박에 부드러운 패드
   if (i === 0 || (i === 4 && bar.chord2)) {
     for (const n of chord) note(ac, out, n, t, EIGHTH * (bar.chord2 ? 3.8 : 7.8), 'sine', 0.035, 0.12);
   }
 }
 
-export function startMusic(songId: SongId = 'travel', volume = 0.16): void {
+/** 곡 이름(기존 곡) 또는 게임 폴더에서 만든 Song 객체를 반복 재생한다. 같은 곡이 이미 나오고 있으면 그대로 둔다. */
+export function startMusic(songId: SongId | Song = 'travel', volume = 0.16): void {
   const ac = getAudioContext();
   if (!ac) return;
   if (timer !== null) {
@@ -193,7 +211,7 @@ export function startMusic(songId: SongId = 'travel', volume = 0.16): void {
   }
   if (playing !== songId) step = 0;
   playing = songId;
-  const song = SONGS[songId];
+  const song = typeof songId === 'string' ? SONGS[songId] : songId;
   const EIGHTH = 60 / song.bpm / 2;
   master = ac.createGain();
   master.gain.setValueAtTime(0.0001, ac.currentTime);

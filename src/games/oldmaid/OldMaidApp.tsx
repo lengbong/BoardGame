@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useScrollTop } from '../../lib/useScrollTop';
 import { useGameSettings } from '../common/settings';
 import { createGame } from './rules';
 import { OldMaidGame } from './OldMaidGame';
@@ -20,6 +21,7 @@ export function OldMaidApp({ onExit }: { onExit: () => void }) {
   const [saved, setSaved] = useState<SavedOldMaidGame | null>(loadSavedOldMaidGame);
   const [lastSetup, setLastSetup] = useState<OldMaidSetup>(loadOldMaidSetup);
   const [screen, setScreen] = useState<Screen>({ type: 'setup' });
+  useScrollTop('key' in screen ? screen.key : screen.type);
 
   const start = (setup: OldMaidSetup) => {
     saveOldMaidSetup(setup);

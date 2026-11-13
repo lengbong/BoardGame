@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useScrollTop } from '../../lib/useScrollTop';
 import { setMuted } from '../../lib/sound';
 import { RaceGame } from './RaceGame';
 import { createGame } from './rules';
@@ -21,6 +22,7 @@ export function RaceApp({ onExit }: { onExit: () => void }) {
   const [saved, setSaved] = useState<SavedGame | null>(loadSavedGame);
   const [lastSetup, setLastSetup] = useState<GameSetup>(loadLastSetup);
   const [screen, setScreen] = useState<Screen>({ type: 'setup' });
+  useScrollTop('key' in screen ? screen.key : screen.type);
 
   useEffect(() => {
     setMuted(settings.muted);

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useScrollTop } from '../../lib/useScrollTop';
 import { useGameSettings } from '../common/settings';
 import { MemoryGame } from './MemoryGame';
 import { MemorySetupScreen } from './MemorySetup';
@@ -14,6 +15,7 @@ export function MemoryApp({ onExit }: { onExit: () => void }) {
   const [saved, setSaved] = useState<SavedMemoryGame | null>(loadSavedMemoryGame);
   const [lastSetup, setLastSetup] = useState<MemorySetup>(loadMemorySetup);
   const [screen, setScreen] = useState<Screen>({ type: 'setup' });
+  useScrollTop('key' in screen ? screen.key : screen.type);
 
   const start = (setup: MemorySetup) => {
     saveMemorySetup(setup);

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useScrollTop } from '../../lib/useScrollTop';
 import { useGameSettings } from '../common/settings';
 import { DiscDefs } from './DiscArt';
 import { ReversiGame } from './ReversiGame';
@@ -21,6 +22,7 @@ export function ReversiApp({ onExit }: { onExit: () => void }) {
   const [saved, setSaved] = useState<SavedReversiGame | null>(loadSavedReversiGame);
   const [lastSetup, setLastSetup] = useState<Setup>(loadReversiSetup);
   const [screen, setScreen] = useState<Screen>({ type: 'setup' });
+  useScrollTop('key' in screen ? screen.key : screen.type);
 
   const start = (setup: Setup) => {
     saveReversiSetup(setup);

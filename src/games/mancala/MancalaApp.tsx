@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useScrollTop } from '../../lib/useScrollTop';
 import { useGameSettings } from '../common/settings';
 import { MancalaGame } from './MancalaGame';
 import { MancalaSetup } from './MancalaSetup';
@@ -14,6 +15,7 @@ export function MancalaApp({ onExit }: { onExit: () => void }) {
   const [saved, setSaved] = useState<SavedMancalaGame | null>(loadSavedMancalaGame);
   const [lastSetup, setLastSetup] = useState<Setup>(loadMancalaSetup);
   const [screen, setScreen] = useState<Screen>({ type: 'setup' });
+  useScrollTop('key' in screen ? screen.key : screen.type);
 
   const start = (setup: Setup) => {
     saveMancalaSetup(setup);

@@ -16,7 +16,7 @@ interface GameControlsProps {
 /** 게임 화면 옆 패널 맨 아래의 공통 버튼 줄: 속도, 음악, 효과음, 새 게임, 처음 화면 */
 export function GameControls({ settings, onSettings, showSpeed = true, onNewGame, onExit, children }: GameControlsProps) {
   return (
-    <section className="controls">
+    <section className="controls game-controls">
       {children}
       {showSpeed && (
         <label>

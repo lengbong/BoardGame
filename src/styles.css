@@ -354,6 +354,7 @@ button.game-card:hover {
   cursor: pointer;
 }
 .rule-item input {
+  flex: none;
   width: 18px;
   height: 18px;
   margin-top: 3px;
@@ -778,6 +779,22 @@ button.game-card:hover {
   align-items: center;
   gap: 6px;
   font-size: 14px;
+}
+/* 공용 버튼 줄 (components/GameControls.tsx): 좁은 패널에서도 2칸씩 가지런히 */
+.game-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.game-controls > label {
+  grid-column: 1 / -1;
+}
+.game-controls > label select {
+  flex: 1;
+}
+.game-controls > .btn {
+  padding: 7px 8px;
+  font-size: 14px;
+  white-space: nowrap;
 }
 
 /* ---------- 결과 화면 ---------- */

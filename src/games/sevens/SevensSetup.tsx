@@ -2,10 +2,10 @@ import type { CSSProperties } from 'react';
 import { useState } from 'react';
 import { PlayingCardBack, PlayingCardFace } from '../../components/PlayingCard';
 import { SeatPicker } from '../../components/SeatPicker';
+import { SpeedPicker } from '../../components/SpeedPicker';
 import { activeSeatCount } from '../common/players';
 import { makeCard } from '../common/playingCards';
 import type { GameSettings } from '../common/settings';
-import { SPEEDS, SPEED_LABELS, type Speed } from '../common/speed';
 import { MAX_PASSES, TARGET_SCORES } from './rules';
 import type { SavedSevensGame } from './storage';
 import type { EndMode, HandView, SevensOptions, SevensSetup } from './types';
@@ -161,16 +161,7 @@ export function SevensSetupScreen({ initialSetup, saved, settings, onSettings, o
       </section>
 
       <section className="setup-section setup-footer">
-        <label className="speed-select">
-          컴퓨터·애니메이션 속도
-          <select value={settings.speed} onChange={(e) => onSettings({ ...settings, speed: e.target.value as Speed })}>
-            {SPEEDS.map((s) => (
-              <option key={s} value={s}>
-                {SPEED_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SpeedPicker caption="컴퓨터·애니메이션 속도" value={settings.speed} onChange={(speed) => onSettings({ ...settings, speed })} inline />
         <button type="button" className="btn btn-primary btn-large" disabled={count < 2} onClick={() => onStart(setup)} data-testid="sv-start">
           게임 시작
         </button>

@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
+import { SpeedPicker } from '../../components/SpeedPicker';
 import { KIND_LABEL, SEAT_COLORS } from '../common/players';
-import { SPEEDS, SPEED_LABELS, type Speed } from '../common/speed';
+import type { Speed } from '../common/speed';
 import { CityArt } from './art/cities';
 import { BuildingIcon, Pawn } from './art/tiles';
 import { LEVEL_NAMES, REGION_INFO, SQUARES, buildCost, rentFor } from './board';
@@ -109,6 +110,7 @@ export function SidePanel(props: SidePanelProps) {
       </section>
 
       <section className="world-controls">
+        <SpeedPicker value={speed} onChange={props.onSpeed} />
         <button type="button" className={`icon-btn${music ? ' on' : ''}`} onClick={props.onToggleMusic} title="배경음악" data-testid="music-toggle">
           🎵
           <span>{music ? '음악 켜짐' : '음악 꺼짐'}</span>
@@ -117,16 +119,6 @@ export function SidePanel(props: SidePanelProps) {
           {muted ? '🔇' : '🔊'}
           <span>{muted ? '효과음 꺼짐' : '효과음 켜짐'}</span>
         </button>
-        <label className="icon-btn speed">
-          ⏩
-          <select value={speed} onChange={(e) => props.onSpeed(e.target.value as Speed)} aria-label="속도">
-            {SPEEDS.map((s) => (
-              <option key={s} value={s}>
-                {SPEED_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        </label>
         <button type="button" className="icon-btn" onClick={props.onAtlas} data-testid="atlas-open">
           📖<span>도시 도감</span>
         </button>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { DuelPicker } from '../../components/DuelPicker';
+import { SpeedPicker } from '../../components/SpeedPicker';
 import type { GameSettings } from '../common/settings';
-import { SPEEDS, SPEED_LABELS, type Speed } from '../common/speed';
 import { FOURLINE_SIDES, Stone } from './StoneArt';
 import { SIDE_LABELS } from './rules';
 import type { SavedFourLineGame } from './storage';
@@ -118,16 +118,7 @@ export function FourLineSetup({ initialSetup, saved, settings, onSettings, onSta
       </section>
 
       <section className="setup-section setup-footer">
-        <label className="speed-select">
-          컴퓨터·애니메이션 속도
-          <select value={settings.speed} onChange={(e) => onSettings({ ...settings, speed: e.target.value as Speed })}>
-            {SPEEDS.map((s) => (
-              <option key={s} value={s}>
-                {SPEED_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SpeedPicker caption="컴퓨터·애니메이션 속도" value={settings.speed} onChange={(speed) => onSettings({ ...settings, speed })} inline />
         <button
           type="button"
           className="btn btn-primary btn-large"

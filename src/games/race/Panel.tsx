@@ -1,7 +1,8 @@
 import { GOAL, SEAT_COLORS } from './board';
 import { Dice } from '../../components/Dice';
+import { SpeedPicker } from '../../components/SpeedPicker';
 import { KIND_LABEL } from '../common/players';
-import { SPEED_LABELS, type Speed } from './storage';
+import type { Speed } from './storage';
 import type { GameState } from './types';
 
 const MEDALS = ['🥇', '🥈', '🥉', '4등'];
@@ -93,16 +94,7 @@ export function Panel(props: PanelProps) {
       </section>
 
       <section className="controls game-controls">
-        <label>
-          속도
-          <select value={speed} onChange={(e) => props.onSpeed(e.target.value as Speed)}>
-            {(Object.keys(SPEED_LABELS) as Speed[]).map((s) => (
-              <option key={s} value={s}>
-                {SPEED_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SpeedPicker value={speed} onChange={props.onSpeed} />
         <button type="button" className="btn" onClick={props.onToggleMute}>
           {muted ? '🔇 소리 꺼짐' : '🔊 소리 켜짐'}
         </button>

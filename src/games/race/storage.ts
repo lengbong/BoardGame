@@ -9,7 +9,6 @@ const SETTINGS_KEY = 'family-boardgame.race.settings.v1';
 import { parseSpeed, type Speed } from '../common/speed';
 
 export type { Speed } from '../common/speed';
-export { SPEED_LABELS } from '../common/speed';
 
 export interface Settings {
   speed: Speed;

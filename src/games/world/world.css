@@ -1015,9 +1015,10 @@
   min-height: 90px;
   overflow-y: auto;
 }
+/* 6칸 격자: 속도는 한 줄 전체, 버튼은 2칸씩, 마지막 두 버튼은 3칸씩 차지해 줄이 가지런하다 */
 .world-controls {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 6px;
   padding: 10px;
   border: 1px solid var(--border);
@@ -1050,13 +1051,14 @@
 .icon-btn:hover {
   border-color: #ff9a4a;
 }
-.icon-btn.speed select {
-  max-width: 100%;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 700;
+.world-controls > .choice-field {
+  grid-column: 1 / -1;
+}
+.world-controls > .icon-btn {
+  grid-column: span 2;
+}
+.world-controls > .icon-btn:nth-last-child(-n + 2) {
+  grid-column: span 3;
 }
 
 /* ---------------------------------------------------------------- 모달·도감 */

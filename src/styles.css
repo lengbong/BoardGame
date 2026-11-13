@@ -321,7 +321,6 @@ button.game-card:hover {
   color: var(--text-muted);
 }
 .seat-card input,
-.speed-select select,
 .controls select {
   padding: 6px 8px;
   border: 1px solid var(--border);
@@ -376,11 +375,6 @@ button.game-card:hover {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-}
-.speed-select {
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 .setup-back {
   align-self: flex-start;
@@ -478,30 +472,47 @@ button.game-card:hover {
   font-size: 20px;
 }
 
-/* ---------- 참가 종류 아이콘 고르기 (components/KindPicker.tsx) ---------- */
-.kind-field {
+/* ---------- 아이콘 버튼으로 고르기: 참가 종류, 속도 (components/IconPicker.tsx) ---------- */
+.choice-field {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 0 12px;
   font-size: 14px;
   color: var(--text-muted);
 }
-.kind-picker {
+.seat-card > .choice-field,
+.duel-card > .choice-field {
+  padding: 0 12px;
+}
+/* 이름표를 왼쪽에 두는 모양 (설정 화면 아래 속도, 게임 화면 패널) */
+.choice-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+}
+.choice-inline > span {
+  flex: none;
+}
+.choice-inline > .choice-group {
+  flex: 1;
+}
+.choice-group {
   --pick: var(--accent);
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
   gap: 4px;
 }
-.kind-option {
+/* `.controls label` 같은 일반 label 규칙에 덮이지 않게 한 단계 더 구체적으로 */
+.choice-group > .choice-option {
   position: relative;
   min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 6px 2px 4px;
+  padding: 6px 4px 4px;
   border: 1.5px solid var(--border);
   border-radius: 10px;
   background: var(--surface-2);
@@ -517,39 +528,39 @@ button.game-card:hover {
     color 0.12s,
     transform 0.12s;
 }
-.kind-option:hover {
+.choice-option:hover {
   border-color: var(--pick);
   color: var(--text);
 }
-.kind-option:active {
+.choice-option:active {
   transform: scale(0.95);
 }
 /* 진짜 라디오 버튼은 숨기되 키보드(Tab, 방향키)로는 그대로 고를 수 있게 둔다 */
-.kind-option input {
+.choice-option input {
   position: absolute;
   inset: 0;
   margin: 0;
   opacity: 0;
   pointer-events: none;
 }
-.kind-option:has(input:focus-visible) {
+.choice-option:has(input:focus-visible) {
   outline: 3px solid var(--accent);
   outline-offset: 2px;
 }
-.kind-option.kind-on {
+.choice-option.choice-on {
   background: var(--pick);
   border-color: var(--pick);
   color: #fff;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
 }
-.kind-icon {
+.choice-icon {
   display: block;
   flex: none;
 }
-.kind-option.kind-on .kind-icon {
+.choice-option.choice-on .choice-icon {
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
 }
-.kind-option span {
+.choice-option span {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -868,7 +879,8 @@ button.game-card:hover {
   display: grid;
   grid-template-columns: 1fr 1fr;
 }
-.game-controls > label {
+.game-controls > label,
+.game-controls > .choice-field {
   grid-column: 1 / -1;
 }
 .game-controls > label select {

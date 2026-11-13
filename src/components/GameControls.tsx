@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { SPEEDS, SPEED_LABELS, type Speed } from '../games/common/speed';
+import { SpeedPicker } from './SpeedPicker';
 import type { GameSettings } from '../games/common/settings';
 
 interface GameControlsProps {
@@ -19,16 +19,7 @@ export function GameControls({ settings, onSettings, showSpeed = true, onNewGame
     <section className="controls game-controls">
       {children}
       {showSpeed && (
-        <label>
-          속도
-          <select value={settings.speed} onChange={(e) => onSettings({ ...settings, speed: e.target.value as Speed })}>
-            {SPEEDS.map((s) => (
-              <option key={s} value={s}>
-                {SPEED_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SpeedPicker value={settings.speed} onChange={(speed) => onSettings({ ...settings, speed })} />
       )}
       <button type="button" className="btn" onClick={() => onSettings({ ...settings, music: !settings.music })}>
         {settings.music ? '🎵 음악 켜짐' : '🎵 음악 꺼짐'}

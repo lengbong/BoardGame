@@ -1,0 +1,623 @@
+/* ================================================================
+   사목 — 모든 클래스는 fl- 로 시작한다 (다른 게임과 겹치지 않게)
+   ================================================================ */
+
+.fl-game {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  height: calc(100vh - 32px);
+  min-height: 560px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.fl-game kbd,
+.fl-result kbd {
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  opacity: 0.65;
+}
+
+/* ---------------------------------------------------------------- 판 */
+.fl-board-area {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  container-type: size;
+}
+.fl-stage {
+  --cell: min(calc(100cqw / 7.9), calc(100cqh / 8.3));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  user-select: none;
+}
+.fl-heads {
+  display: grid;
+  grid-template-columns: repeat(7, var(--cell));
+  height: var(--cell);
+  margin-bottom: calc(var(--cell) * 0.3 + 2px);
+}
+.fl-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
+  outline: none;
+}
+.fl-live .fl-head {
+  cursor: pointer;
+}
+.fl-head-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 2px dashed var(--border);
+  color: var(--text-muted);
+  font-weight: 800;
+  font-size: calc(var(--cell) * 0.24);
+}
+.fl-head-full .fl-head-num {
+  opacity: 0.3;
+}
+.fl-ghost {
+  position: absolute;
+  inset: 7%;
+  opacity: 0.95;
+  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.25));
+  animation: fl-bob 0.9s ease-in-out infinite alternate;
+}
+.fl-ghost svg,
+.fl-stone svg,
+.fl-hero-stone svg,
+.fl-hero-drop svg,
+.fl-turn-stone svg,
+.fl-player-stone svg,
+.fl-log-stone svg,
+.fl-result-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+@keyframes fl-bob {
+  from {
+    transform: translateY(-5%);
+  }
+  to {
+    transform: translateY(5%);
+  }
+}
+.fl-head-cursor::after {
+  content: '';
+  position: absolute;
+  inset: 2%;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  pointer-events: none;
+}
+
+.fl-board {
+  position: relative;
+  width: calc(var(--cell) * 7);
+  height: calc(var(--cell) * 6);
+}
+.fl-back {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 40%, #3a2415, #1f130b);
+}
+.fl-stones {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.fl-cell {
+  position: absolute;
+  width: var(--cell);
+  height: var(--cell);
+  left: calc(var(--c) * var(--cell));
+  top: calc(var(--r) * var(--cell));
+}
+.fl-stone {
+  position: absolute;
+  inset: 5%;
+  display: block;
+}
+.fl-stone-drop {
+  animation: fl-drop var(--dur) linear both;
+}
+@keyframes fl-drop {
+  0% {
+    transform: translateY(calc(var(--fall) * var(--cell) * -1));
+    animation-timing-function: cubic-bezier(0.5, 0, 1, 0.6);
+  }
+  68% {
+    transform: translateY(0);
+    animation-timing-function: ease-out;
+  }
+  73% {
+    transform: translateY(3%) scale(1.06, 0.9);
+    animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1);
+  }
+  85% {
+    transform: translateY(calc(var(--cell) * -0.16));
+    animation-timing-function: cubic-bezier(0.6, 0, 1, 0.6);
+  }
+  94% {
+    transform: translateY(0);
+    animation-timing-function: ease-out;
+  }
+  97% {
+    transform: translateY(calc(var(--cell) * -0.04));
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+.fl-cell-last::after {
+  content: '';
+  position: absolute;
+  inset: 17%;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+  animation: fl-fade 0.25s var(--after) ease-out backwards;
+}
+@keyframes fl-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.fl-plate {
+  position: absolute;
+  z-index: 2;
+  left: calc(var(--cell) * -0.3);
+  top: calc(var(--cell) * -0.3);
+  width: calc(var(--cell) * 7.6);
+  height: calc(var(--cell) * 6.6);
+  pointer-events: none;
+  filter: drop-shadow(0 8px 14px rgba(40, 22, 8, 0.35));
+}
+.fl-hole-shadow {
+  fill: none;
+  stroke: rgba(30, 15, 5, 0.55);
+  stroke-width: 0.7;
+}
+.fl-hole-rim {
+  fill: none;
+  stroke: rgba(255, 236, 205, 0.22);
+  stroke-width: 0.45;
+}
+
+/* 도움 표시 */
+.fl-marks {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.fl-mark {
+  position: absolute;
+  left: calc(var(--c) * var(--cell));
+  top: calc(var(--r) * var(--cell));
+  width: var(--cell);
+  height: var(--cell);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: max(11px, calc(var(--cell) * 0.17));
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.fl-mark::before {
+  content: '';
+  position: absolute;
+  inset: 9%;
+  border-radius: 50%;
+  border: max(3px, calc(var(--cell) * 0.05)) dashed;
+  animation: fl-spin 3s linear infinite;
+}
+.fl-mark-win::before {
+  border-color: #3ddc84;
+}
+.fl-mark-block::before {
+  border-color: #ff9f43;
+}
+@keyframes fl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 이긴 줄 */
+.fl-winline {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 4;
+  pointer-events: none;
+  overflow: visible;
+}
+.fl-winline line {
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: fl-draw 0.5s var(--after) ease-out forwards;
+}
+.fl-winline-under {
+  stroke: rgba(0, 0, 0, 0.45);
+  stroke-width: 2.8;
+}
+.fl-winline-top {
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+@keyframes fl-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.fl-winring {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 0.8;
+  opacity: 0;
+  animation:
+    fl-fade-in 0.3s var(--after) ease-out forwards,
+    fl-ring 1s calc(var(--after) + 0.3s) ease-in-out infinite;
+}
+@keyframes fl-fade-in {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes fl-ring {
+  0%,
+  100% {
+    opacity: 1;
+    stroke-width: 0.8;
+  }
+  50% {
+    opacity: 0.55;
+    stroke-width: 1.4;
+  }
+}
+
+/* 줄을 고르는 투명 단추 */
+.fl-cols {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+.fl-colbtn {
+  padding: 0;
+  border: 0;
+  margin: 0;
+  background: transparent;
+  cursor: default;
+  outline: none;
+  border-radius: calc(var(--cell) * 0.12);
+}
+.fl-live .fl-colbtn {
+  cursor: pointer;
+}
+.fl-colbtn-on {
+  background: linear-gradient(rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05));
+}
+.fl-feet {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(7, var(--cell));
+  margin-top: calc(var(--cell) * 0.3 + 2px);
+  height: calc(var(--cell) * 0.5);
+  align-items: center;
+  justify-items: center;
+  font-weight: 700;
+  font-size: max(11px, calc(var(--cell) * 0.24));
+  color: var(--text-muted);
+}
+.fl-feet::before,
+.fl-feet::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  width: calc(var(--cell) * 0.45);
+  height: calc(var(--cell) * 0.5);
+  background: linear-gradient(#9a6a3c, #6e4524);
+  clip-path: polygon(25% 0, 75% 0, 100% 100%, 0 100%);
+}
+.fl-feet::before {
+  left: calc(var(--cell) * -0.5);
+}
+.fl-feet::after {
+  right: calc(var(--cell) * -0.5);
+}
+.fl-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------- 패널 */
+.fl-turn-stone {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex: none;
+}
+.fl-sub {
+  margin: 4px 0 6px;
+  font-size: 13px;
+  color: #6f675e;
+}
+.fl-thinking {
+  display: inline-block;
+  width: 26px;
+  height: 8px;
+  margin-left: 8px;
+  vertical-align: middle;
+  background: radial-gradient(circle, #6f675e 3px, transparent 3.5px) 0 50% / 9px 8px repeat-x;
+  animation: fl-think 0.9s steps(3) infinite;
+}
+@keyframes fl-think {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 -10% 0 0);
+  }
+}
+.fl-player-stone {
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+.fl-count {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.fl-count::before {
+  content: '돌 ';
+}
+.fl-log-stone {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+
+/* ---------------------------------------------------------------- 설정 화면 */
+.fl-hero {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 20px 28px;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 85% 20%, rgba(255, 255, 255, 0.18), transparent 40%),
+    linear-gradient(135deg, #2a9d8f, #23566b);
+  color: #fff;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.fl-hero h1 {
+  font-size: 38px;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+.fl-hero p {
+  margin: 4px 0 0;
+  opacity: 0.95;
+}
+.fl-hero-art {
+  position: relative;
+  flex: none;
+  width: 170px;
+  height: 176px;
+}
+.fl-hero-board {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 170px;
+  height: 136px;
+  background: #2b1a0f;
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 5px #b07a45,
+    0 8px 18px rgba(0, 0, 0, 0.35);
+}
+.fl-hero-stone {
+  position: absolute;
+  width: 20%;
+  height: 25%;
+  padding: 2.5%;
+}
+.fl-hero-plate {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+}
+.fl-hero-drop {
+  position: absolute;
+  left: 80%;
+  top: 0;
+  width: 20%;
+  height: 25%;
+  padding: 2.5%;
+  animation: fl-hero-drop 2.8s infinite;
+}
+@keyframes fl-hero-drop {
+  0%,
+  15% {
+    transform: translateY(-44px);
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.5, 0, 1, 0.6);
+  }
+  20% {
+    opacity: 1;
+  }
+  45% {
+    transform: translateY(102px);
+    animation-timing-function: ease-out;
+  }
+  53% {
+    transform: translateY(92px);
+    animation-timing-function: ease-in;
+  }
+  60%,
+  90% {
+    transform: translateY(102px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(102px);
+    opacity: 0;
+  }
+}
+.fl-note {
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.fl-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------------- 결과 */
+.fl-result {
+  max-width: 520px;
+}
+.fl-result-icon {
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 8px;
+  font-size: 52px;
+  line-height: 60px;
+  animation: fl-pop 0.6s cubic-bezier(0.3, 1.5, 0.5, 1) backwards;
+}
+@keyframes fl-pop {
+  from {
+    transform: translateY(-40px) scale(0.5);
+    opacity: 0;
+  }
+}
+.fl-result h2 {
+  margin-bottom: 6px;
+}
+.fl-result-sub {
+  margin: 0 0 14px;
+  color: var(--text-muted);
+}
+.fl-mini {
+  display: block;
+  width: 190px;
+  height: auto;
+  margin: 0 auto 18px;
+}
+.fl-mini-plate {
+  fill: #b07a45;
+}
+.fl-mini-hole {
+  fill: #2b1a0f;
+}
+.fl-mini-r {
+  fill: #e5484d;
+}
+.fl-mini-y {
+  fill: #f5b400;
+}
+.fl-mini-line {
+  stroke: #fff;
+  stroke-width: 0.16;
+  stroke-linecap: round;
+}
+
+/* ---------------------------------------------------------------- 좁은 화면 */
+@media (max-width: 1000px) {
+  .fl-game {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+  .fl-board-area {
+    height: min(calc((100vw - 32px) * 1.05), 80vh);
+  }
+}
+@media (max-width: 640px) {
+  .fl-hero {
+    flex-direction: column;
+    gap: 14px;
+  }
+  .fl-hero h1 {
+    font-size: 30px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fl-stone-drop {
+    animation-duration: 1ms !important;
+  }
+  .fl-ghost,
+  .fl-mark::before,
+  .fl-winring,
+  .fl-hero-drop,
+  .fl-thinking,
+  .fl-result-icon {
+    animation: none;
+  }
+  .fl-winring {
+    opacity: 1;
+  }
+  .fl-winline line {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* 설정·패널의 작은 켜기/끄기 */
+.fl-rules input {
+  flex: none;
+}
+.fl-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.fl-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}

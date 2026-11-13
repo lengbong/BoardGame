@@ -320,8 +320,7 @@ button.game-card:hover {
   font-size: 14px;
   color: var(--text-muted);
 }
-.seat-card input,
-.controls select {
+.seat-card input {
   padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -382,15 +381,6 @@ button.game-card:hover {
 .sub-title {
   margin: 20px 0 10px;
   font-size: 16px;
-}
-.inline-select {
-  margin-left: 8px;
-  padding: 2px 6px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-2);
-  color: var(--text);
-  font-size: 14px;
 }
 .how-to summary {
   cursor: pointer;
@@ -565,6 +555,42 @@ button.game-card:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* 작은 알약 모양: 숫자처럼 글자만 있는 선택 (목표 점수, 판 수 …) */
+.choice-small {
+  font-size: 13px;
+}
+.choice-small > .choice-group {
+  display: flex;
+  flex-wrap: wrap;
+}
+.choice-small > .choice-group > .choice-option {
+  min-width: 56px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+.choice-dimmed > .choice-group {
+  opacity: 0.6;
+}
+.choice-disabled > .choice-group {
+  opacity: 0.45;
+}
+.choice-disabled > .choice-group > .choice-option {
+  cursor: not-allowed;
+  transform: none;
+}
+.choice-disabled .choice-option:hover {
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+.choice-disabled .choice-option.choice-on:hover {
+  border-color: var(--pick);
+  color: #fff;
+}
+/* 규칙 고르기 칸 밑에 붙는 세부 선택 (동그라미·네모 칸 너비만큼 들여 쓴다) */
+.rule-extra {
+  margin: 6px 0 0 28px;
 }
 
 /* ---------- 차례 넘김 화면 (components/PassScreen.tsx) ---------- */
@@ -882,9 +908,6 @@ button.game-card:hover {
 .game-controls > label,
 .game-controls > .choice-field {
   grid-column: 1 / -1;
-}
-.game-controls > label select {
-  flex: 1;
 }
 .game-controls > .btn {
   padding: 7px 8px;

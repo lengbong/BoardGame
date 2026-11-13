@@ -1,15 +1,16 @@
 import { useId, type CSSProperties, type ReactNode } from 'react';
 
-export interface IconChoice<V extends string> {
+export interface IconChoice<V extends string | number> {
   value: V;
-  /** 아이콘 밑에 쓰는 짧은 이름. 예: '쉬움' */
+  /** 버튼에 쓰는 짧은 이름. 예: '쉬움', '200점' */
   short: string;
   /** 전체 이름 (없으면 short). 마우스를 올리면 보이고 화면 낭독기가 읽는다. 예: '컴퓨터 (쉬움)' */
   label?: string;
-  icon: ReactNode;
+  /** 없으면 글자만 있는 버튼 */
+  icon?: ReactNode;
 }
 
-interface IconPickerProps<V extends string> {
+interface IconPickerProps<V extends string | number> {
   /** 이름표. 예: '참가', '속도' */
   caption: string;
   value: V;
@@ -19,18 +20,35 @@ interface IconPickerProps<V extends string> {
   color?: string;
   /** 이름표를 위가 아니라 왼쪽에 둔다 */
   inline?: boolean;
+  /** 작은 알약 모양 버튼 (숫자 고르기처럼 글자만 있을 때) */
+  small?: boolean;
+  /** 흐리게 보여 준다 (지금 쓰이지 않는 설정). 눌러서 고를 수는 있다. */
+  dimmed?: boolean;
+  disabled?: boolean;
   /** 묶음에 붙는 data-testid. 칸마다 `${testId}-${value}`가 붙는다. */
   testId?: string;
 }
 
 /**
- * 몇 가지 중 하나를 아이콘 버튼 한 줄로 고른다 (드롭다운 대신).
+ * 몇 가지 중 하나를 버튼 한 줄로 고른다 (드롭다운 대신).
  * 속은 라디오 버튼이라 Tab으로 들어가 방향키로도 고를 수 있다.
  */
-export function IconPicker<V extends string>({ caption, value, options, onChange, color, inline, testId }: IconPickerProps<V>) {
+export function IconPicker<V extends string | number>({
+  caption,
+  value,
+  options,
+  onChange,
+  color,
+  inline,
+  small,
+  dimmed,
+  disabled,
+  testId,
+}: IconPickerProps<V>) {
   const id = useId();
+  const cls = ['choice-field', inline && 'choice-inline', small && 'choice-small', dimmed && 'choice-dimmed', disabled && 'choice-disabled'];
   return (
-    <div className={`choice-field${inline ? ' choice-inline' : ''}`}>
+    <div className={cls.filter(Boolean).join(' ')}>
       <span id={`${id}-caption`}>{caption}</span>
       <div
         className="choice-group"
@@ -43,7 +61,15 @@ export function IconPicker<V extends string>({ caption, value, options, onChange
           const on = o.value === value;
           return (
             <label key={o.value} className={`choice-option${on ? ' choice-on' : ''}`} title={o.label ?? o.short} data-testid={testId && `${testId}-${o.value}`}>
-              <input type="radio" name={id} value={o.value} checked={on} onChange={() => onChange(o.value)} aria-label={o.label ?? o.short} />
+              <input
+                type="radio"
+                name={id}
+                value={o.value}
+                checked={on}
+                disabled={disabled}
+                onChange={() => onChange(o.value)}
+                aria-label={o.label ?? o.short}
+              />
               {o.icon}
               <span aria-hidden="true">{o.short}</span>
             </label>

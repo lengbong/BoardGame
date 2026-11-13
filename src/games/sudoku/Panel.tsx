@@ -1,9 +1,15 @@
 import type { MouseEvent } from 'react';
 import { GameControls } from '../../components/GameControls';
+import { IconPicker, type IconChoice } from '../../components/IconPicker';
 import type { GameSettings } from '../common/settings';
 import { DIFFICULTY_INFO } from './generator';
 import { formatTime } from './storage';
 import type { MistakeMode, SudokuState } from './types';
+
+const MISTAKE_CHOICES: IconChoice<MistakeMode>[] = [
+  { value: 'instant', short: '바로 표시', label: '틀린 숫자를 바로 표시' },
+  { value: 'end', short: '다 채운 뒤 확인', label: '다 채운 뒤에 한꺼번에 확인' },
+];
 
 export type MessageTone = 'info' | 'warn' | 'hint' | 'good';
 
@@ -193,13 +199,7 @@ export function Panel(props: PanelProps) {
         <button type="button" className="btn btn-small" onMouseDown={keepFocus} onClick={props.onPrint} data-testid="sd-print-current">
           🖨 지금 문제 인쇄
         </button>
-        <label className="sd-mode-select">
-          틀린 숫자
-          <select value={state.mistakeMode} onChange={(e) => props.onMistakeMode(e.target.value as MistakeMode)} disabled={!playing}>
-            <option value="instant">바로 표시</option>
-            <option value="end">다 채운 뒤 확인</option>
-          </select>
-        </label>
+        <IconPicker caption="틀린 숫자" inline small disabled={!playing} value={state.mistakeMode} options={MISTAKE_CHOICES} onChange={props.onMistakeMode} testId="sd-mistake" />
       </section>
 
       <GameControls settings={props.settings} onSettings={props.onSettings} showSpeed={false} onNewGame={props.onNewGame} onExit={props.onExit} />

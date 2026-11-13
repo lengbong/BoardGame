@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { IconPicker } from '../../components/IconPicker';
 import { SeatPicker } from '../../components/SeatPicker';
 import { SpeedPicker } from '../../components/SpeedPicker';
 import { activeSeatCount } from '../common/players';
@@ -137,30 +138,28 @@ export function LastCardSetup({ initialSetup, saved, settings, onSettings, onSta
         <h3 className="sub-title">언제 끝낼까요?</h3>
         <div className="rule-grid">
           {END_MODES.map((m) => (
-            <label key={m.value} className="rule-item">
-              <input type="radio" name="lc-end-mode" checked={opt.endMode === m.value} onChange={() => setOpt({ endMode: m.value })} />
-              <span>
-                <strong>
-                  {m.title}
-                  {m.value === 'points' && (
-                    <select
-                      className="inline-select"
-                      value={opt.targetScore}
-                      onChange={(e) => setOpt({ endMode: 'points', targetScore: Number(e.target.value) })}
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label="목표 점수"
-                    >
-                      {TARGET_SCORES.map((v) => (
-                        <option key={v} value={v}>
-                          {v}점
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </strong>
-                <small>{m.desc}</small>
-              </span>
-            </label>
+            <div key={m.value}>
+              <label className="rule-item">
+                <input type="radio" name="lc-end-mode" checked={opt.endMode === m.value} onChange={() => setOpt({ endMode: m.value })} />
+                <span>
+                  <strong>{m.title}</strong>
+                  <small>{m.desc}</small>
+                </span>
+              </label>
+              {m.value === 'points' && (
+                <div className="rule-extra">
+                  <IconPicker
+                    caption="목표 점수"
+                    inline
+                    small
+                    dimmed={opt.endMode !== 'points'}
+                    value={opt.targetScore}
+                    options={TARGET_SCORES.map((v) => ({ value: v, short: `${v}점` }))}
+                    onChange={(v) => setOpt({ endMode: 'points', targetScore: v })}
+                  />
+                </div>
+              )}
+            </div>
           ))}
         </div>
       </section>

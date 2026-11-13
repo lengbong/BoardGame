@@ -1,4 +1,5 @@
 import { useState, type CSSProperties } from 'react';
+import { IconPicker } from '../../components/IconPicker';
 import { SeatPicker } from '../../components/SeatPicker';
 import { SpeedPicker } from '../../components/SpeedPicker';
 import { activeSeatCount } from '../common/players';
@@ -134,57 +135,53 @@ export function TilesSetup({ initialSetup, saved, settings, onSettings, onStart,
               <small>처음 낼 때는 내 타일만으로 합이 30 이상인 줄을 내야 해요. 그 전에는 판의 타일을 건드릴 수 없어요.</small>
             </span>
           </label>
-          <label className="rule-item">
-            <input type="checkbox" checked={opt.turnTime > 0} onChange={(e) => setOpt({ turnTime: e.target.checked ? TIME_CHOICES[0] : 0 })} />
-            <span>
-              <strong>
-                차례 시간 제한
-                <select
-                  className="inline-select"
-                  value={opt.turnTime || TIME_CHOICES[0]}
-                  onChange={(e) => setOpt({ turnTime: Number(e.target.value) })}
-                  onClick={(e) => e.stopPropagation()}
-                  aria-label="제한 시간"
-                >
-                  {TIME_CHOICES.map((v) => (
-                    <option key={v} value={v}>
-                      {v / 60}분
-                    </option>
-                  ))}
-                </select>
-              </strong>
-              <small>시간이 다 되면 판이 올바를 때는 그대로 완료, 아니면 되돌리고 타일을 1개 가져와요. (사람만)</small>
-            </span>
-          </label>
+          <div>
+            <label className="rule-item">
+              <input type="checkbox" checked={opt.turnTime > 0} onChange={(e) => setOpt({ turnTime: e.target.checked ? TIME_CHOICES[0] : 0 })} />
+              <span>
+                <strong>차례 시간 제한</strong>
+                <small>시간이 다 되면 판이 올바를 때는 그대로 완료, 아니면 되돌리고 타일을 1개 가져와요. (사람만)</small>
+              </span>
+            </label>
+            <div className="rule-extra">
+              <IconPicker
+                caption="제한 시간"
+                inline
+                small
+                dimmed={opt.turnTime === 0}
+                value={opt.turnTime || TIME_CHOICES[0]}
+                options={TIME_CHOICES.map((v) => ({ value: v, short: `${v / 60}분` }))}
+                onChange={(v) => setOpt({ turnTime: v })}
+              />
+            </div>
+          </div>
         </div>
 
         <h3 className="sub-title">언제 끝낼까요?</h3>
         <div className="rule-grid">
           {END_MODES.map((m) => (
-            <label key={m.value} className="rule-item">
-              <input type="radio" name="tl-end-mode" checked={opt.endMode === m.value} onChange={() => setOpt({ endMode: m.value })} />
-              <span>
-                <strong>
-                  {m.title}
-                  {m.value === 'rounds' && (
-                    <select
-                      className="inline-select"
-                      value={opt.rounds}
-                      onChange={(e) => setOpt({ endMode: 'rounds', rounds: Number(e.target.value) })}
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label="판 수"
-                    >
-                      {ROUND_CHOICES.map((v) => (
-                        <option key={v} value={v}>
-                          {v}판
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </strong>
-                <small>{m.desc}</small>
-              </span>
-            </label>
+            <div key={m.value}>
+              <label className="rule-item">
+                <input type="radio" name="tl-end-mode" checked={opt.endMode === m.value} onChange={() => setOpt({ endMode: m.value })} />
+                <span>
+                  <strong>{m.title}</strong>
+                  <small>{m.desc}</small>
+                </span>
+              </label>
+              {m.value === 'rounds' && (
+                <div className="rule-extra">
+                  <IconPicker
+                    caption="판 수"
+                    inline
+                    small
+                    dimmed={opt.endMode !== 'rounds'}
+                    value={opt.rounds}
+                    options={ROUND_CHOICES.map((v) => ({ value: v, short: `${v}판` }))}
+                    onChange={(v) => setOpt({ endMode: 'rounds', rounds: v })}
+                  />
+                </div>
+              )}
+            </div>
           ))}
         </div>
       </section>

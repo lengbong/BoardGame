@@ -1285,20 +1285,6 @@
   flex-wrap: wrap;
   gap: 24px;
 }
-.world-options label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  color: var(--text-muted);
-  font-size: 14px;
-}
-.world-options select {
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-2);
-  color: var(--text);
-}
 .rule-grid.end-modes {
   grid-template-columns: 1fr;
 }

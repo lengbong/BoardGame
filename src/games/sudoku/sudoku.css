@@ -556,13 +556,6 @@
   align-items: center;
   gap: 6px;
 }
-.sd-mode-select {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-}
-.sd-mode-select select,
 .sd-code-row input,
 .sd-stepper input,
 .sd-title-input {

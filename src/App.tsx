@@ -1,9 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CATEGORIES, GAMES } from './games/registry';
 
 export function App() {
   const [gameId, setGameId] = useState<string | null>(null);
   const game = GAMES.find((g) => g.id === gameId);
+
+  // 게임을 열거나 닫을 때 맨 위에서 시작한다. (좁은 화면에서 처음 화면의 스크롤 위치가 남지 않게)
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [gameId]);
 
   if (game) {
     const Game = game.component;

@@ -1213,19 +1213,6 @@
 .world-result h2 {
   margin-bottom: 14px;
 }
-.trophy {
-  font-size: 64px;
-  line-height: 1;
-  animation: trophy 0.9s cubic-bezier(0.3, 1.6, 0.5, 1) both;
-}
-@keyframes trophy {
-  0% {
-    transform: scale(0) rotate(-30deg);
-  }
-  100% {
-    transform: none;
-  }
-}
 .world-result .result-list li {
   animation: slide-in 0.45s ease both;
 }

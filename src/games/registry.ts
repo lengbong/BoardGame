@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from 'react';
 import { createElement } from 'react';
+import { BaseballApp } from './baseball/BaseballApp';
 import { BoxesApp } from './boxes/BoxesApp';
 import { DominoApp } from './domino/DominoApp';
 import { DominoIcon } from './domino/DominoIcon';
@@ -172,6 +173,16 @@ export const GAMES: GameEntry[] = [
     category: 'paper',
     icon: '🚢',
     component: ShipsApp,
+  },
+  {
+    id: 'baseball',
+    title: '숫자야구',
+    description: '숨긴 숫자를 스트라이크·볼 힌트로 추리해서 맞혀요. 숫자와 자리가 맞으면 스트라이크! 혼자 기록에 도전할 수도 있어요.',
+    players: '1~2명 (컴퓨터 상대 가능)',
+    playTime: '5~15분',
+    category: 'paper',
+    icon: '⚾',
+    component: BaseballApp,
   },
   {
     id: 'sudoku',

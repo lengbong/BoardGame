@@ -7,10 +7,14 @@ import { DominoApp } from './domino/DominoApp';
 import { DominoIcon } from './domino/DominoIcon';
 import { FourLineApp } from './fourline/FourLineApp';
 import { LastCardApp } from './lastcard/LastCardApp';
+import { MalangIcon } from './malang/JellyArt';
+import { MalangApp } from './malang/MalangApp';
 import { MancalaApp } from './mancala/MancalaApp';
 import { MancalaIcon } from './mancala/MancalaIcon';
 import { MemoryApp } from './memory/MemoryApp';
 import { OldMaidApp } from './oldmaid/OldMaidApp';
+import { OmokApp } from './omok/OmokApp';
+import { OmokIcon } from './omok/StoneArt';
 import { RaceApp } from './race/RaceApp';
 import { ReversiApp } from './reversi/ReversiApp';
 import { ReversiIcon } from './reversi/ReversiIcon';
@@ -20,13 +24,14 @@ import { SudokuApp } from './sudoku/SudokuApp';
 import { TilesApp } from './tiles/TilesApp';
 import { WorldApp } from './world/WorldApp';
 
-export type GameCategory = 'board' | 'cards' | 'duel' | 'paper' | 'puzzle';
+export type GameCategory = 'board' | 'cards' | 'duel' | 'action' | 'paper' | 'puzzle';
 
 /** 처음 화면에서 게임을 묶어 보여 주는 순서와 제목 */
 export const CATEGORIES: { id: GameCategory; title: string }[] = [
   { id: 'board', title: '🎲 말판·주사위' },
   { id: 'cards', title: '🃏 카드·타일' },
   { id: 'duel', title: '♟️ 둘이서 수 싸움' },
+  { id: 'action', title: '🕹️ 실시간 퍼즐' },
   { id: 'paper', title: '✏️ 종이·연필 놀이' },
   { id: 'puzzle', title: '🧩 혼자 푸는 퍼즐' },
 ];
@@ -164,6 +169,26 @@ export const GAMES: GameEntry[] = [
     category: 'duel',
     icon: createElement(MancalaIcon),
     component: MancalaApp,
+  },
+  {
+    id: 'omok',
+    title: '오목',
+    description: '흑과 백이 번갈아 바둑판에 돌을 놓아 가로·세로·대각선으로 다섯 개를 먼저 이으면 이겨요. 쌍삼 금지·렌주 규칙도 골라요!',
+    players: '2명 (컴퓨터 상대 가능)',
+    playTime: '5~20분',
+    category: 'duel',
+    icon: createElement(OmokIcon),
+    component: OmokApp,
+  },
+  {
+    id: 'malang',
+    title: '말랑 팡팡',
+    description: '두 개씩 떨어지는 젤리를 돌려서 같은 색 4개를 이으면 팡! 연쇄로 상대에게 방해 젤리를 보내요. 둘이서 한 키보드로도 해요.',
+    players: '1~2명 (컴퓨터 상대 가능)',
+    playTime: '3~10분',
+    category: 'action',
+    icon: createElement(MalangIcon),
+    component: MalangApp,
   },
   {
     id: 'boxes',

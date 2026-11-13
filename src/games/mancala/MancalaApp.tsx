@@ -1,11 +1,56 @@
-/** 임시 화면: 이 게임을 만드는 동안 게임 목록에서 열 수 있게 둔다. */
+import { useState } from 'react';
+import { useGameSettings } from '../common/settings';
+import { MancalaGame } from './MancalaGame';
+import { MancalaSetup } from './MancalaSetup';
+import { createGame } from './rules';
+import { SETTINGS_KEY, loadMancalaSetup, loadSavedMancalaGame, saveMancalaSetup, type SavedMancalaGame } from './storage';
+import type { MancalaSetup as Setup, MancalaState } from './types';
+import './mancala.css';
+
+type Screen = { type: 'setup' } | { type: 'game'; setup: Setup; state: MancalaState; key: number };
+
 export function MancalaApp({ onExit }: { onExit: () => void }) {
+  const [settings, setSettings] = useGameSettings(SETTINGS_KEY);
+  const [saved, setSaved] = useState<SavedMancalaGame | null>(loadSavedMancalaGame);
+  const [lastSetup, setLastSetup] = useState<Setup>(loadMancalaSetup);
+  const [screen, setScreen] = useState<Screen>({ type: 'setup' });
+
+  const start = (setup: Setup) => {
+    saveMancalaSetup(setup);
+    setLastSetup(setup);
+    setScreen({ type: 'game', setup, state: createGame(setup), key: Date.now() });
+  };
+
+  const backToSetup = () => {
+    setSaved(loadSavedMancalaGame());
+    setLastSetup(loadMancalaSetup());
+    setScreen({ type: 'setup' });
+  };
+
+  if (screen.type === 'game') {
+    return (
+      <MancalaGame
+        key={screen.key}
+        setup={screen.setup}
+        initialState={screen.state}
+        settings={settings}
+        onSettings={setSettings}
+        onRestart={start}
+        onChangeSetup={backToSetup}
+        onExit={onExit}
+      />
+    );
+  }
+
   return (
-    <div className="setup">
-      <button type="button" className="btn btn-ghost setup-back" onClick={onExit}>
-        ← 게임 목록
-      </button>
-      <p>준비 중이에요.</p>
-    </div>
+    <MancalaSetup
+      initialSetup={lastSetup}
+      saved={saved}
+      settings={settings}
+      onSettings={setSettings}
+      onStart={start}
+      onResume={() => saved && setScreen({ type: 'game', setup: saved.setup, state: saved.state, key: Date.now() })}
+      onBack={onExit}
+    />
   );
 }

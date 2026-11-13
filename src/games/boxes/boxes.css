@@ -1,0 +1,597 @@
+/* ================================================================
+   점과 상자 — 모든 클래스는 bx- 로 시작한다 (다른 게임과 겹치지 않게)
+   ================================================================ */
+
+.bx-game,
+.bx-hero,
+.bx-result-overlay {
+  --bx-paper: #fffdf5;
+  --bx-grid: #bcd6ee;
+  --bx-graphite: #3b3835;
+  --bx-margin: #f19a9a;
+  --bx-hole: #e6dfcc;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .bx-game,
+  :root:not([data-theme='light']) .bx-hero,
+  :root:not([data-theme='light']) .bx-result-overlay {
+    --bx-paper: #ece6d5;
+    --bx-grid: #a8bfd3;
+    --bx-graphite: #2f2c29;
+    --bx-margin: #d98585;
+    --bx-hole: #c9c1ad;
+  }
+}
+:root[data-theme='dark'] .bx-game,
+:root[data-theme='dark'] .bx-hero,
+:root[data-theme='dark'] .bx-result-overlay {
+  --bx-paper: #ece6d5;
+  --bx-grid: #a8bfd3;
+  --bx-graphite: #2f2c29;
+  --bx-margin: #d98585;
+  --bx-hole: #c9c1ad;
+}
+
+/* ---------------------------------------------------------------- 화면 배치 */
+.bx-game {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  height: calc(100vh - 32px);
+  min-height: 560px;
+}
+.bx-main {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+.bx-stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bx-game kbd,
+.bx-result kbd {
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  opacity: 0.7;
+}
+.bx-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- 판 (SVG) */
+.bx-board {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  filter: drop-shadow(0 3px 8px rgba(60, 45, 20, 0.18));
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.bx-board-pick {
+  cursor: pointer;
+}
+.bx-paper {
+  fill: var(--bx-paper);
+  stroke: rgba(0, 0, 0, 0.08);
+  stroke-width: 1.5;
+}
+.bx-grid-line {
+  fill: none;
+  stroke: var(--bx-grid);
+  stroke-width: 1.2;
+  opacity: 0.55;
+}
+.bx-margin-line {
+  stroke: var(--bx-margin);
+  stroke-width: 2;
+}
+.bx-hole {
+  fill: var(--bx-hole);
+  stroke: rgba(0, 0, 0, 0.22);
+  stroke-width: 1.5;
+}
+.bx-dot {
+  fill: var(--bx-graphite);
+}
+
+/* 그은 선: 펜 두 번 그은 느낌 */
+.bx-ink path {
+  fill: none;
+  stroke-linecap: round;
+}
+.bx-ink-main {
+  stroke-width: 9;
+}
+.bx-ink-sketch {
+  stroke-width: 3.2;
+  opacity: 0.45;
+  transform: translate(1.5px, -1.5px);
+}
+.bx-ink-new path {
+  stroke-dasharray: 1 1.2;
+  stroke-dashoffset: 1;
+  animation: bx-draw var(--bx-draw, 400ms) cubic-bezier(0.35, 0.1, 0.4, 1) forwards;
+}
+.bx-ink-new .bx-ink-sketch {
+  animation-delay: calc(var(--bx-draw, 400ms) * 0.35);
+}
+@keyframes bx-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* 마지막 선: 형광펜 */
+.bx-highlight {
+  stroke: #ffe14d;
+  stroke-width: 26;
+  stroke-linecap: round;
+  opacity: 0.75;
+  animation: bx-fade 0.4s ease-out backwards;
+}
+@keyframes bx-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* 고르는 중인 선 */
+.bx-ghost {
+  stroke-width: 8;
+  stroke-linecap: round;
+  stroke-dasharray: 10 13;
+  opacity: 0.6;
+  pointer-events: none;
+  animation: bx-ghost 1s ease-in-out infinite alternate;
+}
+@keyframes bx-ghost {
+  to {
+    opacity: 0.32;
+  }
+}
+.bx-cursor {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3.5;
+  stroke-dasharray: 9 6;
+  pointer-events: none;
+}
+.bx-marker {
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bx-pop 0.25s ease-out backwards;
+}
+.bx-marker-text,
+.bx-marker-warn-text {
+  text-anchor: middle;
+  font-weight: 900;
+  font-family: inherit;
+}
+.bx-marker-text {
+  fill: #fff;
+  font-size: 22px;
+}
+.bx-marker-warn-text {
+  fill: #5a3c00;
+  font-size: 25px;
+}
+
+/* 완성한 상자 */
+.bx-box-wash {
+  opacity: 0.6;
+}
+.bx-hatch {
+  fill: none;
+}
+.bx-hatch path {
+  fill: none;
+  stroke-width: 6.5;
+  stroke-linecap: round;
+  opacity: 0.5;
+}
+.bx-box-new .bx-hatch path {
+  stroke-dasharray: 1 1.2;
+  stroke-dashoffset: 1;
+  animation: bx-draw 0.22s ease-out forwards;
+}
+.bx-box-new .bx-box-wash {
+  animation: bx-fade 0.35s ease-out backwards;
+}
+.bx-box-mark {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.bx-box-new .bx-box-mark {
+  animation: bx-pop 0.5s cubic-bezier(0.3, 1.6, 0.5, 1) 0.18s backwards;
+}
+@keyframes bx-pop {
+  from {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+}
+.bx-box-initial {
+  font-size: 25px;
+  font-weight: 900;
+  text-anchor: middle;
+  font-family: inherit;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 4px;
+}
+.bx-plus {
+  font-size: 30px;
+  font-weight: 900;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 5px;
+  pointer-events: none;
+  animation: bx-rise 0.95s ease-out forwards;
+}
+@keyframes bx-rise {
+  0% {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-26px);
+    opacity: 0;
+  }
+}
+
+/* 선을 긋는 연필 */
+.bx-pencil {
+  pointer-events: none;
+  opacity: 0;
+  animation: bx-pencil calc(var(--bx-draw, 400ms) * 1.35) ease-out forwards;
+}
+@keyframes bx-pencil {
+  0% {
+    transform: translate(var(--x1), var(--y1));
+    opacity: 1;
+  }
+  74% {
+    transform: translate(var(--x2), var(--y2));
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--x2), var(--y2)) translate(6px, -10px);
+    opacity: 0;
+  }
+}
+
+/* 판 위 차례 표시·알림 */
+.bx-turn-chip {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 2px solid var(--pc);
+  font-weight: 800;
+  font-size: 14px;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+.bx-toast {
+  position: absolute;
+  top: 10%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 22px;
+  border-radius: 999px;
+  background: var(--pc);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 900;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+  animation: bx-toast 1.2s ease-out forwards;
+}
+@keyframes bx-toast {
+  0% {
+    transform: translate(-50%, 12px) scale(0.7);
+    opacity: 0;
+  }
+  15% {
+    transform: translate(-50%, 0) scale(1.05);
+    opacity: 1;
+  }
+  25% {
+    transform: translate(-50%, 0) scale(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -10px);
+    opacity: 0;
+  }
+}
+
+/* ---------------------------------------------------------------- 패널 */
+.bx-round-info {
+  margin: 4px 0 6px;
+  font-size: 13px;
+  color: #6f675e;
+}
+.bx-keys {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6f675e;
+}
+.bx-panel .players li {
+  gap: 10px;
+}
+.bx-player-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.bx-player-text .player-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bx-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.bx-score strong {
+  min-width: 2.2em;
+  text-align: right;
+}
+.bx-score-bar,
+.bx-row-bar {
+  position: relative;
+  display: inline-block;
+  width: 64px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border);
+  overflow: hidden;
+}
+.bx-score-bar::after,
+.bx-row-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform-origin: left;
+  transform: scaleX(var(--ratio));
+  background: var(--pc);
+  transition: transform 0.5s ease;
+}
+.bx-log {
+  display: flex;
+  flex-direction: column;
+  min-height: 110px;
+}
+.bx-log ol {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ---------------------------------------------------------------- 결과 */
+.bx-result {
+  position: relative;
+  max-width: min(780px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+.bx-result-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.bx-result-head h2 {
+  margin: 0;
+}
+.bx-trophy {
+  font-size: 44px;
+  line-height: 1;
+  animation: bx-pop 0.6s cubic-bezier(0.3, 1.6, 0.5, 1) backwards;
+}
+.bx-result-body {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.bx-result-board {
+  width: 260px;
+  height: 260px;
+}
+.bx-score-table {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bx-score-table li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  font-size: 17px;
+  text-align: left;
+  animation: bx-slide 0.4s ease backwards;
+}
+.bx-score-table li strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bx-row-winner {
+  outline: 2px solid var(--accent);
+}
+.bx-row-total {
+  min-width: 4.5em;
+  text-align: right;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+@keyframes bx-slide {
+  from {
+    transform: translateX(-16px);
+    opacity: 0;
+  }
+}
+
+/* ---------------------------------------------------------------- 설정 화면 */
+.bx-hero {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 18px 28px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(90deg, transparent 54px, rgba(229, 72, 77, 0.45) 54px, rgba(229, 72, 77, 0.45) 56px, transparent 56px),
+    repeating-linear-gradient(180deg, transparent 0 27px, rgba(80, 140, 200, 0.28) 27px 28px),
+    var(--bx-paper);
+  color: #2b2724;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.bx-hero h1 {
+  font-size: 38px;
+  letter-spacing: -0.02em;
+}
+.bx-hero p {
+  margin: 4px 0 0;
+  color: #4a433c;
+}
+.bx-hero-paper {
+  flex: none;
+  width: 190px;
+  height: 190px;
+  transform: rotate(-4deg);
+  animation: bx-hero-in 0.6s cubic-bezier(0.3, 1.3, 0.5, 1) backwards;
+}
+.bx-hero-board {
+  width: 100%;
+  height: 100%;
+}
+@keyframes bx-hero-in {
+  from {
+    transform: translateY(30px) rotate(-12deg);
+    opacity: 0;
+  }
+}
+.bx-size-sub {
+  font-style: normal;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+.bx-tag-rec {
+  font-style: normal;
+  margin-left: 8px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------- 움직임 줄이기 */
+@media (prefers-reduced-motion: reduce) {
+  .bx-ink-new path,
+  .bx-box-new .bx-hatch path {
+    animation: none;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+  }
+  .bx-pencil,
+  .bx-plus {
+    display: none;
+  }
+  .bx-ghost,
+  .bx-box-new .bx-box-mark,
+  .bx-box-new .bx-box-wash,
+  .bx-highlight,
+  .bx-toast,
+  .bx-hero-paper,
+  .bx-trophy,
+  .bx-score-table li {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------- 좁은 화면 */
+@media (max-width: 1000px) {
+  .bx-game {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+  .bx-stage {
+    height: min(94vw, 76vh);
+  }
+  .bx-log {
+    max-height: 260px;
+  }
+}
+@media (max-width: 640px) {
+  .bx-result-body {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+  .bx-result-board {
+    width: 220px;
+    height: 220px;
+  }
+  .bx-hero {
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+  }
+  .bx-hero h1 {
+    font-size: 30px;
+  }
+}

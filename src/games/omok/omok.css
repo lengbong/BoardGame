@@ -1,0 +1,379 @@
+/* ================================================================
+   오목 — 모든 클래스는 ok- 로 시작한다 (다른 게임과 겹치지 않게)
+   ================================================================ */
+
+.ok-game {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  height: calc(100vh - 32px);
+  min-height: 600px;
+}
+.ok-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+}
+.ok-game kbd,
+.ok-panel kbd {
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  opacity: 0.7;
+}
+.ok-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------- 판 */
+.ok-board {
+  display: block;
+  width: min(100%, calc(100vh - 40px));
+  height: auto;
+  aspect-ratio: 1;
+  user-select: none;
+  touch-action: manipulation;
+  filter: drop-shadow(0 6px 14px rgba(60, 35, 10, 0.25));
+}
+.ok-board-on {
+  cursor: pointer;
+}
+.ok-frame {
+  fill: #8a5a2b;
+}
+.ok-grain {
+  fill: none;
+  stroke: #b8833f;
+  stroke-width: 0.05;
+  opacity: 0.35;
+}
+.ok-lines line,
+.ok-edge {
+  stroke: #5c3d1e;
+  stroke-width: 0.035;
+  fill: none;
+}
+.ok-edge {
+  stroke-width: 0.07;
+}
+.ok-star {
+  fill: #5c3d1e;
+}
+.ok-labels text {
+  font-size: 0.38px;
+  font-weight: 700;
+  fill: #6b4a2b;
+}
+.ok-forbidden {
+  stroke: #d1342f;
+  stroke-width: 0.07;
+  stroke-linecap: round;
+  opacity: 0.75;
+}
+.ok-hint {
+  fill: none;
+  stroke-width: 0.09;
+  pointer-events: none;
+  animation: ok-hint 1.2s ease-in-out infinite;
+}
+.ok-hint-win {
+  stroke: #1fa15a;
+}
+.ok-hint-block {
+  stroke: #ff7a1a;
+}
+.ok-hint-watch {
+  stroke: #e6b800;
+  stroke-dasharray: 0.16 0.1;
+}
+@keyframes ok-hint {
+  50% {
+    opacity: 0.35;
+  }
+}
+.ok-new {
+  animation: ok-drop 0.22s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+@keyframes ok-drop {
+  from {
+    transform: scale(1.35);
+    opacity: 0.4;
+  }
+}
+.ok-last {
+  fill: #e5484d;
+  stroke: #fff;
+  stroke-width: 0.03;
+}
+.ok-num {
+  font-size: 0.4px;
+  font-weight: 800;
+  pointer-events: none;
+}
+.ok-num-b {
+  fill: #f4f0e6;
+}
+.ok-num-w {
+  fill: #2b2724;
+}
+.ok-num-last {
+  fill: #e5484d;
+}
+.ok-winstone {
+  animation: ok-pulse 0.9s ease-in-out infinite;
+}
+@keyframes ok-pulse {
+  50% {
+    filter: drop-shadow(0 0 0.15px #ffd23f) brightness(1.15);
+  }
+}
+.ok-winline {
+  stroke: #ffcf3f;
+  stroke-width: 0.16;
+  stroke-linecap: round;
+  opacity: 0.92;
+  filter: drop-shadow(0 0 0.12px #ff9f1c);
+  stroke-dasharray: 30;
+  stroke-dashoffset: 30;
+  animation: ok-line 0.7s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes ok-line {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.ok-ghost {
+  opacity: 0.45;
+}
+.ok-cursor-box {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 0.06;
+}
+.ok-cursor-key .ok-cursor-box {
+  stroke: var(--accent);
+}
+
+/* ---------------------------------------------------------------- 사이드 패널 */
+.ok-panel .turn-card .hint {
+  min-height: 3em;
+}
+.ok-turn-stone,
+.ok-player-stone {
+  display: inline-flex;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  font-size: 22px;
+}
+.ok-player-stone {
+  width: 22px;
+  height: 22px;
+}
+.ok-stone-icon {
+  width: 100%;
+  height: 100%;
+}
+.ok-sub {
+  margin: 4px 0 6px;
+  font-size: 14px;
+  color: #4a433c;
+}
+.ok-notice {
+  color: #c0392b !important;
+}
+.ok-thinking {
+  display: inline-block;
+  width: 26px;
+  height: 8px;
+  margin-left: 8px;
+  vertical-align: middle;
+  background: radial-gradient(circle, #6f675e 3px, transparent 3.5px) 0 50% / 9px 8px repeat-x;
+  animation: ok-think 0.9s steps(3) infinite;
+}
+@keyframes ok-think {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 -10% 0 0);
+  }
+}
+.ok-players .player-kind {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ok-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 8px;
+  font-size: 14px;
+}
+.ok-toggles label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.ok-toggles input {
+  accent-color: var(--accent);
+}
+.ok-log-stone {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+
+/* ---------------------------------------------------------------- 결과 */
+.ok-result-overlay {
+  overflow: hidden;
+}
+.ok-result {
+  position: relative;
+  max-width: min(520px, 100%);
+}
+.ok-result-close {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 18px;
+}
+.ok-result-icon {
+  display: flex;
+  justify-content: center;
+  font-size: 56px;
+  line-height: 1;
+  animation: trophy 0.9s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+.ok-result-icon .ok-stone-icon {
+  width: 64px;
+  height: 64px;
+}
+.ok-result-sub {
+  margin: -8px 0 14px;
+  color: var(--text-muted);
+}
+.ok-mini {
+  display: block;
+  width: min(300px, 80vw);
+  margin: 0 auto 18px;
+}
+
+/* ---------------------------------------------------------------- 설정 화면 */
+.ok-hero {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 20px 28px;
+  border-radius: 20px;
+  border: 8px solid #8a5a2b;
+  background: linear-gradient(135deg, #5c3d1e, #3b2612);
+  color: #fff;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.ok-hero h1 {
+  font-size: 38px;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.ok-hero p {
+  margin: 4px 0 0;
+  opacity: 0.95;
+}
+.ok-hero-art {
+  flex: none;
+  width: 160px;
+  height: 160px;
+}
+.ok-hero-stone {
+  animation: ok-hero-in 0.4s cubic-bezier(0.3, 1.4, 0.5, 1) backwards;
+}
+@keyframes ok-hero-in {
+  from {
+    opacity: 0;
+  }
+}
+.ok-hero-drop {
+  animation: ok-hero-in 0.3s ease-out 1.3s backwards;
+}
+.ok-hero-line {
+  animation-delay: 1.6s;
+}
+.ok-note {
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.ok-rule-list {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.ok-choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.ok-choice-row > span {
+  min-width: 70px;
+  font-weight: 700;
+}
+.ok-disabled {
+  opacity: 0.55;
+}
+
+/* ---------------------------------------------------------------- 좁은 화면 */
+@media (max-width: 1000px) {
+  .ok-game {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+  .ok-board {
+    width: min(100%, 720px);
+  }
+}
+
+@media (max-width: 640px) {
+  .ok-hero {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .ok-hero h1 {
+    font-size: 30px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ok-hint,
+  .ok-new,
+  .ok-winstone,
+  .ok-thinking {
+    animation: none;
+  }
+  .ok-winline {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}

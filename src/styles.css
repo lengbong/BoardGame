@@ -413,6 +413,8 @@ button.game-card:hover {
   flex: 1;
   min-width: 0;
   border: 2px solid;
+  /* 편 색이 아주 어두워도(흑돌 등) 다크 모드에서 카드 테두리가 보이게 */
+  box-shadow: 0 0 0 1px var(--border);
   border-radius: 12px;
   overflow: hidden;
   display: flex;

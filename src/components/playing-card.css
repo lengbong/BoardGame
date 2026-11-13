@@ -1,0 +1,168 @@
+/* ================================================================
+   트럼프 카드 (components/PlayingCard.tsx) — 모든 클래스는 pc- 로 시작
+   크기: --pc-w (카드 너비), 뒷면 색: --pc-back, --pc-back-2
+   ================================================================ */
+
+.pc-card {
+  display: block;
+  flex: none;
+  width: var(--pc-w, 72px);
+  height: auto;
+  aspect-ratio: 5 / 7;
+}
+.pc-face {
+  overflow: visible;
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.28));
+}
+.pc-face text {
+  user-select: none;
+}
+.pc-suit-icon {
+  display: inline-block;
+  flex: none;
+  vertical-align: -0.14em;
+}
+
+/* 뒷면: 흰 테두리 + 마름모 격자 무늬 + 가운데 보석 */
+.pc-back {
+  position: relative;
+  overflow: hidden;
+  border-radius: calc(var(--pc-w, 72px) * 0.08);
+  background: #fffdf8;
+  border: 1px solid rgba(0, 0, 0, 0.38);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.pc-back::before {
+  content: '';
+  position: absolute;
+  inset: 6%;
+  border-radius: calc(var(--pc-w, 72px) * 0.05);
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.17) 0 1.5px, transparent 1.5px 7px),
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.17) 0 1.5px, transparent 1.5px 7px),
+    radial-gradient(circle at 50% 45%, var(--pc-back-2, #9b5cc0), var(--pc-back, #5b2d7a) 72%);
+}
+.pc-back-emblem {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 40%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border-radius: 24%;
+  background: var(--pc-back, #5b2d7a);
+  border: max(1px, calc(var(--pc-w, 72px) * 0.028)) solid #fffdf8;
+  box-shadow: 0 0 0 max(1px, calc(var(--pc-w, 72px) * 0.02)) var(--pc-back, #5b2d7a);
+}
+.pc-back-emblem::after {
+  content: '';
+  position: absolute;
+  inset: 27%;
+  border-radius: 50%;
+  background: #f2bd3c;
+  box-shadow: inset 0 0 0 max(1px, calc(var(--pc-w, 72px) * 0.012)) rgba(0, 0, 0, 0.25);
+}
+
+/* 뒤집히는 카드 */
+.pc-flip {
+  display: block;
+  flex: none;
+  width: var(--pc-w, 72px);
+  aspect-ratio: 5 / 7;
+  perspective: 700px;
+}
+.pc-flip-inner {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transform: rotateY(180deg);
+  transition: transform 0.45s cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+.pc-flip-up .pc-flip-inner {
+  transform: rotateY(0deg);
+}
+.pc-flip-front,
+.pc-flip-back {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.pc-flip-front .pc-card,
+.pc-flip-back .pc-card {
+  width: 100%;
+}
+.pc-flip-back {
+  transform: rotateY(180deg);
+}
+
+/* 날아가는 카드 */
+.pc-flyer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 45;
+  width: var(--pc-w, 64px);
+  pointer-events: none;
+  animation-name: pc-fly;
+  animation-timing-function: cubic-bezier(0.3, 0.7, 0.35, 1);
+  animation-fill-mode: both;
+}
+.pc-flyer > .pc-card,
+.pc-flyer > .pc-flip {
+  width: 100%;
+}
+@keyframes pc-fly {
+  0% {
+    transform: translate(var(--fx), var(--fy)) translate(-50%, -50%) scale(1) rotate(0deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--tx), var(--ty)) translate(-50%, -50%) scale(var(--s1, 1)) rotate(var(--r1, 0deg));
+    opacity: 1;
+  }
+}
+.pc-flyer-turn .pc-flip-inner {
+  transition: none;
+  animation-timing-function: ease-in-out;
+  animation-fill-mode: both;
+}
+.pc-turn-up .pc-flip-inner {
+  animation-name: pc-turn-up;
+}
+.pc-turn-down .pc-flip-inner {
+  animation-name: pc-turn-down;
+}
+@keyframes pc-turn-up {
+  0%,
+  25% {
+    transform: rotateY(180deg);
+  }
+  100% {
+    transform: rotateY(0deg);
+  }
+}
+@keyframes pc-turn-down {
+  0%,
+  25% {
+    transform: rotateY(0deg);
+  }
+  100% {
+    transform: rotateY(180deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-flip-inner {
+    transition: none;
+  }
+  .pc-flyer,
+  .pc-flyer-turn .pc-flip-inner {
+    animation-duration: 1ms !important;
+  }
+}

@@ -16,6 +16,7 @@ import {
   legFreq,
   legHours,
   leaseRent,
+  opsRates,
   maxFreq,
   pairDemand,
   planeAge,
@@ -29,6 +30,8 @@ import {
 } from './simulate';
 import { yearOf } from './time';
 import type { AirlineAction, AirlineState, ModelDef, RegionId } from './types';
+import { SparkBars, Sparkline } from './Charts';
+import { causeInfo } from './ReportView';
 import { ActButton, CoName, LoadMeter, Stepper } from './ui';
 
 export interface Planner {
@@ -292,7 +295,7 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
                             onClick={() => acquire({ lease: m.id })}
                             title={deposit > 0 ? `보증금 ${fmtMoney(deposit)} (돌려줄 때 돌려받아요)` : '첫해에는 보증금이 없어요'}
                           >
-                            리스 · 분기 {fmtMoney(leaseRent(state, m))}
+                            리스 · 달 {fmtMoney(leaseRent(state, m))}
                           </ActButton>
                           {used && (
                             <ActButton small blocker={canAct ? usedBlocker(state, viewer, used.id) : notMine} onClick={() => acquire({ used: used.id })} title={`${used.age}년 된 중고`}>
@@ -304,7 +307,7 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
                     );
                   })}
                 </ul>
-                <p className="al-muted al-tip">새 비행기 주문은 ‘비행기’ 화면에서 해요 (싸지만 몇 분기 뒤에 와요).</p>
+                <p className="al-muted al-tip">새 비행기 주문은 ‘비행기’ 화면에서 해요 (싸지만 몇 달 뒤에 와요).</p>
               </>
             )}
           </section>
@@ -339,6 +342,41 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
         </div>
         <div className="al-editor-right">
           <EstimateCard est={est} lastProfit={r.stats?.profit ?? null} lastLf={r.stats?.lf ?? null} />
+          <section className="al-card al-route-ops">
+            <h4>운항과 지난 열두 달</h4>
+            {(() => {
+              const risk = opsRates(state, viewer, r.id);
+              const info = causeInfo(risk.cause);
+              const hist = r.stats?.hist ?? [];
+              return (
+                <dl className="al-est-grid">
+                  <div>
+                    <dt>탑승률 흐름</dt>
+                    <dd>
+                      <Sparkline values={hist.map((x) => x[0])} label="최근 열두 달 탑승률" />
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>이익 흐름</dt>
+                    <dd>
+                      <SparkBars values={hist.map((x) => x[1])} label="최근 열두 달 이익" />
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>지난달 정시율 · 결항</dt>
+                    <dd>{r.stats ? `${pct(r.stats.onTime)} · 결항 ${(r.stats.cancel * 100).toFixed(1)}%` : '—'}</dd>
+                  </div>
+                  <div>
+                    <dt>이번 달 걱정</dt>
+                    <dd>
+                      {info.icon} {info.name}
+                      {risk.city ? ` (${CITY[risk.city].name})` : ''} · 지연 약 {pct(risk.late)} · 결항 약 {(risk.cancel * 100).toFixed(1)}%
+                    </dd>
+                  </div>
+                </dl>
+              );
+            })()}
+          </section>
           {rivals.length > 0 && (
             <section className="al-card">
               <h4>라이벌</h4>
@@ -373,8 +411,8 @@ const COST_PARTS: { key: keyof RouteEstimate['cost']; name: string; cls: string 
   { key: 'lease', name: '리스·보험', cls: 'al-c-lease' },
 ];
 
-/** 이번 분기 어림 (손님·탑승률·수입·비용·이익) */
-export function EstimateCard({ est, lastProfit, lastLf, title = '이번 분기 어림' }: { est: RouteEstimate; lastProfit: number | null; lastLf: number | null; title?: string }) {
+/** 이번 달 어림 (손님·탑승률·수입·비용·이익) */
+export function EstimateCard({ est, lastProfit, lastLf, title = '이번 달 어림' }: { est: RouteEstimate; lastProfit: number | null; lastLf: number | null; title?: string }) {
   const total = Math.max(est.revenue, est.cost.total, 1);
   return (
     <section className="al-card al-estimate" aria-live="polite">
@@ -403,7 +441,7 @@ export function EstimateCard({ est, lastProfit, lastLf, title = '이번 분기 �
           <dd>{pct(est.share)}</dd>
         </div>
         <div>
-          <dt>분기 운임 수입</dt>
+          <dt>달 운임 수입</dt>
           <dd>{fmtMoney(est.revenue)}</dd>
         </div>
       </dl>
@@ -427,7 +465,7 @@ export function EstimateCard({ est, lastProfit, lastLf, title = '이번 분기 �
       </ul>
       {lastProfit !== null && (
         <p className="al-muted al-last">
-          지난 분기 실제: 이익 {signedMoney(lastProfit)}
+          지난달 실제: 이익 {signedMoney(lastProfit)}
           {lastLf !== null && ` · 탑승률 ${pct(lastLf)}`}
         </p>
       )}
@@ -604,7 +642,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
               </h4>
               <p className="al-muted">
                 {AIRPORT_INFO[airportClass(CITY[to], year)].name}
-                {needBranch.length > 0 && ` · 지점 새로 열기: ${needBranch.map((c) => `${CITY[c].name} ${fmtMoney(branchCost(c, state.q))} (유지비 분기 ${fmtMoney(branchUpkeep(c, state.q))})`).join(', ')}`}
+                {needBranch.length > 0 && ` · 지점 새로 열기: ${needBranch.map((c) => `${CITY[c].name} ${fmtMoney(branchCost(c, state.q))} (유지비 달 ${fmtMoney(branchUpkeep(c, state.q))})`).join(', ')}`}
               </p>
               {options.length === 0 ? (
                 <p className="al-why">지금 이 노선에 띄울 수 있는 비행기가 없어요. (거리·공항 크기·슬롯을 확인하세요)</p>
@@ -619,7 +657,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                           주 {o.freq}회 · {o.m.seats}석 · 탑승률 {pct(o.e.lf)}
                         </small>
                         <small>
-                          이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/분기
+                          이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/달
                         </small>
                       </span>
                       <span className="al-two">
@@ -630,7 +668,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                           onClick={() => openWith(o, 'lease')}
                           title={(() => {
                             const dep = depositFor(state, viewer, o.m.id);
-                            return `분기 리스료 ${fmtMoney(leaseRent(state, o.m))}${dep > 0 ? `, 보증금 ${fmtMoney(dep)} (돌려줄 때 돌려받아요)` : ', 첫해 보증금 없음'}`;
+                            return `달 리스료 ${fmtMoney(leaseRent(state, o.m))}${dep > 0 ? `, 보증금 ${fmtMoney(dep)} (돌려줄 때 돌려받아요)` : ', 첫해 보증금 없음'}`;
                           })()}
                         >
                           리스로 열기
@@ -661,7 +699,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                             {o.p.legs.length === 0 ? '쉬는 중' : `남는 시간으로`} 주 {o.freq}회 · 탑승률 {pct(o.e.lf)}
                           </small>
                           <small>
-                            이 노선 이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/분기 <span className="al-muted">(리스료는 이미 내는 중)</span>
+                            이 노선 이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/달 <span className="al-muted">(리스료는 이미 내는 중)</span>
                           </small>
                         </span>
                         <ActButton small blocker={why} onClick={() => openWith(o, o.p.id)}>

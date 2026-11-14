@@ -15,11 +15,18 @@ import { CoName, Kbd } from './ui';
 
 const MEDALS = ['🥇', '🥈', '🥉', '4등'];
 
-/** 분기가 끝날 때마다 나오는 결산표 */
+
+/** 분기가 끝날 때마다(석 달 합) 나오는 결산표. 12월에는 한 해 결산과 경영 평가도 */
 export function QuarterReport({ state, report, viewer, onClose, onDetail }: { state: AirlineState; report: Report; viewer: number; onClose: () => void; onDetail: () => void }) {
   const me = state.companies[viewer];
   const r = report.companies[viewer];
-  const prev = state.history.length >= 2 ? state.history[state.history.length - 2].value[viewer] : r.value;
+  const prevPoint = state.history.length >= 2 ? state.history[state.history.length - 2] : null;
+  const prev = prevPoint ? prevPoint.value[viewer] : r.value;
+  const year = (() => {
+    const rv = r.review;
+    const y = rv ? state.years.find((x) => x.year === rv.year) : undefined;
+    return y && y.companies[viewer] ? { year: y.year, r: y.companies[viewer] } : null;
+  })();
   const order = rankings(state);
   const rank = order.indexOf(viewer) + 1;
   const mine = report.routes.filter((x) => x.company === viewer).sort((a, b) => b.profit - a.profit);
@@ -27,7 +34,7 @@ export function QuarterReport({ state, report, viewer, onClose, onDetail }: { st
   const worst = mine.length > 1 ? mine[mine.length - 1] : null;
   const news = state.news.filter((n) => report.news.includes(n.id));
   const lf = r.seats > 0 ? r.pax / r.seats : 0;
-  const costs = r.fuel + r.crew + r.airport + r.service + r.sales + r.lease + r.fleet + r.branch + r.ads + r.interest + r.tax;
+  const costs = r.fuel + r.crew + r.airport + r.service + r.sales + r.lease + r.fleet + r.branch + r.ads + r.interest + r.disrupt + r.tax;
   const btn = useRef<HTMLButtonElement>(null);
   useEffect(() => btn.current?.focus(), []);
   const review = r.review;
@@ -36,7 +43,7 @@ export function QuarterReport({ state, report, viewer, onClose, onDetail }: { st
 
   let tip = '';
   if (me.out) tip = '회사가 문을 닫았어요. 다른 회사들의 경쟁을 끝까지 지켜볼 수 있어요.';
-  else if (me.crisis > 0) tip = '⚠ 돈이 모자라요! 다음 분기에도 모자라면 운항을 멈춰야 해요. 손해 보는 노선을 닫고, 쉬는 비행기를 팔고, 대출을 받아 보세요.';
+  else if (me.crisis > 0) tip = '⚠ 돈이 모자라요! 몇 달 더 모자라면 운항을 멈춰야 해요. 손해 보는 노선을 닫고, 쉬는 비행기를 팔고, 대출을 받아 보세요.';
   else if (r.pax === 0) tip = '아직 나는 비행기가 없어요. 🧑‍💼 경영 비서가 권하는 노선이나 노선 화면에서 비행기를 띄워 보세요.';
   else if (lf < 0.55) tip = '빈 좌석이 많아요. 운임을 내리거나, 횟수를 줄이거나, 작은 비행기로 바꿔 보세요.';
   else if (lf > 0.95) tip = '좌석이 꽉 찼어요! 운임을 올리거나 비행기를 더 넣으면 더 벌 수 있어요.';
@@ -45,7 +52,7 @@ export function QuarterReport({ state, report, viewer, onClose, onDetail }: { st
   return (
     <div className="overlay al-qr-overlay" role="dialog" aria-modal="true" aria-labelledby="al-qr-title">
       <div className="result-card al-qr" data-testid="al-quarter-report">
-        <h2 id="al-qr-title">📊 {qLabel(report.q)} 결산</h2>
+        <h2 id="al-qr-title">📊 {qLabel(report.q)} 결산 <small className="al-muted">석 달 합</small></h2>
         <p className="al-qr-co">
           <CoName c={me} bold /> · {rank}등
         </p>
@@ -70,8 +77,16 @@ export function QuarterReport({ state, report, viewer, onClose, onDetail }: { st
           <span className="al-c-fuel" style={{ width: `${(costs / Math.max(1, r.ticket + r.side, costs)) * 100}%` }} />
         </div>
         <p className="al-qr-sub">
-          수입 {fmtMoney(r.ticket + r.side)} · 비용 {fmtMoney(costs)} (연료 {fmtMoney(r.fuel)})
+          수입 {fmtMoney(r.ticket + r.side)} · 비용 {fmtMoney(costs)} (연료 {fmtMoney(r.fuel)}) · 정시 운항률 {r.flights > 0 ? pct(r.onTime) : '—'} · 결항 {r.cancelled}편
         </p>
+        {year && (
+          <div className="al-qr-year" data-testid="al-year-report">
+            <b>📆 {year.year}년 한 해 결산</b>
+            <span>
+              수입 {fmtMoney(year.r.ticket + year.r.side)} · 이익 <b className={year.r.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(year.r.profit)}</b> · 손님 {fmtPax(year.r.pax)} · 탑승률 {pct(year.r.seats > 0 ? year.r.pax / year.r.seats : 0)} · 정시율 {year.r.flights > 0 ? pct(year.r.onTime) : '—'}
+            </span>
+          </div>
+        )}
         {review && (
           <div className="al-review" data-testid="al-review">
             <span className="al-grade al-grade-big" style={{ background: GRADE_INFO[review.grade].color }} aria-label={`${review.year}년 경영 평가 ${review.grade}`}>
@@ -139,7 +154,7 @@ export function QuarterReport({ state, report, viewer, onClose, onDetail }: { st
         )}
         <div className="result-actions">
           <button ref={btn} type="button" className="btn btn-primary" onClick={onClose} data-testid="al-qr-close">
-            다음 분기로 <Kbd>Enter</Kbd>
+            다음 달로 <Kbd>Enter</Kbd>
           </button>
           <button type="button" className="btn" onClick={onDetail}>
             보고서 자세히

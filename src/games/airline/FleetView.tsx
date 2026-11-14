@@ -16,7 +16,7 @@ import {
   planeValue,
   routeOf,
 } from './simulate';
-import { qLabel, yearOf } from './time';
+import { mLabel, yearOf } from './time';
 import type { AirlineAction, AirlineState, ModelDef } from './types';
 import { aircraftPhoto } from './images';
 import { ActButton, Meter, Photo, Stars } from './ui';
@@ -67,7 +67,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
           🏷️ 중고 시장 {state.market.length}
         </button>
         <span className="al-subtab-note">
-          이번 분기에 바로 받은 비행기 (리스·중고) {delivered}/{MAX_DELIVERIES}대
+          이번 달에 바로 받은 비행기 (리스·중고) {delivered}/{MAX_DELIVERIES}대
         </span>
       </div>
 
@@ -104,7 +104,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                         <Photo src={aircraftPhoto(m.id)} alt={`${m.name} 사진`} className="al-thumb" fallback={<PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={64} />} />
                         <b>{m.name}</b>
                         <span>
-                          {qLabel(o.due)} 도착 <small className="al-muted">({o.due - state.q}분기 뒤)</small>
+                          {mLabel(o.due)} 도착 <small className="al-muted">({o.due - state.t}달 뒤)</small>
                         </span>
                         <span className="al-muted">낸 값 {fmtMoney(o.price)}</span>
                         <ActButton
@@ -129,7 +129,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
               <button type="button" className="al-link" onClick={() => setTab('shop')}>
                 리스하거나 주문
               </button>
-              해 보세요. 리스는 바로 쓸 수 있고, 주문은 싸지만 몇 분기 기다려야 해요.
+              해 보세요. 리스는 바로 쓸 수 있고, 주문은 싸지만 몇 달 기다려야 해요.
             </p>
           )}
           <ul className="al-plane-list">
@@ -152,7 +152,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                       {m.maker} · {m.seats}석 · {km(m.range)}
                     </small>
                     <small>
-                      {Math.floor(age)}년째 · {p.leased ? `리스 (분기 ${fmtMoney(p.rent)}${p.deposit > 0 ? ` · 보증금 ${fmtMoney(p.deposit)}` : ''})` : `내 것 (가치 ${fmtMoney(planeValue(state, p))})`}
+                      {Math.floor(age)}년째 · {p.leased ? `리스 (달 ${fmtMoney(p.rent)}${p.deposit > 0 ? ` · 보증금 ${fmtMoney(p.deposit)}` : ''})` : `내 것 (가치 ${fmtMoney(planeValue(state, p))})`}
                       {old && ' · 단종'}
                     </small>
                   </div>
@@ -218,7 +218,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
               </button>
             ))}
             <span className="al-muted al-shop-note">
-              {year}년에 살 수 있는 기종 · 값은 어림한 오늘 돈 · 주문은 값을 먼저 내고 몇 분기 뒤에 받아요. 리스는 바로 받지만 분기마다 값의 3.5%를 내요.
+              {year}년에 살 수 있는 기종 · 값은 어림한 오늘 돈 · 주문은 값을 먼저 내고 3~12달 뒤에 받아요. 리스는 바로 받지만 달마다 값의 1.2% 남짓을 내요.
               {help && ' 첫해에는 리스 보증금이 없어요.'}
             </span>
           </div>
@@ -295,7 +295,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                     <div>
                       <dt>주문하면</dt>
                       <dd>
-                        {lead}분기 뒤 <small className="al-muted">({qLabel(state.q + lead)})</small>
+                        {lead}달 뒤 <small className="al-muted">({mLabel(state.t + lead)})</small>
                       </dd>
                     </div>
                   </dl>
@@ -306,7 +306,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                       blocker={canAct ? buyBlocker(state, viewer, m.id, false) : notMine}
                       onClick={() => perform({ type: 'buy', model: m.id })}
                       testId={`al-buy-${m.id}`}
-                      title={`값을 지금 내고 ${qLabel(state.q + lead)}에 받아요`}
+                      title={`값을 지금 내고 ${mLabel(state.t + lead)}에 받아요`}
                     >
                       주문 {fmtMoney(orderPrice(state, m, me))}
                     </ActButton>
@@ -317,7 +317,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                       title={deposit > 0 ? `보증금 ${fmtMoney(deposit)}은 돌려줄 때 돌려받아요` : '첫해에는 보증금 없이 바로 받아요'}
                       testId={`al-lease-${m.id}`}
                     >
-                      리스 · 분기 {fmtMoney(rent)} <small>{deposit > 0 ? `(보증금 ${fmtMoney(deposit)})` : '(보증금 없음)'}</small>
+                      리스 · 달 {fmtMoney(rent)} <small>{deposit > 0 ? `(보증금 ${fmtMoney(deposit)})` : '(보증금 없음)'}</small>
                     </ActButton>
                   </div>
                 </li>
@@ -335,7 +335,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
       {tab === 'used' && (
         <div className="al-used">
           <p className="al-muted">
-            다른 회사가 쓰던 비행기예요. 바로 받고 새것보다 싸지만, 낡을수록 연료·정비비가 더 들고 손님도 덜 좋아해요. 매물은 분기마다 바뀌어요.
+            다른 회사가 쓰던 비행기예요. 바로 받고 새것보다 싸지만, 낡을수록 연료·정비비가 더 들고 손님도 덜 좋아해요. 매물은 달마다 조금씩 바뀌어요. 노선에 넣지 않은 비행기는 기체 점검이나 결항 때 대신 나는 예비기가 돼요.
           </p>
           {state.market.length === 0 && <p className="al-muted al-empty-main">지금은 나온 비행기가 없어요.</p>}
           <ul className="al-cards">

@@ -6,9 +6,9 @@ import { coColors } from './brand';
 import { CompanyBadge, SEAT_SHAPES } from './Art';
 import { CHALLENGE } from './challenges';
 import { fmtMoney } from './format';
-import { actor, endQ, rankings } from './rules';
+import { actor, endT, rankings } from './rules';
 import { companyValue, regionsServed } from './simulate';
-import { QUARTER_NAMES, qLabel, quarterOf } from './time';
+import { mLabel } from './time';
 import type { AirlineState } from './types';
 import { AirlinePhoto } from './AirlinePicker';
 import { CreditsModal } from './CreditsModal';
@@ -23,20 +23,24 @@ interface PanelProps {
   canEnd: boolean;
   busy: string | null;
   onEndTurn: () => void;
+  /** 지금 켜 둔 자동 진행 */
+  auto: 'quarter' | 'event' | null;
+  onAuto: (mode: 'quarter' | 'event') => void;
+  onStopAuto: () => void;
   settings: GameSettings;
   onSettings: (s: GameSettings) => void;
   onNewGame: () => void;
   onExit: () => void;
 }
 
-export function Panel({ state, viewer, hint, canEnd, busy, onEndTurn, settings, onSettings, onNewGame, onExit }: PanelProps) {
+export function Panel({ state, viewer, hint, canEnd, busy, onEndTurn, auto, onAuto, onStopAuto, settings, onSettings, onNewGame, onExit }: PanelProps) {
   const act = actor(state);
   const shown = state.phase === 'gameover' ? state.companies[state.result?.winners[0] ?? viewer] : state.companies[act];
   const color = coColors(shown);
   const order = rankings(state);
   const recent = state.log.slice(-14).reverse();
   const me = state.companies[viewer];
-  const left = endQ(state) - state.q + 1;
+  const left = endT(state) - state.t + 1;
   const [credits, setCredits] = useState(false);
 
   let goal: ReactNode;
@@ -51,7 +55,7 @@ export function Panel({ state, viewer, hint, canEnd, busy, onEndTurn, settings, 
         <Meter value={state.challenge.ratio} tone="good" label="도전 진행" />
         <small>{state.challenge.progress}</small>
         <small className="al-muted">
-          기한 {qLabel(state.challenge.deadline)} (남은 {Math.max(0, left)}분기)
+          기한 {mLabel(state.challenge.deadline)} (남은 {Math.max(0, left)}달)
         </small>
       </>
     );
@@ -70,11 +74,11 @@ export function Panel({ state, viewer, hint, canEnd, busy, onEndTurn, settings, 
       </>
     );
   } else {
-    const total = state.options.years * 4;
+    const total = state.options.years * 12;
     goal = (
       <>
-        <b>🏁 {qLabel(endQ(state))}까지 회사 가치 1등</b>
-        <small>남은 {Math.max(0, left)}분기</small>
+        <b>🏁 {mLabel(endT(state))}까지 회사 가치 1등</b>
+        <small>남은 {Math.max(0, left)}달</small>
         <Meter value={(total - left) / total} tone="blue" label="지난 시간" />
       </>
     );
@@ -96,19 +100,37 @@ export function Panel({ state, viewer, hint, canEnd, busy, onEndTurn, settings, 
           </div>
         )}
         <p className="al-turn-date">
-          {qLabel(state.q)} · {QUARTER_NAMES[quarterOf(state.q) - 1]} · 유가 {state.oil.toFixed(2)}
+          {mLabel(state.t)} · 유가 {state.oil.toFixed(2)}
         </p>
         <div className="hint" data-testid="al-hint">
           {hint}
         </div>
         {state.phase === 'manage' && (
-          <button type="button" className="btn btn-primary al-end-btn" disabled={!canEnd} onClick={onEndTurn} data-testid="al-end-turn">
+          <button type="button" className="btn btn-primary al-end-btn" disabled={!canEnd || !!auto} onClick={onEndTurn} data-testid="al-end-turn">
             {busy ?? (
               <>
-                이번 분기 마치기 <Kbd>Enter</Kbd>
+                이번 달 마치기 <Kbd>Enter</Kbd>
               </>
             )}
           </button>
+        )}
+        {state.phase === 'manage' && state.companies[viewer]?.kind === 'human' && (
+          <div className="al-auto-row">
+            {auto ? (
+              <button type="button" className="btn btn-small al-auto-stop" onClick={onStopAuto} data-testid="al-auto-stop">
+                ⏸ 자동 진행 멈추기
+              </button>
+            ) : (
+              <>
+                <button type="button" className="btn btn-small" disabled={!canEnd} onClick={() => onAuto('quarter')} title="이번 분기가 끝날 때까지 달을 넘겨요 (일이 생기면 멈춰요)" data-testid="al-auto-quarter">
+                  ⏩ 분기 끝까지 맡기기
+                </button>
+                <button type="button" className="btn btn-small" disabled={!canEnd} onClick={() => onAuto('event')} title="결정할 일·큰 사건·돈 걱정·우리 노선 라이벌 소식이 생길 때까지 달을 넘겨요" data-testid="al-auto-event">
+                  ⏭ 일이 생길 때까지
+                </button>
+              </>
+            )}
+          </div>
         )}
       </section>
 

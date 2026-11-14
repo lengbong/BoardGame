@@ -1,3 +1,4 @@
+import { defaultTimes } from './timetable';
 import { describe, expect, it } from 'vitest';
 import { seededRandom } from '../../lib/random';
 import { MODEL } from './aircraft';
@@ -157,7 +158,7 @@ describe('비용과 이익', () => {
     let s = base();
     const c = s.companies[0];
     c.branches.push('tokyo');
-    c.routes.push({ id: 50, a: 'seoul', b: 'tokyo', fare: 10, since: s.t, stats: null });
+    c.routes.push({ id: 50, a: 'seoul', b: 'tokyo', fare: 10, since: s.t, stats: null, times: defaultTimes('seoul', 'tokyo', 2003) });
     c.planes.push({ id: 51, model: 'a321', leased: true, rent: 10, deposit: 0, since: s.t, legs: [{ route: 50, freq: 12 }] });
     s.nextId = 60;
     const est = estimateRoute(s, 0, 'seoul', 'tokyo', [{ model: 'a321', freq: 12, fixed: planeFixed(c.planes[0]) }], 10);
@@ -174,7 +175,7 @@ describe('비용과 이익', () => {
   it('이익이 날 때만 법인세를 내고, 대출 한도는 내 비행기 가치에 따라 는다', () => {
     const s = base();
     s.companies[0].branches.push('tokyo');
-    s.companies[0].routes.push({ id: 50, a: 'seoul', b: 'tokyo', fare: 0, since: s.t, stats: null });
+    s.companies[0].routes.push({ id: 50, a: 'seoul', b: 'tokyo', fare: 0, since: s.t, stats: null, times: defaultTimes('seoul', 'tokyo', 2003) });
     s.companies[0].planes.push({ id: 51, model: 'b737-800', leased: false, rent: 0, deposit: 0, since: s.t, legs: [{ route: 50, freq: 20 }] });
     s.nextId = 60;
     const r = computeQuarter(s).reports;

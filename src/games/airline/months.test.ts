@@ -1,3 +1,4 @@
+import { defaultTimes } from './timetable';
 import { describe, expect, it } from 'vitest';
 import { seededRandom } from '../../lib/random';
 import { aiTurn } from './ai';
@@ -22,7 +23,7 @@ function withRoute(to: string, age = 0, freq = 14, model = 'a320'): { s: Airline
   const c = s.companies[0];
   c.branches.push(to);
   const route = s.nextId++;
-  c.routes.push({ id: route, a: 'seoul', b: to, fare: 0, since: s.t, stats: null });
+  c.routes.push({ id: route, a: 'seoul', b: to, fare: 0, since: s.t, stats: null, times: defaultTimes('seoul', to, 2003) });
   c.planes.push({ id: s.nextId++, model, leased: false, rent: 0, deposit: 0, since: s.t - Math.round(age * 12), legs: [{ route, freq }] });
   return { s, route };
 }

@@ -1,3 +1,4 @@
+import { defaultTimes } from './timetable';
 import { describe, expect, it } from 'vitest';
 import { seededRandom } from '../../lib/random';
 import { MODEL, availableModels, commonalityMult, launchDiscount, leadTime } from './aircraft';
@@ -471,7 +472,7 @@ describe('승리 조건', () => {
     for (const [a, b, model] of pairs) {
       for (const city of [a, b]) if (!c.branches.includes(city)) c.branches.push(city);
       const rid = s.nextId++;
-      c.routes.push({ id: rid, a, b, fare: 0, since: s.t, stats: null });
+      c.routes.push({ id: rid, a, b, fare: 0, since: s.t, stats: null, times: defaultTimes(a, b, 2003) });
       c.planes.push({ id: s.nextId++, model, leased: true, rent: 3, deposit: 0, since: s.t, legs: [{ route: rid, freq: 2 }] });
     }
     s = runMonth(s, seededRandom(1));

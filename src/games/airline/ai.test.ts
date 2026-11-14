@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { seededRandom } from '../../lib/random';
 import { MODEL } from './aircraft';
 import { aiManage, aiTurn, planTurn } from './ai';
+import { advise } from './advisor';
 import { CHALLENGES } from './challenges';
 import { AIRPORT_INFO, CITY, airportClass, dist } from './cities';
 import { actor, applyAction, createGame } from './rules';
@@ -169,6 +170,36 @@ describe('컴퓨터끼리 끝까지', () => {
     }
     expect(normal / games).toBeGreaterThanOrEqual(0.75);
   });
+
+  it('경영 비서만 따르는 사람은 보통 컴퓨터와 비슷하게 겨룬다 (같은 크기 본사, 자리 바꿔 두 판)', () => {
+    let bot = 0;
+    let ai = 0;
+    for (const swap of [false, true]) {
+      const rng = seededRandom(swap ? 202 : 101);
+      const kinds: SeatKind[] = swap ? ['ai-normal', 'human'] : ['human', 'ai-normal'];
+      let s = createGame(setup(kinds, { years: 10 }, swap ? ['paris', 'newyork'] : ['newyork', 'paris']), rng);
+      const H = swap ? 1 : 0;
+      let guard = 0;
+      while (s.phase !== 'gameover' && guard++ < 400) {
+        const ci = s.order[s.turnPos];
+        if (ci === H) {
+          if (s.companies[ci].choice) s = applyAction(s, { type: 'choose', option: 0 }, rng);
+          for (let k = 0; k < 4; k++) {
+            const tip = advise(s, ci).find((x) => x.apply);
+            const next = tip?.apply?.(s);
+            if (!next || next === s) break;
+            s = next;
+          }
+          s = applyAction(s, { type: 'endTurn' }, rng);
+        } else s = aiTurn(s, rng);
+      }
+      expect(s.phase).toBe('gameover');
+      bot += companyValue(s, H);
+      ai += companyValue(s, 1 - H);
+    }
+    expect(bot / ai).toBeGreaterThan(0.6);
+    expect(bot / ai).toBeLessThan(1.6);
+  }, 30000);
 
   it('도전 과제마다 컴퓨터가 도전해도 멈추지 않는다', () => {
     for (const def of CHALLENGES) {

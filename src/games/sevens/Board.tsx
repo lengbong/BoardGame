@@ -40,7 +40,7 @@ export function Board({ state, reg, playable, selectedId, onPlay, onSelect, hidd
   const { width, height } = useElementSize(boxRef);
   const byW = (width - PAD * 2 - LABEL_W - GAP * 13) / 13;
   const byH = (height - PAD * 2 - HEAD_H - GAP * 4 - 26) / 4 / 1.4;
-  const cell = Math.max(26, Math.min(84, Math.floor(Math.min(byW, byH))));
+  const cell = Math.max(15, Math.min(84, Math.floor(Math.min(byW, byH))));
   const mini = cell < 56;
   const playableIds = new Set(playable.map((c) => c.id));
 

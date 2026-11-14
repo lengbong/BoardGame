@@ -1026,7 +1026,7 @@ button.lc-hand-card:not(:disabled) {
 
 @media (max-width: 640px) {
   .lc-table {
-    min-height: 600px;
+    min-height: 700px;
     border-width: 8px;
   }
   .lc-seat {
@@ -1035,10 +1035,10 @@ button.lc-hand-card:not(:disabled) {
   }
   .lc-pos-1,
   .lc-pos-3 {
-    top: 30%;
+    top: 33%;
   }
   .lc-center {
-    top: 56%;
+    top: 61%;
     --cw: 70px;
   }
   .lc-dir-ring {

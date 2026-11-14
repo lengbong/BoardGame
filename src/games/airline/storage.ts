@@ -2,6 +2,8 @@ import { loadJson, removeKey, saveJson } from '../../lib/storage';
 import { SEAT_KIND_OPTIONS } from '../common/players';
 import type { Speed } from '../common/speed';
 import { MODEL } from './aircraft';
+import { MEDIA } from './ads';
+import { BUSINESS_KINDS } from './business';
 import { cabinBlocker, defaultCabin } from './cabin';
 import { CHALLENGE } from './challenges';
 import { CITY, REGIONS } from './cities';
@@ -119,8 +121,11 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
   if (k.airline !== undefined && k.airline !== null && typeof k.airline !== 'string') return false;
   if (k.color !== undefined && k.color !== null && !(typeof k.color === 'string' && /^#[0-9a-f]{6}$/i.test(k.color))) return false;
   if (!isObj(k.ads) || !isObj(k.awareness) || !REGIONS.every((r) => isNum(k.ads[r]) && isNum(k.awareness[r]))) return false;
+  // 광고 매체·캠페인 (예전 판 저장에는 없을 수 있다)
+  if (k.adMedia !== undefined && !(isObj(k.adMedia) && REGIONS.every((r) => MEDIA.includes(k.adMedia![r])))) return false;
+  if (k.lastCampaign !== undefined && !isInt(k.lastCampaign)) return false;
   if (!isInt(k.service) || k.service < 1 || k.service > 5 || !isNum(k.reputation)) return false;
-  if (!Array.isArray(k.businesses) || !k.businesses.every((b) => isObj(b) && isCity(b.city) && (b.kind === 'hotel' || b.kind === 'agency') && isNum(b.cost))) return false;
+  if (!Array.isArray(k.businesses) || !k.businesses.every((b) => isObj(b) && isCity(b.city) && BUSINESS_KINDS.includes(b.kind) && isNum(b.cost))) return false;
   if (typeof k.out !== 'boolean' || !isInt(k.crisis) || !isObj(k.stats)) return false;
   return true;
 }

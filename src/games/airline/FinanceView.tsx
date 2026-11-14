@@ -1,10 +1,12 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { CAMPAIGNS, CAMPAIGN_INFO, MEDIA, MEDIA_INFO, mediaOf } from './ads';
 import { MODEL } from './aircraft';
+import { BUSINESS_INFO } from './business';
 import { MEAL_ICONS, MEAL_NAMES } from './cabin';
 import { CITY, REGIONS, REGION_INFO } from './cities';
 import { fmtMoney, signedMoney } from './format';
 import { GRADE_INFO, goalProgress } from './goals';
-import { ADS_MAX, allianceOutlook, borrowBlocker, proposeBlocker, repayBlocker } from './rules';
+import { ADS_MAX, allianceOutlook, borrowBlocker, campaignBlocker, campaignCost, proposeBlocker, repayBlocker } from './rules';
 import {
   businessValue,
   companyValue,
@@ -13,8 +15,8 @@ import {
   planeValue,
   reputationTarget,
 } from './simulate';
-import { qLabel } from './time';
-import type { AirlineAction, AirlineState, CompanyReport, Mod } from './types';
+import { qLabel, yearOf } from './time';
+import type { AdMedia, AirlineAction, AirlineState, CompanyReport, Mod, RegionId } from './types';
 import { ActButton, CoName, Meter, Stepper } from './ui';
 
 interface FinanceViewProps {
@@ -57,6 +59,10 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
   const block = (b: string | null) => (canAct ? b : notMine);
   const amounts = [100, 500, 1000];
   const adsTotal = REGIONS.reduce((s, r) => s + me.ads[r], 0);
+  const year = yearOf(state.q);
+  const [campaignRegion, setCampaignRegion] = useState<RegionId>(CITY[me.hub].region);
+  const campaignDone = me.lastCampaign === state.q;
+  const activeCampaigns = me.mods.filter((m) => m.until > state.q && CAMPAIGNS.some((k) => m.label === `${CAMPAIGN_INFO[k].icon} ${CAMPAIGN_INFO[k].name}`));
   const target = reputationTarget(state, me);
   const avgMeal = me.planes.length > 0 ? me.planes.reduce((s, p) => s + p.meal, 0) / me.planes.length : me.service;
   const mixed = me.planes.some((p) => p.meal !== me.service);
@@ -296,10 +302,61 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
                 format={(v) => (v === 0 ? '0' : fmtMoney(v))}
                 onChange={(v) => perform({ type: 'setAds', region: r, amount: v })}
               />
+              <select
+                className="al-media"
+                value={mediaOf(me, r)}
+                disabled={!canAct}
+                aria-label={`${REGION_INFO[r].name} 광고 매체`}
+                title={MEDIA_INFO[mediaOf(me, r)].desc}
+                onChange={(e) => perform({ type: 'setMedia', region: r, media: e.target.value as AdMedia })}
+              >
+                {MEDIA.filter((m) => year >= MEDIA_INFO[m].from || mediaOf(me, r) === m).map((m) => (
+                  <option key={m} value={m}>
+                    {MEDIA_INFO[m].icon} {MEDIA_INFO[m].name}
+                  </option>
+                ))}
+              </select>
             </li>
           ))}
         </ul>
-        <p className="al-muted al-tip">광고를 하면 그 지역에 닿는 노선에서 손님이 우리 회사를 더 골라요. 효과는 몇 분기에 걸쳐 쌓이고, 멈추면 천천히 줄어요.</p>
+        <p className="al-muted al-tip">
+          광고를 하면 그 지역에 닿는 노선에서 손님이 우리 회사를 더 골라요. 효과는 몇 분기에 걸쳐 쌓이고, 멈추면 천천히 줄어요. 매체마다 닿는 손님이 달라요: 📰 신문은 사업 손님, 📖 여행 잡지는 관광 손님, 📻
+          라디오는 적은 돈에 효과가 크지만 많이 써도 덜 늘고, 💻 인터넷(1998년부터)은 같은 돈에 효과가 커요.
+        </p>
+        <h4 className="al-campaign-title">
+          캠페인 <small>{campaignDone ? '이번 분기에는 이미 했어요' : '한 분기에 하나'}</small>
+        </h4>
+        <div className="al-campaigns">
+          <label className="al-campaign-region">
+            지역
+            <select value={campaignRegion} onChange={(e) => setCampaignRegion(e.target.value as RegionId)} aria-label="캠페인 지역">
+              {REGIONS.map((r) => (
+                <option key={r} value={r}>
+                  {REGION_INFO[r].emoji} {REGION_INFO[r].short}
+                </option>
+              ))}
+            </select>
+          </label>
+          {CAMPAIGNS.map((k) => {
+            const info = CAMPAIGN_INFO[k];
+            return (
+              <ActButton
+                key={k}
+                small
+                blocker={canAct ? campaignBlocker(state, viewer, k, campaignRegion) : '내 차례에만 할 수 있어요'}
+                onClick={() => perform({ type: 'campaign', kind: k, region: info.region ? campaignRegion : undefined })}
+                title={info.desc}
+                testId={`al-campaign-${k}`}
+              >
+                {info.icon} {info.name}
+                {info.region ? ` (${REGION_INFO[campaignRegion].short})` : ''} · {fmtMoney(campaignCost(state, k))}
+              </ActButton>
+            );
+          })}
+        </div>
+        {activeCampaigns.length > 0 && (
+          <p className="al-muted al-tip">진행 중: {activeCampaigns.map((m) => `${m.label} (${qLabel(m.until - 1)}까지)`).join(', ')}</p>
+        )}
       </section>
 
       <section className="al-card al-service">
@@ -332,16 +389,16 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
         </p>
         {me.businesses.length > 0 && (
           <>
-            <h4>호텔·여행사</h4>
+            <h4>부대사업</h4>
             <ul className="al-biz-list">
               {me.businesses.map((b) => (
                 <li key={`${b.city}-${b.kind}`}>
-                  {b.kind === 'hotel' ? '🏨 호텔' : '🧳 여행사'} · {CITY[b.city].name}
+                  {BUSINESS_INFO[b.kind].icon} {BUSINESS_INFO[b.kind].name} · {CITY[b.city].name}
                   <ActButton
                     small
                     blocker={canAct ? null : notMine}
                     onClick={() => {
-                      if (window.confirm(`${CITY[b.city].name} ${b.kind === 'hotel' ? '호텔' : '여행사'}을 ${fmtMoney(b.cost * 0.7)}에 팔까요?`)) perform({ type: 'sellBusiness', city: b.city, kind: b.kind });
+                      if (window.confirm(`${CITY[b.city].name} ${BUSINESS_INFO[b.kind].name}을(를) ${fmtMoney(b.cost * 0.7)}에 팔까요?`)) perform({ type: 'sellBusiness', city: b.city, kind: b.kind });
                     }}
                   >
                     팔기 +{fmtMoney(b.cost * 0.7)}

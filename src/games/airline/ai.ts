@@ -1,5 +1,6 @@
 import { MODEL, availableModels, leadTime } from './aircraft';
 import { MAX_ROUTES } from './limits';
+import { CAMPAIGN_INFO, MEDIA_INFO, mediaOf } from './ads';
 import { cabinPresets, sameCabin } from './cabin';
 import { makerPolitics, routePolitics } from './politics';
 import { aiChoose, allianceScore } from './choices';
@@ -8,7 +9,9 @@ import {
   applyAction,
   bestFreq,
   branchBlocker,
+  buildBlocker,
   buyBlocker,
+  campaignCost,
   depositFor,
   fleetCount,
   historyOn,
@@ -25,6 +28,7 @@ import {
   baseFare,
   branchCost,
   branchUpkeep,
+  businessCost,
   creditLimit,
   draftsOf,
   estimateExisting,
@@ -38,13 +42,14 @@ import {
   planeAge,
   planeHours,
   regionsServed,
+  routeFreq,
   routeIndex,
   slotCapacity,
   slotsUsed,
   type DraftPlane,
 } from './simulate';
-import { yearOf } from './time';
-import type { AirlineAction, AirlineState, Cabin, Company, ModelDef, RegionId, Rng } from './types';
+import { quarterOf, yearOf } from './time';
+import type { AdMedia, AirlineAction, AirlineState, BusinessKind, Cabin, CampaignKind, Company, ModelDef, RegionId, Rng } from './types';
 
 export type AiLevel = 'ai-easy' | 'ai-normal';
 
@@ -160,6 +165,7 @@ export class Planner {
       this.setAds();
       this.configureCabins();
       this.setMeals();
+      this.buildBusinesses();
       this.maybePropose();
       this.manageLoans(false);
     } else {
@@ -678,7 +684,36 @@ export class Planner {
 
   // ---------------------------------------------------------------- 광고·서비스·대출
 
+  /** 지역 손님 가운데 사업 손님이 많으면 신문, 관광 손님이 많으면 여행 잡지, 아니면 TV(인터넷이 나오면 인터넷) */
+  private setMedia(): void {
+    const year = this.year;
+    for (const region of REGIONS) {
+      if (this.c.ads[region] <= 0) continue;
+      let biz = 0;
+      let all = 0;
+      for (const r of this.c.routes) {
+        if (CITY[r.a].region !== region && CITY[r.b].region !== region) continue;
+        const d = pairDemand(this.s, r.a, r.b);
+        biz += d.biz;
+        all += d.biz + d.leisure;
+      }
+      const share = all > 0 ? biz / all : 0.4;
+      const want: AdMedia = share > 0.52 ? 'newspaper' : share < 0.3 ? 'magazine' : year >= MEDIA_INFO.internet.from ? 'internet' : 'tv';
+      if (mediaOf(this.c, region) !== want) this.act({ type: 'setMedia', region, media: want });
+    }
+  }
+
+  /** 치열한 회사는 돈이 넉넉하면 3분기마다 캠페인 */
+  private maybeCampaign(): void {
+    if (this.style !== 'fierce' || quarterOf(this.s.q) !== 3) return;
+    const kind: CampaignKind = this.year >= CAMPAIGN_INFO.miles.from ? 'miles' : 'lucky';
+    if (this.c.cash - this.reserve() < campaignCost(this.s, kind) * 5) return;
+    this.act({ type: 'campaign', kind });
+  }
+
   private setAds(): void {
+    this.setMedia();
+    this.maybeCampaign();
     const rep = this.s.report?.companies[this.ci];
     if (!rep) return;
     const total = Math.max(0, rep.ticket * (this.style === 'fierce' ? 0.03 : 0.025));
@@ -695,6 +730,24 @@ export class Planner {
     const region = CITY[this.c.hub].region;
     const want = rep ? Math.min(100, Math.round(rep.ticket * 0.01)) : 0;
     if (Math.abs(want - this.c.ads[region]) > 3) this.act({ type: 'setAds', region, amount: want });
+  }
+
+  /** 돈이 넉넉하면 1년에 한 번, 노선이 많은 도시에 부대사업 하나 */
+  private buildBusinesses(): void {
+    if (quarterOf(this.s.q) !== 2 || this.style === 'relaxed') return;
+    const count = new Map<string, number>();
+    for (const r of this.c.routes) for (const x of [r.a, r.b]) count.set(x, (count.get(x) ?? 0) + routeFreq(this.c, r.id));
+    const cities = [...count.entries()].sort((x, y) => y[1] - x[1]).slice(0, 4).map(([city]) => city);
+    const prefer: BusinessKind[] = ['resort', 'hotel', 'bus', 'agency', 'ski', 'park', 'store', 'restaurant'];
+    for (const city of cities) {
+      for (const kind of prefer) {
+        if (buildBlocker(this.s, this.ci, city, kind)) continue;
+        const cost = businessCost(city, kind, this.s.q);
+        if (this.c.cash - this.reserve() < cost * 4) continue;
+        if (kind === 'hotel' && CITY[city].fun < 6) continue;
+        if (this.act({ type: 'build', city, kind })) return;
+      }
+    }
   }
 
   /** 비행기가 나는 노선들의 평균 거리와 사업 손님 비율 (왕복 수 가중) */

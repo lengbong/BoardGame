@@ -12,6 +12,8 @@ import {
   type CabinStats,
 } from './cabin';
 import { AIRPORT_INFO, CITY, FEE_INFO, REGIONS, SEASON_INFO, airportClass, citySize, dist, pairIndex, pairKey } from './cities';
+import { MEDIA_INFO, mediaOf } from './ads';
+import { BUSINESS_INFO, businessSeason } from './business';
 import { effectMults, fixedEventMult, priceMult, worldMult } from './events';
 import { quarterOf, yearOf } from './time';
 import type {
@@ -249,8 +251,7 @@ export function branchUpkeep(city: string, q: number): number {
 
 export function businessCost(city: string, kind: Business['kind'], q: number): number {
   const c = CITY[city];
-  const s = citySize(c, yearOf(q));
-  return Math.round(kind === 'hotel' ? 40 + 10 * s + 6 * c.fun : 15 + 4 * s);
+  return Math.round(BUSINESS_INFO[kind].cost(c, citySize(c, yearOf(q))));
 }
 
 // ------------------------------------------------------------------ 비행기 시간과 슬롯
@@ -467,11 +468,16 @@ export interface OfferResult {
 const A0_BIZ = 1.2;
 const A0_LEISURE = 1.5;
 
-/** 평판·광고로 정해지는 회사의 기본 매력 */
-function quality(c: Company, a: string, b: string): number {
+/** 평판·광고로 정해지는 회사의 기본 매력 (광고 매체마다 사업·관광 손님에게 닿는 정도가 다르다) */
+function quality(c: Company, a: string, b: string): { biz: number; leisure: number } {
   const rep = 0.8 + (0.4 * c.reputation) / 100;
-  const ad = 1 + (0.3 * (c.awareness[CITY[a].region] + c.awareness[CITY[b].region])) / 2;
-  return rep * ad;
+  const ra = CITY[a].region;
+  const rb = CITY[b].region;
+  const ma = MEDIA_INFO[mediaOf(c, ra)];
+  const mb = MEDIA_INFO[mediaOf(c, rb)];
+  const biz = 1 + (0.3 * (c.awareness[ra] * ma.biz + c.awareness[rb] * mb.biz)) / 2;
+  const leisure = 1 + (0.3 * (c.awareness[ra] * ma.leisure + c.awareness[rb] * mb.leisure)) / 2;
+  return { biz: rep * biz, leisure: rep * leisure };
 }
 
 /** 제휴 상대와 둘 다 지점이 있는 도시면 손님이 조금 더 (공동 운항 효과) */
@@ -537,18 +543,16 @@ function attraction(state: AirlineState, a: string, b: string, offer: Offer, bes
   let bizBonus = 1;
   for (const biz of c.businesses) {
     if (biz.city !== a && biz.city !== b) continue;
-    if (biz.kind === 'hotel') leisureBonus *= 1.12;
-    else {
-      leisureBonus *= 1.05;
-      bizBonus *= 1.05;
-    }
+    leisureBonus *= BUSINESS_INFO[biz.kind].leisure;
+    bizBonus *= BUSINESS_INFO[biz.kind].biz;
   }
   const cabinBiz = premiumAttraction(premAttr / seats, d, firstSeats > 0);
   const p = (1 + offer.fare / 100) * premium;
-  const common = quality(c, a, b) * hub * partnerBonus(state, c, a, b);
+  const qual = quality(c, a, b);
+  const common = hub * partnerBonus(state, c, a, b);
   return {
-    biz: freq ** 0.6 * p ** -0.8 * common * comfort ** 1.5 * speed * bizBonus * cabinBiz * demandMult(c, a, b, state.q, 'biz'),
-    leisure: freq ** 0.5 * p ** -1.8 * common * comfort ** 0.5 * speed ** 0.3 * leisureBonus * demandMult(c, a, b, state.q, 'leisure'),
+    biz: freq ** 0.6 * p ** -0.8 * common * qual.biz * comfort ** 1.5 * speed * bizBonus * cabinBiz * demandMult(c, a, b, state.q, 'biz'),
+    leisure: freq ** 0.5 * p ** -1.8 * common * qual.leisure * comfort ** 0.5 * speed ** 0.3 * leisureBonus * demandMult(c, a, b, state.q, 'leisure'),
     seats,
     prem,
     econ,
@@ -1035,12 +1039,13 @@ function assignTransfers(state: AirlineState, runs: RouteRun[], unserved: Map<nu
       const f = Math.min(cn.r1.freq, cn.r2.freq);
       const c1 = state.companies[cn.r1.ci];
       const c2 = state.companies[cn.r2.ci];
-      const q = (quality(c1, cn.r1.route.a, cn.r1.route.b) + quality(c2, cn.r2.route.a, cn.r2.route.b)) / 2;
+      const q1 = quality(c1, cn.r1.route.a, cn.r1.route.b);
+      const q2 = quality(c2, cn.r2.route.a, cn.r2.route.b);
       const tf = Math.min(1, tDirect / (cn.r1.hours + cn.r2.hours + XFER_HOURS));
       const fare = (1 + (cn.r1.route.fare + cn.r2.route.fare) / 200) * XFER_FARE;
       return {
-        biz: f ** 0.6 * q * tf ** 2 * fare ** -0.8 * 0.75,
-        leisure: f ** 0.5 * q * tf * fare ** -1.8 * 0.85,
+        biz: f ** 0.6 * ((q1.biz + q2.biz) / 2) * tf ** 2 * fare ** -0.8 * 0.75,
+        leisure: f ** 0.5 * ((q1.leisure + q2.leisure) / 2) * tf * fare ** -1.8 * 0.85,
         fare,
       };
     });
@@ -1206,8 +1211,8 @@ export function computeQuarter(state: AirlineState): QuarterOutcome {
     for (const biz of c.businesses) {
       const city = CITY[biz.city];
       const arrivalsQ = arrivals[ci].get(biz.city) ?? 0;
-      if (biz.kind === 'hotel') rep.side += biz.cost * (0.016 + 0.003 * city.fun) * SEASON_INFO[city.season].mult[quarter] + arrivalsQ * 0.0003;
-      else rep.side += biz.cost * 0.02 + arrivalsQ * 0.0001;
+      const info = BUSINESS_INFO[biz.kind];
+      rep.side += biz.cost * info.rate(city) * businessSeason(biz.kind, city, quarter, SEASON_INFO[city.season].mult) + arrivalsQ * info.perArrival;
     }
     // 노선 보조금: 그 도시를 오가는 노선을 날고 있으면
     for (const m of c.mods) {

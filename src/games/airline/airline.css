@@ -1437,7 +1437,7 @@
 }
 .al-ads li {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr) auto;
+  grid-template-columns: 110px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 8px;
   font-size: 13.5px;
@@ -3276,4 +3276,31 @@
   .al-confetti {
     display: none;
   }
+}
+
+/* ---------------------------------------------------------------- 광고 매체·캠페인 */
+.al-media,
+.al-campaign-region select {
+  padding: 3px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+}
+.al-campaign-title {
+  margin: 10px 0 4px;
+}
+.al-campaigns {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.al-campaign-region {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
 }

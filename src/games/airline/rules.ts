@@ -1,5 +1,7 @@
 import { withJosa } from '../../lib/korean';
 import { MODEL, MODELS, isAvailable, leadTime } from './aircraft';
+import { CAMPAIGN_INFO, MEDIA_INFO, adTarget, mediaOf } from './ads';
+import { BUSINESS_INFO } from './business';
 import { cabinBlocker, defaultCabin, sameCabin } from './cabin';
 import { blockText, branchPolitics, makerPolitics, politicalNews, polity, routePolitics } from './politics';
 import { CHALLENGE, challengeDeadline, checkChallenge } from './challenges';
@@ -38,12 +40,14 @@ import {
 } from './simulate';
 import { qLabel, qOf, quarterOf, yearOf } from './time';
 import type {
+  AdMedia,
   AirlineAction,
   AirlineOptions,
   AirlineSetup,
   AirlineState,
   BusinessKind,
   Cabin,
+  CampaignKind,
   Choice,
   Company,
   DistOmit,
@@ -524,6 +528,24 @@ export function cabinChangeBlocker(state: AirlineState, ci: number, planeId: num
   return null;
 }
 
+/** 캠페인 값 (광고 규모에 따라) */
+export function campaignCost(state: Pick<AirlineState, 'q'>, kind: CampaignKind): number {
+  return Math.round(CAMPAIGN_INFO[kind].costK * adScale(state.q));
+}
+
+/** 캠페인을 벌일 수 없는 까닭 */
+export function campaignBlocker(state: AirlineState, ci: number, kind: CampaignKind, region?: RegionId): string | null {
+  const c = state.companies[ci];
+  const info = CAMPAIGN_INFO[kind];
+  if (!info) return '없는 캠페인이에요';
+  if (yearNow(state) < info.from) return `${info.from}년부터 할 수 있어요`;
+  if (c.lastCampaign === state.q) return '캠페인은 한 분기에 하나만 해요';
+  if (info.region && (!region || !REGIONS.includes(region))) return '지역을 골라요';
+  const cost = campaignCost(state, kind);
+  if (c.cash < cost) return `돈이 모자라요 (${fmtMoney(cost)} 필요)`;
+  return null;
+}
+
 /** 새 비행기 주문(lease=false) 또는 리스(lease=true)를 할 수 있는지 */
 export function buyBlocker(state: AirlineState, ci: number, modelId: string, lease: boolean): string | null {
   const c = state.companies[ci];
@@ -628,7 +650,10 @@ export function buildBlocker(state: AirlineState, ci: number, city: string, kind
   const c = state.companies[ci];
   if (!CITY[city]) return '없는 도시예요';
   if (!hasBranch(c, city)) return '지점이 있는 도시에만 지어요';
+  if (!BUSINESS_INFO[kind]) return '없는 사업이에요';
   if (c.businesses.some((b) => b.city === city && b.kind === kind)) return '이미 있어요';
+  const why = BUSINESS_INFO[kind].why(CITY[city], citySize(CITY[city], yearNow(state)));
+  if (why) return why;
   const cost = businessCost(city, kind, state.q);
   if (c.cash < cost) return `돈이 모자라요 (${fmtMoney(cost)} 필요)`;
   return null;
@@ -889,6 +914,29 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
         c.ads[action.region] = amount;
       });
     }
+    case 'setMedia': {
+      if (!REGIONS.includes(action.region) || !MEDIA_INFO[action.media] || yearNow(state) < MEDIA_INFO[action.media].from || mediaOf(c0, action.region) === action.media) return state;
+      return edit(state, ci, (c) => {
+        c.adMedia = { ...(c.adMedia ?? Object.fromEntries(REGIONS.map((r) => [r, 'tv']))), [action.region]: action.media } as Record<RegionId, AdMedia>;
+      });
+    }
+    case 'campaign': {
+      if (campaignBlocker(state, ci, action.kind, action.region)) return state;
+      const info = CAMPAIGN_INFO[action.kind];
+      const cost = campaignCost(state, action.kind);
+      const s = edit(state, ci, (c, s) => {
+        c.cash -= cost;
+        c.lastCampaign = s.q;
+        if (info.mod) {
+          c.mods.push({ id: s.nextId, kind: info.mod.kind, value: info.mod.value, until: s.q + info.mod.quarters, label: `${info.icon} ${info.name}`, seg: info.mod.seg, ...(info.region && action.region ? { region: action.region } : {}) });
+          s.nextId += 1;
+        }
+        if (info.awareness && action.region) c.awareness[action.region] = Math.min(1, c.awareness[action.region] + info.awareness);
+        if (info.rep) c.reputation = clampRep(c.reputation + info.rep);
+        pushEvent(s, { type: 'campaign', company: ci, kind: action.kind });
+      });
+      return addLog(s, seat, `${c0.name}: ${info.icon} ${info.name}${action.region && info.region ? ` (${REGION_INFO[action.region].name})` : ''} (−${fmtMoney(cost)})`);
+    }
     case 'setService': {
       const level = Math.round(action.level);
       if (level < 1 || level > 5 || (level === c0.service && c0.planes.every((p) => p.meal === level))) return state;
@@ -951,7 +999,7 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
         c.businesses.push({ city: action.city, kind: action.kind, cost });
         pushEvent(s, { type: 'build', company: ci, city: action.city, kind: action.kind });
       });
-      return addLog(s, seat, `${c0.name}: ${CITY[action.city].name}에 ${action.kind === 'hotel' ? '호텔' : '여행사'} 열기 (−${fmtMoney(cost)})`);
+      return addLog(s, seat, `${c0.name}: ${CITY[action.city].name}에 ${withJosa(BUSINESS_INFO[action.kind].name, '을/를')} 열기 (−${fmtMoney(cost)})`);
     }
     case 'sellBusiness': {
       const b = c0.businesses.find((x) => x.city === action.city && x.kind === action.kind);
@@ -961,7 +1009,7 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
         c.cash += refund;
         c.businesses = c.businesses.filter((x) => !(x.city === action.city && x.kind === action.kind));
       });
-      return addLog(s, seat, `${c0.name}: ${CITY[action.city].name} ${action.kind === 'hotel' ? '호텔' : '여행사'} 팔기 (+${fmtMoney(refund)})`);
+      return addLog(s, seat, `${c0.name}: ${CITY[action.city].name} ${BUSINESS_INFO[action.kind].name} 팔기 (+${fmtMoney(refund)})`);
     }
     case 'choose':
       return applyChoice(state, ci, action.option);
@@ -1124,7 +1172,7 @@ export function runQuarter(state: AirlineState, rng: Rng = Math.random): Airline
     c.reputation = Math.round((c.reputation + (reputationTarget(s, c) - c.reputation) * 0.3) * 10) / 10;
     const scale = adScale(q);
     for (const region of REGIONS) {
-      const effect = 1 - Math.exp(-c.ads[region] / scale);
+      const effect = adTarget(c, region, scale);
       c.awareness[region] = Math.round((c.awareness[region] * 0.7 + effect * 0.3) * 1000) / 1000;
     }
     c.stats.pax += Math.round(rep.pax);

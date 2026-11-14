@@ -329,7 +329,8 @@ export interface Route {
   stats: RouteStats | null;
 }
 
-export type BusinessKind = 'hotel' | 'agency';
+/** 부대사업 (business.ts) */
+export type BusinessKind = 'hotel' | 'agency' | 'bus' | 'restaurant' | 'store' | 'resort' | 'ski' | 'park';
 
 export interface Business {
   city: string;
@@ -367,6 +368,10 @@ export interface Company {
   ads: Record<RegionId, number>;
   /** 지역마다 알려진 정도 0~1 (광고가 쌓인다) */
   awareness: Record<RegionId, number>;
+  /** 지역마다 광고 매체 (없으면 TV) */
+  adMedia?: Record<RegionId, AdMedia>;
+  /** 마지막으로 캠페인을 벌인 분기 (한 분기에 하나) */
+  lastCampaign?: number;
   /** 기내식 기본값 1~5 (새 비행기에 쓰고, 바꾸면 모든 비행기에 한꺼번에) */
   service: number;
   /** 평판 0~100 */
@@ -402,6 +407,11 @@ export interface Company {
   /** 회사 색 (실제 항공사의 칠 색에서 고른 것). null이면 자리 색 */
   color: string | null;
 }
+
+/** 광고 매체 (ads.ts) */
+export type AdMedia = 'tv' | 'newspaper' | 'magazine' | 'radio' | 'internet';
+/** 캠페인 (ads.ts) */
+export type CampaignKind = 'sale' | 'miles' | 'lucky' | 'star';
 
 /** 컴퓨터 성향: 느긋 / 보통 / 치열 */
 export type AiStyle = 'relaxed' | 'normal' | 'fierce';
@@ -600,6 +610,8 @@ export type AirlineAction =
   | { type: 'endAlliance' }
   | { type: 'setFare'; route: number; fare: number }
   | { type: 'setAds'; region: RegionId; amount: number }
+  | { type: 'setMedia'; region: RegionId; media: AdMedia }
+  | { type: 'campaign'; kind: CampaignKind; region?: RegionId }
   /** 기내식 기본값: 모든 비행기에 한꺼번에 */
   | { type: 'setService'; level: number }
   /** 비행기 좌석 배치 (all이면 같은 기종 모두) */
@@ -625,6 +637,7 @@ export type GameEvent =
   | { id: number; type: 'sell'; company: number; model: string; amount: number }
   | { id: number; type: 'assign'; company: number; route: number }
   | { id: number; type: 'cabin'; company: number; plane: number; cost: number }
+  | { id: number; type: 'campaign'; company: number; kind: CampaignKind }
   | { id: number; type: 'money'; company: number; amount: number; what: 'borrow' | 'repay' }
   | { id: number; type: 'build'; company: number; city: string; kind: BusinessKind }
   | { id: number; type: 'turn'; company: number }

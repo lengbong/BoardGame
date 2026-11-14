@@ -378,10 +378,17 @@ export interface Company {
   taken: number;
   /** 마지막으로 제휴를 제안한 분기 */
   lastProposal: number;
+  /** 실제 항공사 id (realAirlines.ts). 가상 항공사면 null */
+  airline: string | null;
+  /** 회사 색 (실제 항공사의 칠 색에서 고른 것). null이면 자리 색 */
+  color: string | null;
 }
 
 /** 컴퓨터 성향: 느긋 / 보통 / 치열 */
 export type AiStyle = 'relaxed' | 'normal' | 'fierce';
+
+/** 항공사 이름: 실제 항공사 / 가상 항공사 */
+export type NameMode = 'real' | 'fictional';
 
 export type StartEra = 1963 | 1983 | 2003;
 export type WinMode = 'goal' | 'years' | 'challenge';
@@ -401,6 +408,8 @@ export interface AirlineOptions {
   challenge: string | null;
   /** 컴퓨터 성향 */
   aiStyle: AiStyle;
+  /** 항공사 이름 */
+  names: NameMode;
 }
 
 export interface AirlineSetup {
@@ -408,6 +417,8 @@ export interface AirlineSetup {
   options: AirlineOptions;
   /** 자리마다 고른 본사(허브) 도시. null이면 저절로 고른다 */
   hubs: (string | null)[];
+  /** 자리마다 고른 실제 항공사 id (실제 항공사 모드). null이면 저절로 고른다 */
+  airlines: (string | null)[];
 }
 
 /** 사건의 효과 (기한이 지나면 없어진다) */
@@ -430,6 +441,8 @@ export interface NewsItem {
   city?: string;
   /** 특히 이 회사들에게 중요한 소식 (라이벌 진입 등) */
   for?: number[];
+  /** 소식의 주인공 회사 (사진·배지) */
+  company?: number;
 }
 
 /** 회사 한 곳의 분기 손익 (억) */

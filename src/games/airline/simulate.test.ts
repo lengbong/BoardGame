@@ -30,8 +30,9 @@ function base(era: 1963 | 1983 | 2003 = 2003): AirlineState {
       { kind: 'empty', name: '' },
       { kind: 'empty', name: '' },
     ],
-    options: { era, mode: 'years', years: 20, goalValue: 20000, goalRegions: 6, money: 'normal', challenge: null, aiStyle: 'normal' },
+    options: { era, mode: 'years', years: 20, goalValue: 20000, goalRegions: 6, money: 'normal', challenge: null, aiStyle: 'normal', names: 'fictional' },
     hubs: ['seoul', 'tokyo', null, null],
+    airlines: [null, null, null, null],
   };
   return createGame(setup, seededRandom(1));
 }

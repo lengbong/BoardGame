@@ -4,17 +4,21 @@ import { advise } from './advisor';
 import { aiTurn, planTurn } from './ai';
 import { SCENARIO_IDS, allianceScore, makeChoice } from './choices';
 import { goalMet, gradeYear, newGoals } from './goals';
-import { MAX_PLANES, actor, applyAction, choiceBlocker, createGame, proposeBlocker, routeOnPair, runQuarter } from './rules';
+import { MAX_PLANES, actor, applyAction, choiceBlocker, createGame, hubCandidates, proposeBlocker, routeOnPair, runQuarter } from './rules';
 import { computeQuarter, networks } from './simulate';
-import { isValidState } from './storage';
+import { isValidState, parseSaved } from './storage';
+import { colorDistance, coColors, gameHub, pickColors, usableColor } from './brand';
+import { CITY } from './cities';
+import { REAL_AIRLINE, airlinesAt } from './realAirlines';
 import { qOf, quarterOf, yearOf } from './time';
 import type { AirlineOptions, AirlineSetup, AirlineState, Company, SeatKind } from './types';
 
 function setup(kinds: SeatKind[], options: Partial<AirlineOptions> = {}, hubs: (string | null)[] = []): AirlineSetup {
   return {
     seats: [0, 1, 2, 3].map((i) => ({ kind: kinds[i] ?? 'empty', name: '' })) as AirlineSetup['seats'],
-    options: { era: 2003, mode: 'years', years: 20, goalValue: 20000, goalRegions: 6, money: 'normal', challenge: null, aiStyle: 'normal', ...options },
+    options: { era: 2003, mode: 'years', years: 20, goalValue: 20000, goalRegions: 6, money: 'normal', challenge: null, aiStyle: 'normal', names: 'fictional', ...options },
     hubs: [0, 1, 2, 3].map((i) => hubs[i] ?? null),
+    airlines: [null, null, null, null],
   };
 }
 
@@ -224,7 +228,7 @@ describe('파산과 중고 시장', () => {
     const fromIt = s.market.filter((u) => u.from === c.name);
     expect(fromIt).toHaveLength(3);
     expect(fromIt.every((u) => u.model === 'a320' && u.price > 0)).toBe(true);
-    expect(s.news.some((n) => n.title.includes('파산') && n.text.includes('슬롯'))).toBe(true);
+    expect(s.news.some((n) => n.title.includes('운항 중단') && n.text.includes('슬롯'))).toBe(true);
     expect(s.phase).toBe('manage');
   });
 });
@@ -352,5 +356,102 @@ describe('컴퓨터 성향과 기타', () => {
     expect(s.q).toBe(qOf(2003, 1));
     expect(s.version).toBe(2);
     expect(isValidState(JSON.parse(JSON.stringify(s)))).toBe(true);
+  });
+});
+
+describe('실제 항공사', () => {
+  const realSetup = (kinds: SeatKind[], airlines: (string | null)[] = [], era: 1963 | 1983 | 2003 = 2003, hubs: (string | null)[] = []): AirlineSetup => ({
+    ...setup(kinds, { era, names: 'real' }, hubs),
+    airlines: [0, 1, 2, 3].map((i) => airlines[i] ?? null),
+  });
+
+  it('시대마다 모든 회사가 그 해에 날던 서로 다른 실제 항공사가 되고, 본사와 색이 겹치지 않는다', () => {
+    for (const era of [1963, 1983, 2003] as const) {
+      for (let seed = 1; seed <= 6; seed++) {
+        const s = createGame(realSetup(['human', 'ai-normal', 'ai-easy', 'ai-normal'], [], era), seededRandom(seed * 31 + era));
+        const flying = new Set(airlinesAt(era).map((a) => a.id));
+        const ids = s.companies.map((c) => c.airline);
+        expect(ids.every((id) => id !== null && flying.has(id))).toBe(true);
+        expect(new Set(ids).size).toBe(4);
+        expect(new Set(s.companies.map((c) => c.hub)).size).toBe(4);
+        for (const c of s.companies) expect(c.name).toBe(REAL_AIRLINE[c.airline!].name);
+        const cols = s.companies.map((c) => coColors(c).main);
+        for (let i = 0; i < cols.length; i++) for (let j = i + 1; j < cols.length; j++) expect(colorDistance(cols[i], cols[j])).toBeGreaterThanOrEqual(30);
+      }
+    }
+  });
+
+  it('사람이 고른 항공사는 실제 본거지에서 시작하고, 두 사람이 같은 항공사를 고를 수는 없다', () => {
+    const s = createGame(realSetup(['human', 'human', 'ai-normal'], ['korean', 'korean']), seededRandom(2));
+    expect(s.companies[0].airline).toBe('korean');
+    expect(s.companies[0].hub).toBe('seoul');
+    expect(s.companies[1].airline).not.toBe('korean');
+    expect(s.companies[1].airline).not.toBeNull();
+    // 같은 본거지 항공사 둘 (대한항공·아시아나): 둘째는 가까운 다른 도시에서
+    const t = createGame(realSetup(['human', 'human'], ['korean', 'asiana']), seededRandom(3));
+    expect(t.companies[0].hub).toBe('seoul');
+    expect(t.companies[1].airline).toBe('asiana');
+    expect(t.companies[1].hub).not.toBe('seoul');
+    expect(CITY[t.companies[1].hub].region).toBe('eastasia');
+    // 고른 본사가 있으면 그 도시
+    const u = createGame(realSetup(['human', 'ai-easy'], ['korean'], 2003, ['busan']), seededRandom(4));
+    expect(u.companies[0].hub).toBe('busan');
+    // 그 해에 없던 항공사는 고를 수 없다 (1963년 에미레이트)
+    const v = createGame(realSetup(['human', 'ai-easy'], ['emirates'], 1963), seededRandom(5));
+    expect(v.companies[0].airline).not.toBe('emirates');
+  });
+
+  it('실제 본거지 공항이 아직 작으면 같은 지역의 가까운 큰 도시에서 시작한다', () => {
+    const cands = hubCandidates(1963);
+    for (const a of airlinesAt(1963)) {
+      const h = gameHub(a, cands)!;
+      expect(cands).toContain(h);
+      if (cands.includes(a.hub)) expect(h).toBe(a.hub);
+    }
+  });
+
+  it('가상 항공사 모드는 예전처럼 정해진 이름과 자리 색을 쓴다', () => {
+    const s = createGame(setup(['human', 'ai-normal']), seededRandom(1));
+    expect(s.companies.map((c) => c.airline)).toEqual([null, null]);
+    expect(s.companies.map((c) => c.color)).toEqual([null, null]);
+    expect(s.companies[1].name).toBe('바람길항공');
+  });
+
+  it('지도·배지에 쓰기 어려운 흰색·회색은 쓰지 않고, 밝기를 가운데로 맞춘다', () => {
+    expect(usableColor('#ffffff')).toBeNull();
+    expect(usableColor('#a2aab0')).toBeNull();
+    expect(usableColor('#111111')).toBeNull();
+    const c = usableColor('#003876')!;
+    expect(c).toMatch(/^#[0-9a-f]{6}$/);
+    expect(pickColors([{ seat: 0, airline: null }])).toEqual([null]);
+  });
+
+  it('도전 과제에서도 라이벌 본거지의 실제 항공사 이름을 쓴다', () => {
+    const s = createGame({ ...setup(['human'], { mode: 'challenge', challenge: 'rescue', names: 'real' }), airlines: [null, null, null, null] }, seededRandom(1));
+    expect(s.companies[0].airline).toBeNull();
+    expect(s.companies.slice(1).some((c) => c.airline !== null)).toBe(true);
+  });
+
+  it('실제 항공사 컴퓨터끼리 10년을 끝까지 하고, 운항을 멈춘 회사 소식은 중립적인 말로 쓴다', () => {
+    const rng = seededRandom(77);
+    let s = createGame({ ...realSetup(['ai-normal', 'ai-easy', 'ai-normal', 'ai-easy'], [], 1983), options: { ...realSetup([]).options, era: 1983, years: 10, names: 'real' } }, rng);
+    const names = s.companies.map((c) => c.name);
+    let guard = 0;
+    while (s.phase !== 'gameover' && guard++ < 400) s = aiTurn(s, rng);
+    expect(s.phase).toBe('gameover');
+    expect(s.companies.map((c) => c.name)).toEqual(names);
+    expect(s.news.every((n) => !n.title.includes('파산'))).toBe(true);
+  });
+
+  it('저장했다가 불러와도 항공사가 그대로이고, 없어진 항공사 id는 가상 항공사로 바꾼다', () => {
+    const st = createGame(realSetup(['human', 'ai-normal'], ['jal']), seededRandom(6));
+    const su = realSetup(['human', 'ai-normal'], ['jal']);
+    const saved = parseSaved(JSON.parse(JSON.stringify({ setup: su, state: st, savedAt: 1 })));
+    expect(saved!.state.companies[0].airline).toBe('jal');
+    expect(saved!.setup.airlines[0]).toBe('jal');
+    const broken = JSON.parse(JSON.stringify(st));
+    broken.companies[0].airline = 'no-such-airline';
+    const again = parseSaved({ setup: su, state: broken, savedAt: 1 });
+    expect(again!.state.companies[0].airline).toBeNull();
   });
 });

@@ -76,6 +76,8 @@ describe('저장과 이어하기', () => {
     expect(o.challenge).toBeNull();
     expect(parseOptions({ era: 1963, mode: 'challenge', challenge: 'rescue' }).challenge).toBe('rescue');
     expect(o.aiStyle).toBe('normal');
+    expect(o.names).toBe('real');
+    expect(parseOptions({ names: 'fictional' }).names).toBe('fictional');
     expect(parseOptions({ aiStyle: 'fierce' }).aiStyle).toBe('fierce');
   });
 

@@ -2,10 +2,12 @@ import { withJosa } from '../../lib/korean';
 import { MODEL, MODELS, isAvailable, leadTime } from './aircraft';
 import { CHALLENGE, challengeDeadline, checkChallenge } from './challenges';
 import { allianceChoice, allianceScore, makeChoice, nextChoiceGap } from './choices';
+import { autoAirline, gameHub, pickColors } from './brand';
 import { AIRPORT_INFO, CITIES, CITY, REGIONS, REGION_INFO, airportClass, citySize, dist, pairKey } from './cities';
 import { FIXED_EVENTS, FIXED_ICON, rollRandomEvent } from './events';
 import { addQuarter, freshAcc, goalMet, gradeYear, newGoals } from './goals';
 import { MAX_PLANES, MAX_ROUTES } from './limits';
+import { REAL_AIRLINE, airlinesAt } from './realAirlines';
 import {
   LEASE_RATE,
   MAX_DELIVERIES,
@@ -63,6 +65,7 @@ export const DEFAULT_OPTIONS: AirlineOptions = {
   money: 'normal',
   challenge: null,
   aiStyle: 'normal',
+  names: 'real',
 };
 
 export const START_MONEY: Record<AirlineOptions['money'], { cash: number; name: string }> = {
@@ -151,6 +154,8 @@ function newCompany(seat: SeatIndex, kind: Company['kind'], name: string, hub: s
     reviews: [],
     taken: 0,
     lastProposal: -99,
+    airline: null,
+    color: null,
   };
 }
 
@@ -193,10 +198,20 @@ export function createGame(setup: AirlineSetup, rng: Rng = Math.random): Airline
   const year = opts.era;
   const cash = START_MONEY[opts.money].cash;
   const taken: string[] = [];
-  // 사람이 고른 본사부터 정하고, 나머지는 저절로
   const active = setup.seats.map((s, i) => ({ s, i })).filter((x) => x.s.kind !== 'empty');
   const hubs = new Map<number, string>();
+  const airlines = new Map<number, string>();
   const valid = hubCandidates(year);
+  const real = opts.names === 'real';
+  // 1) 사람이 고른 실제 항공사 (그 해에 날고, 아직 아무도 안 고른 것만)
+  if (real) {
+    const flying = new Set(airlinesAt(year).map((a) => a.id));
+    for (const { i } of active) {
+      const id = setup.airlines?.[i];
+      if (id && flying.has(id) && ![...airlines.values()].includes(id)) airlines.set(i, id);
+    }
+  }
+  // 2) 사람이 고른 본사, 고른 항공사의 본거지
   for (const { i } of active) {
     const h = setup.hubs[i];
     if (h && valid.includes(h) && !taken.includes(h)) {
@@ -205,14 +220,41 @@ export function createGame(setup: AirlineSetup, rng: Rng = Math.random): Airline
     }
   }
   for (const { i } of active) {
+    const id = airlines.get(i);
+    if (hubs.has(i) || !id) continue;
+    const h = gameHub(REAL_AIRLINE[id], valid, taken);
+    if (h) {
+      hubs.set(i, h);
+      taken.push(h);
+    }
+  }
+  // 3) 나머지: 실제 항공사 모드면 항공사와 본거지를 함께, 아니면 본사만
+  for (const { i } of active) {
+    if (hubs.has(i) && (!real || airlines.has(i))) continue;
+    if (real && !airlines.has(i)) {
+      const pick = autoAirline(year, valid, [...airlines.values()], hubs.has(i) ? taken.filter((h) => h !== hubs.get(i)) : taken, (c) => citySize(CITY[c], year), rng);
+      if (pick) {
+        airlines.set(i, pick.airline.id);
+        if (!hubs.has(i)) {
+          hubs.set(i, pick.hub);
+          taken.push(pick.hub);
+        }
+        continue;
+      }
+    }
     if (hubs.has(i)) continue;
     const h = autoHub(year, taken, rng);
     hubs.set(i, h);
     taken.push(h);
   }
-  const companies = active.map(({ s, i }) =>
-    newCompany(i as SeatIndex, s.kind as Company['kind'], companyName(s.name, i), hubs.get(i)!, cash, Math.round(cash * 0.5), year),
-  );
+  const colors = pickColors(active.map(({ i }) => ({ seat: i, airline: airlines.get(i) ?? null })));
+  const companies = active.map(({ s, i }, k) => {
+    const id = airlines.get(i) ?? null;
+    const c = newCompany(i as SeatIndex, s.kind as Company['kind'], id ? REAL_AIRLINE[id].name : companyName(s.name, i), hubs.get(i)!, cash, Math.round(cash * 0.5), year);
+    c.airline = id;
+    c.color = colors[k];
+    return c;
+  });
   let state = baseState(opts, year, companies);
   state = addNews(state, {
     icon: '✈️',
@@ -234,6 +276,19 @@ function createChallenge(setup: AirlineSetup, opts: AirlineOptions, rng: Rng): A
   me.debt = def.debt ?? 0;
   if (def.branches) me.branches = [...new Set([def.hub, ...def.branches])];
   const rivals = def.rivals.map((r, k) => newCompany((k + 1) as SeatIndex, r.kind, DEFAULT_NAMES[k + 1], r.hub, 2500, 1250, def.year));
+  // 실제 항공사 모드: 라이벌 본거지에 그 해 날던 실제 항공사가 있으면 그 이름으로
+  if (opts.names === 'real') {
+    const used: string[] = [];
+    for (const rv of rivals) {
+      const a = airlinesAt(def.year).find((x) => x.hub === rv.hub && !used.includes(x.id));
+      if (!a) continue;
+      used.push(a.id);
+      rv.airline = a.id;
+      rv.name = a.name;
+    }
+    const colors = pickColors([me, ...rivals].map((c) => ({ seat: c.seat, airline: c.airline })));
+    [me, ...rivals].forEach((c, k) => (c.color = colors[k]));
+  }
   let state = baseState({ ...opts, era: opts.era }, def.year, [me, ...rivals]);
   // 처음 비행기와 노선
   if (def.fleet) {
@@ -535,11 +590,11 @@ export function proposeBlocker(state: AirlineState, ci: number, to: number): str
   const c = state.companies[ci];
   const t = state.companies[to];
   if (!t || to === ci) return '제휴할 회사를 골라요';
-  if (t.out) return '파산한 회사예요';
+  if (t.out) return '운항을 멈춘 회사예요';
   if (c.partner !== null) return '이미 제휴한 회사가 있어요';
-  if (t.partner !== null) return `${t.name}은 다른 회사와 제휴 중이에요`;
+  if (t.partner !== null) return `${withJosa(t.name, '은/는')} 다른 회사와 제휴 중이에요`;
   if (c.lastProposal === state.q) return '이번 분기에는 이미 제안했어요';
-  if (t.kind === 'human' && t.choice) return `${t.name}이 다른 일을 결정하는 중이에요`;
+  if (t.kind === 'human' && t.choice) return `${withJosa(t.name, '이/가')} 다른 일을 결정하는 중이에요`;
   return null;
 }
 
@@ -626,11 +681,12 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
       if (count === 3 && watchers.length) {
         s = addNews(s, {
           icon: '📍',
-          title: `${c0.name}이 ${REGION_INFO[region].name}에 거점을 넓혀요`,
-          text: `${c0.name}이 우리 본사가 있는 ${REGION_INFO[region].name}에 지점을 셋이나 냈어요. 곧 우리 노선에도 들어올지 몰라요.`,
+          title: `${withJosa(c0.name, '이/가')} ${REGION_INFO[region].name}에 거점을 넓혀요`,
+          text: `${withJosa(c0.name, '이/가')} 우리 본사가 있는 ${REGION_INFO[region].name}에 지점을 셋이나 냈어요. 곧 우리 노선에도 들어올지 몰라요.`,
           tone: 'bad',
           city: action.city,
           for: watchers,
+          company: ci,
         });
       }
       return addLog(s, seat, `${c0.name}: ${CITY[action.city].name} 지점 열기 (−${fmtMoney(cost)})`);
@@ -657,11 +713,12 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
       if (rivals.length) {
         s = addNews(s, {
           icon: '⚔️',
-          title: `${c0.name}이 ${CITY[action.a].name}–${CITY[action.b].name}에 들어왔어요`,
+          title: `${withJosa(c0.name, '이/가')} ${CITY[action.a].name}–${CITY[action.b].name}에 들어왔어요`,
           text: '같은 두 도시를 날게 되어 손님을 나눠 가져야 해요. 운임·횟수·비행기를 살펴보세요.',
           tone: 'bad',
           city: action.a,
           for: rivals,
+          company: ci,
         });
       }
       return addLog(s, seat, `${c0.name}: ${CITY[action.a].name}–${CITY[action.b].name} 노선 열기`);
@@ -842,8 +899,8 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
         a.partner = null;
         b.partner = null;
       });
-      s = addNews(s, { icon: '✂️', title: `${c0.name}·${state.companies[p].name} 제휴 끝`, text: '공동 운항을 끝냈어요. 이제 서로의 노선으로 갈아타는 손님을 함께 태우지 않아요.', tone: 'info', for: humansAmong(s, [ci, p]) });
-      return addLog(s, seat, `${c0.name}: ${state.companies[p].name}과 제휴 끝`);
+      s = addNews(s, { icon: '✂️', title: `${c0.name}·${state.companies[p].name} 제휴 끝`, text: '공동 운항을 끝냈어요. 이제 서로의 노선으로 갈아타는 손님을 함께 태우지 않아요.', tone: 'info', for: humansAmong(s, [ci, p]), company: ci });
+      return addLog(s, seat, `${c0.name}: ${withJosa(state.companies[p].name, '와/과')} 제휴 끝`);
     }
     case 'endTurn': {
       // 고르지 않은 결정 사건은 마지막 선택지(대개 '안 해요')로
@@ -903,7 +960,7 @@ function applyChoice(state: AirlineState, ci: number, option: number): AirlineSt
   });
   if (partnerOf && partnerOf.kind === 'alliance') {
     const other = state.companies[partnerOf.with];
-    s = addNews(s, { icon: '🤝', title: `${c0.name}·${other.name} 제휴`, text: '공동 운항(코드셰어)을 시작했어요. 서로의 노선을 이어 갈아타는 손님을 함께 태워요.', tone: 'good', for: humansAmong(s, cis) });
+    s = addNews(s, { icon: '🤝', title: `${c0.name}·${other.name} 제휴`, text: '공동 운항(코드셰어)을 시작했어요. 서로의 노선을 이어 갈아타는 손님을 함께 태워요.', tone: 'good', for: humansAmong(s, cis), company: ci });
   }
   return addLog(s, c0.seat, `${c0.name}: ${choice.title} — ${o.label}`);
 }
@@ -929,11 +986,11 @@ function propose(state: AirlineState, ci: number, to: number): AirlineState {
       b.partner = ci;
       pushEvent(s2, { type: 'alliance', company: ci, with: to, ok: true });
     });
-    s = addNews(s, { icon: '🤝', title: `${c0.name}·${t.name} 제휴`, text: '공동 운항(코드셰어)을 시작했어요. 서로의 노선을 이어 갈아타는 손님을 함께 태워요.', tone: 'good', for: humansAmong(s, [ci, to]) });
+    s = addNews(s, { icon: '🤝', title: `${c0.name}·${t.name} 제휴`, text: '공동 운항(코드셰어)을 시작했어요. 서로의 노선을 이어 갈아타는 손님을 함께 태워요.', tone: 'good', for: humansAmong(s, [ci, to]), company: ci });
   } else {
     s = { ...s, events: [...s.events, { id: s.nextEventId, type: 'alliance', company: ci, with: to, ok: false }], nextEventId: s.nextEventId + 1 };
   }
-  return addLog(s, c0.seat, ok ? `${c0.name}: ${t.name}과 제휴했어요` : `${c0.name}: ${t.name}이 제휴를 거절했어요`);
+  return addLog(s, c0.seat, ok ? `${c0.name}: ${withJosa(t.name, '와/과')} 제휴했어요` : `${c0.name}: ${withJosa(t.name, '이/가')} 제휴를 거절했어요`);
 }
 
 /** 다음 회사로. 모두 마치면 분기를 계산한다 */
@@ -1025,12 +1082,13 @@ export function runQuarter(state: AirlineState, rng: Rng = Math.random): Airline
     c.partner = null;
     c.choice = null;
     s = addNews(s, {
-      icon: '💥',
-      title: `${c.name} 파산`,
-      text: `${withJosa(c.name, '이/가')} 두 분기 내내 돈이 모자라서 문을 닫았어요.${listings.length ? ` 비행기 ${listings.length}대가 중고 시장에 나왔고,` : ''} 쓰던 공항 슬롯과 노선이 비었어요 — 새 노선을 열 기회예요!`,
+      icon: '🛑',
+      title: `${c.name} 운항 중단`,
+      text: `이 판에서 ${withJosa(c.name, '은/는')} 두 분기 내내 돈이 모자라 운항을 멈췄어요.${listings.length ? ` 비행기 ${listings.length}대가 중고 시장에 나왔고,` : ''} 쓰던 공항 슬롯과 노선이 비었어요 — 새 노선을 열 기회예요!${c.airline ? ' (게임 속 이야기일 뿐, 실제 회사와는 관계없어요)' : ''}`,
       tone: 'bad',
+      company: ci,
     });
-    s = addLog(s, c.seat, `💥 ${c.name} 파산`);
+    s = addLog(s, c.seat, `🛑 ${c.name} 운항 중단`);
     pushEvent(s, { type: 'bankrupt', company: ci });
   }
 
@@ -1112,7 +1170,7 @@ function priceWarNews(state: AirlineState): AirlineState {
         const [a, b] = pair.split('|');
         s = addNews(s, {
           icon: '🏷️',
-          title: `${s.companies[x.ci].name}이 ${CITY[a].name}–${CITY[b].name}에서 가격 경쟁`,
+          title: `${withJosa(s.companies[x.ci].name, '이/가')} ${CITY[a].name}–${CITY[b].name}에서 가격 경쟁`,
           text: `라이벌이 우리보다 ${y.fare - x.fare}%p 싸게 팔아요. 따라 내릴지, 서비스·횟수로 버틸지 정해요.`,
           tone: 'bad',
           city: a,
@@ -1150,15 +1208,15 @@ function checkEnd(state: AirlineState, reports: QuarterReport['companies'], q: n
     }
     if (r.failed) {
       s = addNews(s, { icon: '⌛', title: `도전 실패: ${def.title}`, text: r.progress, tone: 'bad' });
-      return finish({ winners: [], reason: s.companies[ch.company].out ? '회사가 파산했어요' : '기한 안에 목표를 이루지 못했어요', success: false });
+      return finish({ winners: [], reason: s.companies[ch.company].out ? '회사가 운항을 멈췄어요' : '기한 안에 목표를 이루지 못했어요', success: false });
     }
     return s;
   }
 
   const humans = s.companies.map((c, i) => (c.kind === 'human' ? i : -1)).filter((i) => i >= 0);
-  if (alive.length === 0) return finish({ winners: [], reason: '모든 회사가 파산했어요' });
+  if (alive.length === 0) return finish({ winners: [], reason: '모든 회사가 운항을 멈췄어요' });
   if (alive.length === 1 && s.companies.length > 1) return finish({ winners: alive, reason: `${s.companies[alive[0]].name}만 남았어요` });
-  if (humans.length > 0 && humans.every((i) => s.companies[i].out)) return finish({ winners: best(alive), reason: '사람 회사가 모두 파산했어요' });
+  if (humans.length > 0 && humans.every((i) => s.companies[i].out)) return finish({ winners: best(alive), reason: '사람 회사가 모두 운항을 멈췄어요' });
 
   if (s.options.mode === 'goal') {
     const goal = s.options.goalValue;
@@ -1279,7 +1337,7 @@ function startQuarter(state: AirlineState, q: number, rng: Rng): AirlineState {
     } else {
       c.partner = best;
       t.partner = ci;
-      s = addNews(s, { icon: '🤝', title: `${c.name}·${t.name} 제휴`, text: '두 회사가 공동 운항을 시작했어요.', tone: 'info' });
+      s = addNews(s, { icon: '🤝', title: `${c.name}·${t.name} 제휴`, text: '두 회사가 공동 운항을 시작했어요.', tone: 'info', company: ci });
     }
   });
   // 순서는 분기마다 한 칸씩 돌린다

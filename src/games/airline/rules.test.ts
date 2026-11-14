@@ -43,8 +43,9 @@ import type { AirlineOptions, AirlineSetup, AirlineState, SeatKind } from './typ
 function setup(kinds: SeatKind[], options: Partial<AirlineOptions> = {}, hubs: (string | null)[] = []): AirlineSetup {
   return {
     seats: [0, 1, 2, 3].map((i) => ({ kind: kinds[i] ?? 'empty', name: '' })) as AirlineSetup['seats'],
-    options: { era: 2003, mode: 'years', years: 20, goalValue: 20000, goalRegions: 6, money: 'normal', challenge: null, aiStyle: 'normal', ...options },
+    options: { era: 2003, mode: 'years', years: 20, goalValue: 20000, goalRegions: 6, money: 'normal', challenge: null, aiStyle: 'normal', names: 'fictional', ...options },
     hubs: [0, 1, 2, 3].map((i) => hubs[i] ?? null),
+    airlines: [null, null, null, null],
   };
 }
 

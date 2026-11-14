@@ -4,6 +4,7 @@ import type { Speed } from '../common/speed';
 import { MODEL } from './aircraft';
 import { CHALLENGE } from './challenges';
 import { CITY, REGIONS } from './cities';
+import { REAL_AIRLINE } from './realAirlines';
 import { DEFAULT_OPTIONS, GOAL_VALUES } from './rules';
 import type { AirlineOptions, AirlineSetup, AirlineState, Choice, Company, GoalKind, ModKind, YearAcc } from './types';
 
@@ -26,6 +27,7 @@ export const DEFAULT_SETUP: AirlineSetup = {
   ],
   options: DEFAULT_OPTIONS,
   hubs: [null, null, null, null],
+  airlines: [null, null, null, null],
 };
 
 const ERAS = [1963, 1983, 2003];
@@ -46,7 +48,13 @@ export function parseOptions(v: unknown): AirlineOptions {
     money: o.money === 'rich' || o.money === 'tight' || o.money === 'normal' ? o.money : DEFAULT_OPTIONS.money,
     challenge: typeof o.challenge === 'string' && CHALLENGE[o.challenge] ? o.challenge : null,
     aiStyle: o.aiStyle === 'relaxed' || o.aiStyle === 'fierce' || o.aiStyle === 'normal' ? o.aiStyle : DEFAULT_OPTIONS.aiStyle,
+    names: o.names === 'fictional' || o.names === 'real' ? o.names : DEFAULT_OPTIONS.names,
   };
+}
+
+function parseAirlines(v: unknown): (string | null)[] {
+  const list = Array.isArray(v) ? v : [];
+  return [0, 1, 2, 3].map((i) => (typeof list[i] === 'string' && REAL_AIRLINE[list[i]] ? (list[i] as string) : null));
 }
 
 export function isValidSetup(v: unknown): v is AirlineSetup {
@@ -57,7 +65,8 @@ export function isValidSetup(v: unknown): v is AirlineSetup {
     s.seats.length === 4 &&
     s.seats.every((seat) => isObj(seat) && typeof seat.name === 'string' && SEAT_KIND_OPTIONS.some((o) => o.value === seat.kind)) &&
     isObj(s.options) &&
-    (s.hubs === undefined || (Array.isArray(s.hubs) && s.hubs.every((h) => h === null || isCity(h))))
+    (s.hubs === undefined || (Array.isArray(s.hubs) && s.hubs.every((h) => h === null || isCity(h)))) &&
+    (s.airlines === undefined || (Array.isArray(s.airlines) && s.airlines.every((a) => a === null || typeof a === 'string')))
   );
 }
 
@@ -100,6 +109,9 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
   if (!Array.isArray(k.goals) || !k.goals.every((g) => isObj(g) && GOAL_KINDS.includes(g.kind) && isNum(g.target) && typeof g.text === 'string' && isObj(g.reward) && isNum(g.reward.cash) && isNum(g.reward.rep) && (g.done === null || typeof g.done === 'boolean'))) return false;
   if (!isObj(k.acc) || !ACC_KEYS.every((key) => isNum((k.acc as unknown as Record<string, unknown>)[key]))) return false;
   if (!Array.isArray(k.reviews) || !k.reviews.every((r) => isObj(r) && isInt(r.year) && ['S', 'A', 'B', 'C', 'D'].includes(r.grade) && typeof r.text === 'string')) return false;
+  // 실제 항공사·색 (예전 판 저장에는 없을 수 있다)
+  if (k.airline !== undefined && k.airline !== null && typeof k.airline !== 'string') return false;
+  if (k.color !== undefined && k.color !== null && !(typeof k.color === 'string' && /^#[0-9a-f]{6}$/i.test(k.color))) return false;
   if (!isObj(k.ads) || !isObj(k.awareness) || !REGIONS.every((r) => isNum(k.ads[r]) && isNum(k.awareness[r]))) return false;
   if (!isInt(k.service) || k.service < 1 || k.service > 5 || !isNum(k.reputation)) return false;
   if (!Array.isArray(k.businesses) || !k.businesses.every((b) => isObj(b) && isCity(b.city) && (b.kind === 'hotel' || b.kind === 'agency') && isNum(b.cost))) return false;
@@ -137,9 +149,11 @@ export function parseSaved(v: unknown): SavedAirlineGame | null {
   const saved = v as unknown as SavedAirlineGame;
   if (!isValidSetup(saved.setup) || !isValidState(saved.state)) return null;
   const options = parseOptions(saved.state.options);
+  // 항공사 자료가 바뀌어 없어진 항공사는 가상 항공사로 (이름·색은 그대로)
+  const companies = saved.state.companies.map((c) => ({ ...c, airline: c.airline && REAL_AIRLINE[c.airline] ? c.airline : null, color: c.color ?? null }));
   return {
-    setup: { ...saved.setup, hubs: saved.setup.hubs ?? [null, null, null, null], options: parseOptions(saved.setup.options) },
-    state: { ...saved.state, options, events: [] },
+    setup: { ...saved.setup, hubs: saved.setup.hubs ?? [null, null, null, null], airlines: parseAirlines(saved.setup.airlines), options: parseOptions(saved.setup.options) },
+    state: { ...saved.state, companies, options, events: [] },
     savedAt: isNum(saved.savedAt) ? saved.savedAt : Date.now(),
   };
 }
@@ -164,7 +178,7 @@ export function clearSavedAirlineGame(): void {
 export function loadAirlineSetup(): AirlineSetup {
   const s = loadJson<AirlineSetup>(SETUP_KEY);
   if (!isValidSetup(s)) return DEFAULT_SETUP;
-  return { seats: s.seats, options: parseOptions(s.options), hubs: s.hubs ?? [null, null, null, null] };
+  return { seats: s.seats, options: parseOptions(s.options), hubs: s.hubs ?? [null, null, null, null], airlines: parseAirlines(s.airlines) };
 }
 
 export function saveAirlineSetup(setup: AirlineSetup): void {

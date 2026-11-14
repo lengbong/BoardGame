@@ -1,3 +1,4 @@
+import { withJosa } from '../../lib/korean';
 import { availableModels, MODEL } from './aircraft';
 import { CITIES, CITY, REGION_INFO, airportClass, citySize, dist, pairKey } from './cities';
 import { FIXED_EVENTS } from './events';
@@ -407,7 +408,7 @@ export function allianceChoice(state: AirlineState, from: number, _to: number): 
     scenario: 'alliance',
     icon: '🤝',
     title: `${a.name}의 제휴 제안`,
-    text: `${a.name}(본사 ${CITY[a.hub].name})이 공동 운항(코드셰어)을 하자고 해요. 제휴하면 서로의 노선을 이어 갈아타는 손님을 함께 태우고, 둘 다 지점이 있는 도시에서 손님이 조금 늘어요.`,
+    text: `${withJosa(a.name, '이/가')} 공동 운항(코드셰어)을 하자고 해요 (본사 ${CITY[a.hub].name}). 제휴하면 서로의 노선을 이어 갈아타는 손님을 함께 태우고, 둘 다 지점이 있는 도시에서 손님이 조금 늘어요.`,
     from,
     options: [
       { label: '받아들이기', desc: '제휴 시작 (언제든 끝낼 수 있어요)', cost: 0, ai: 1, effects: [{ kind: 'alliance', with: from }] },

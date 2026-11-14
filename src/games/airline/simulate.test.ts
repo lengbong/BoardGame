@@ -14,6 +14,7 @@ import {
   estimateRoute,
   maxFreq,
   pairDemand,
+  planeFixed,
   routeCost,
   splitMarket,
   type Offer,
@@ -29,7 +30,7 @@ function base(era: 1963 | 1983 | 2003 = 2003): AirlineState {
       { kind: 'empty', name: '' },
       { kind: 'empty', name: '' },
     ],
-    options: { era, mode: 'years', years: 20, goalValue: 20000, goalRegions: 6, money: 'normal', challenge: null },
+    options: { era, mode: 'years', years: 20, goalValue: 20000, goalRegions: 6, money: 'normal', challenge: null, aiStyle: 'normal' },
     hubs: ['seoul', 'tokyo', null, null],
   };
   return createGame(setup, seededRandom(1));
@@ -124,7 +125,7 @@ describe('손님 나누기', () => {
 describe('비용과 이익', () => {
   it('연료비는 유가에 비례하고, 낡은 비행기는 더 비싸게 난다', () => {
     const s = base();
-    const planes = (age: number) => [{ model: MODEL['b737-800'], freq: 10, age, rent: 0 }];
+    const planes = (age: number) => [{ model: MODEL['b737-800'], freq: 10, age, fixed: 0 }];
     const cheap = routeCost({ ...s, oil: 1 }, 0, 'seoul', 'tokyo', planes(0), 1000, 100);
     const dear = routeCost({ ...s, oil: 2 }, 0, 'seoul', 'tokyo', planes(0), 1000, 100);
     expect(dear.fuel).toBeCloseTo(cheap.fuel * 2, 6);
@@ -145,9 +146,9 @@ describe('비용과 이익', () => {
     const c = s.companies[0];
     c.branches.push('tokyo');
     c.routes.push({ id: 50, a: 'seoul', b: 'tokyo', fare: 10, since: s.q, stats: null });
-    c.planes.push({ id: 51, model: 'a321', leased: true, rent: 29, since: s.q, route: 50, freq: 12 });
+    c.planes.push({ id: 51, model: 'a321', leased: true, rent: 29, deposit: 0, since: s.q, legs: [{ route: 50, freq: 12 }] });
     s.nextId = 60;
-    const est = estimateRoute(s, 0, 'seoul', 'tokyo', [{ model: 'a321', freq: 12, leased: true, rent: 29 }], 10);
+    const est = estimateRoute(s, 0, 'seoul', 'tokyo', [{ model: 'a321', freq: 12, fixed: planeFixed(c.planes[0]) }], 10);
     const out = computeQuarter(s);
     const st = out.routeStats[0].get(50)!;
     expect(st.revenue).toBeCloseTo(est.revenue, 6);
@@ -160,7 +161,7 @@ describe('비용과 이익', () => {
     const s = base();
     s.companies[0].branches.push('tokyo');
     s.companies[0].routes.push({ id: 50, a: 'seoul', b: 'tokyo', fare: 0, since: s.q, stats: null });
-    s.companies[0].planes.push({ id: 51, model: 'b737-800', leased: false, rent: 0, since: s.q, route: 50, freq: 20 });
+    s.companies[0].planes.push({ id: 51, model: 'b737-800', leased: false, rent: 0, deposit: 0, since: s.q, legs: [{ route: 50, freq: 20 }] });
     s.nextId = 60;
     const r = computeQuarter(s).reports;
     expect(r[0].tax).toBeCloseTo(Math.max(0, (r[0].profit + r[0].tax) * TAX_RATE), 6);

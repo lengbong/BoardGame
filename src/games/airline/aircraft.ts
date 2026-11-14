@@ -78,6 +78,56 @@ const ROWS: Row[] = [
   ['a350-1000', 'A350-1000', 'Airbus', 'wide', 2, 369, 16100, 900, 2018, 2040, 2700, 7.0, 640, 3, 5, '가장 멀리 나는 쌍발기 가운데 하나'],
 ];
 
+/** 같은 계열 (조종사 자격과 부품을 함께 써서 여러 대를 굴리면 정비·승무원비가 줄어든다) */
+const FAMILY: Record<string, string> = {
+  f27: 'F27',
+  caravelle: '카라벨',
+  'dc8-50': 'DC-8',
+  'dc8-63': 'DC-8',
+  b707: '707',
+  'b727-100': '727',
+  'b727-200': '727',
+  dc9: 'DC-9·MD-80',
+  md82: 'DC-9·MD-80',
+  'b737-200': '737',
+  'b737-300': '737',
+  'b737-800': '737',
+  'b747-100': '747',
+  'b747-200': '747',
+  'b747-400': '747',
+  dc10: 'DC-10·MD-11',
+  md11: 'DC-10·MD-11',
+  l1011: 'L-1011',
+  a300b4: 'A300·A310',
+  a310: 'A300·A310',
+  'a300-600': 'A300·A310',
+  concorde: '콩코드',
+  'b767-200': '757·767',
+  'b767-300': '757·767',
+  b757: '757·767',
+  a320: 'A320',
+  a321: 'A320',
+  a320neo: 'A320',
+  a321neo: 'A320',
+  f100: 'F100',
+  atr72: 'ATR',
+  crj200: 'CRJ',
+  'a340-300': 'A330·A340',
+  'a330-300': 'A330·A340',
+  'a340-600': 'A330·A340',
+  'a330-900': 'A330·A340',
+  'b777-200': '777',
+  'b777-300': '777',
+  q400: 'Dash 8',
+  e190: 'E-제트',
+  a380: 'A380',
+  'b787-8': '787',
+  'b787-9': '787',
+  'a350-900': 'A350',
+  'a350-1000': 'A350',
+  'a220-300': 'A220',
+};
+
 export const MODELS: readonly ModelDef[] = ROWS.map(([id, name, maker, body, engines, seats, range, speed, intro, end, price, burn, hourCost, runway, comfort, note]) => ({
   id,
   name,
@@ -94,6 +144,7 @@ export const MODELS: readonly ModelDef[] = ROWS.map(([id, name, maker, body, eng
   hourCost,
   runway,
   comfort,
+  family: FAMILY[id] ?? id,
   note,
 }));
 
@@ -106,6 +157,22 @@ export function availableModels(year: number): ModelDef[] {
 
 export function isAvailable(model: ModelDef, year: number): boolean {
   return model.intro <= year && year <= model.end;
+}
+
+/** 새로 주문하면 인도까지 걸리는 분기 수: 막 나온 인기 기종일수록 오래 기다린다 */
+export function leadTime(model: ModelDef, year: number): number {
+  const age = year - model.intro;
+  return age < 2 ? 4 : age < 4 ? 3 : age < 8 ? 2 : 1;
+}
+
+/** 처음 사는 손님(론치 고객) 할인: 나온 지 2년 안에는 15% 싸다 */
+export function launchDiscount(model: ModelDef, year: number): number {
+  return year - model.intro <= 1 ? 0.15 : 0;
+}
+
+/** 같은 계열 비행기 n대일 때 정비·승무원비 배수 (2대부터 3%씩, 최대 12%) */
+export function commonalityMult(n: number): number {
+  return 1 - Math.min(0.12, 0.03 * Math.max(0, n - 1));
 }
 
 export const BODY_INFO: Record<BodyType, { name: string }> = {

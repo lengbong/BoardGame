@@ -1,4 +1,4 @@
-import { companyValue, regionsServed } from './simulate';
+import { companyValue, isIdle, regionsServed, routeFreq } from './simulate';
 import { quarterOf, qOf, yearOf } from './time';
 import type { AirlineState, CompanyReport } from './types';
 
@@ -234,7 +234,7 @@ export function checkChallenge(def: ChallengeDef, state: AirlineState, ci: numbe
     case 'oilstorm': {
       const values = state.companies.map((_, i) => companyValue(state, i));
       const rank = values.filter((v) => v > value).length + 1;
-      const flying = c.routes.filter((r) => c.planes.some((p) => p.route === r.id && p.freq > 0)).length;
+      const flying = c.routes.filter((r) => routeFreq(c, r.id) > 0).length;
       const ok = late && rank === 1 && flying >= 4;
       const span = deadline - qOf(def.year, 1);
       return res(ok, `회사 가치 ${rank}등 · 나는 노선 ${flying}개 (4개 필요) · ${yearOf(deadline)}년 말까지 버티기`, (rank === 1 ? 0.3 : 0.1) + Math.min(flying, 4) / 20 + ((q - qOf(def.year, 1)) / span) * 0.5);
@@ -248,7 +248,7 @@ export function checkChallenge(def: ChallengeDef, state: AirlineState, ci: numbe
       return res(pax >= 200000, `휴양지 노선 손님 ${man(pax)}명 (20만 필요)`, pax / 200000);
     }
     case 'concorde': {
-      const flying = c.planes.filter((p) => p.model === 'concorde' && p.route !== null && p.freq > 0).length;
+      const flying = c.planes.filter((p) => p.model === 'concorde' && !isIdle(p)).length;
       const s = flying >= 2 && report.sstProfit > 0 ? streak + 1 : 0;
       return res(s >= 4, `콩코드 ${flying}대 운항 (2대 필요) · 콩코드 흑자 ${s}분기 연속 (4 필요)`, Math.min(flying, 2) / 4 + Math.min(s, 4) / 8, s);
     }

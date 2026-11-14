@@ -41,13 +41,18 @@ describe('저장과 이어하기', () => {
       (s) => (s.companies[0].branches = ['atlantis']),
       (s) => {
         const p = s.companies[0].planes[0];
-        if (p) p.route = 999999;
+        if (p) p.legs = [{ route: 999999, freq: 3 }];
         else s.companies[0].debt = -1;
       },
       (s) => (s.companies[0].debt = -5),
       (s) => (s.companies = []),
       (s) => (s.turnPos = 9),
-      (s) => (s.companies[1].planes = [{ id: 1, model: 'not-a-plane', leased: false, rent: 0, since: 0, route: null, freq: 0 }]),
+      (s) => (s.companies[1].planes = [{ id: 1, model: 'not-a-plane', leased: false, rent: 0, deposit: 0, since: 0, legs: [] }]),
+      (s) => ((s as unknown as Record<string, unknown>).version = 1),
+      (s) => ((s.companies[0] as unknown as Record<string, unknown>).orders = undefined),
+      (s) => (s.companies[0].goals = [{ kind: 'moon' } as unknown as AirlineState['companies'][0]['goals'][0]]),
+      (s) => (s.market = [{ id: 1, model: 'nope', age: 3, price: 10, listed: 0 }]),
+      (s) => (s.companies[0].partner = 0),
       (s) => ((s as unknown as Record<string, unknown>).q = 'soon'),
       (s) => (s.history[0].value = []),
     ];
@@ -70,5 +75,19 @@ describe('저장과 이어하기', () => {
     expect(o.goalValue).toBe(20000);
     expect(o.challenge).toBeNull();
     expect(parseOptions({ era: 1963, mode: 'challenge', challenge: 'rescue' }).challenge).toBe('rescue');
+    expect(o.aiStyle).toBe('normal');
+    expect(parseOptions({ aiStyle: 'fierce' }).aiStyle).toBe('fierce');
+  });
+
+  it('옛 형식(비행기 한 대 한 노선) 저장은 버린다', () => {
+    const { setup, state } = played(2);
+    const old = clone(state) as unknown as Record<string, unknown>;
+    delete old.version;
+    const companies = old.companies as Record<string, unknown>[];
+    for (const c of companies) {
+      c.planes = (c.planes as { legs: { route: number; freq: number }[] }[]).map((p) => ({ ...p, route: p.legs[0]?.route ?? null, freq: p.legs[0]?.freq ?? 0, legs: undefined }));
+      delete c.orders;
+    }
+    expect(parseSaved({ setup, state: old, savedAt: 1 })).toBeNull();
   });
 });

@@ -5,14 +5,14 @@ import { aiManage, aiTurn, planTurn } from './ai';
 import { CHALLENGES } from './challenges';
 import { AIRPORT_INFO, CITY, airportClass, dist } from './cities';
 import { actor, applyAction, createGame } from './rules';
-import { companyValue, estimateExisting, maxFreq, slotCapacity, slotsUsed } from './simulate';
+import { WEEK_HOURS, companyValue, estimateExisting, maxFreq, planeHours, slotCapacity, slotsUsed } from './simulate';
 import { yearOf } from './time';
 import type { AirlineOptions, AirlineSetup, AirlineState, SeatKind } from './types';
 
 function setup(kinds: SeatKind[], options: Partial<AirlineOptions> = {}, hubs: (string | null)[] = []): AirlineSetup {
   return {
     seats: [0, 1, 2, 3].map((i) => ({ kind: kinds[i] ?? 'empty', name: '' })) as AirlineSetup['seats'],
-    options: { era: 2003, mode: 'years', years: 20, goalValue: 20000, goalRegions: 6, money: 'normal', challenge: null, ...options },
+    options: { era: 2003, mode: 'years', years: 20, goalValue: 20000, goalRegions: 6, money: 'normal', challenge: null, aiStyle: 'normal', ...options },
     hubs: [0, 1, 2, 3].map((i) => hubs[i] ?? null),
   };
 }
@@ -23,17 +23,21 @@ function checkFleet(s: AirlineState): void {
   s.companies.forEach((c, ci) => {
     if (c.out) return;
     for (const p of c.planes) {
-      if (p.route === null) continue;
-      const r = c.routes.find((x) => x.id === p.route)!;
-      expect(r).toBeTruthy();
       const m = MODEL[p.model];
-      const d = dist(r.a, r.b);
-      expect(m.range).toBeGreaterThanOrEqual(d);
-      expect(airportClass(CITY[r.a], year)).toBeGreaterThanOrEqual(m.runway);
-      expect(airportClass(CITY[r.b], year)).toBeGreaterThanOrEqual(m.runway);
-      expect(p.freq).toBeLessThanOrEqual(maxFreq(m, d));
-      expect(c.branches).toContain(r.a);
-      expect(c.branches).toContain(r.b);
+      for (const leg of p.legs) {
+        const r = c.routes.find((x) => x.id === leg.route)!;
+        expect(r).toBeTruthy();
+        const d = dist(r.a, r.b);
+        expect(m.range).toBeGreaterThanOrEqual(d);
+        expect(airportClass(CITY[r.a], year)).toBeGreaterThanOrEqual(m.runway);
+        expect(airportClass(CITY[r.b], year)).toBeGreaterThanOrEqual(m.runway);
+        expect(leg.freq).toBeGreaterThanOrEqual(1);
+        expect(leg.freq).toBeLessThanOrEqual(maxFreq(m, d));
+        expect(c.branches).toContain(r.a);
+        expect(c.branches).toContain(r.b);
+      }
+      // 한 대가 여러 노선을 날아도 주간 비행시간을 넘지 않는다
+      expect(planeHours(c, p)).toBeLessThanOrEqual(WEEK_HOURS + 1e-6);
     }
     for (const city of c.branches) expect(slotsUsed(c, city)).toBeLessThanOrEqual(slotCapacity(s, ci, city));
   });
@@ -82,7 +86,7 @@ describe('컴퓨터 항공사', () => {
       const t = aiManage(s, 0, 'ai-normal', seededRandom(seed));
       const c = t.companies[0];
       expect(c.routes.length).toBeGreaterThan(0);
-      expect(c.planes.some((p) => p.route !== null && p.freq > 0)).toBe(true);
+      expect(c.planes.some((p) => p.legs.some((l) => l.freq > 0))).toBe(true);
       const best = Math.max(...c.routes.map((r) => estimateExisting(t, 0, r).profit));
       expect(best).toBeGreaterThan(0);
       expect(c.cash).toBeGreaterThan(0);
@@ -93,7 +97,7 @@ describe('컴퓨터 항공사', () => {
     let s = createGame(setup(['ai-normal', 'human'], {}, [null, 'london']), seededRandom(7));
     s = aiManage(s, 0, 'ai-normal', seededRandom(7));
     const c = s.companies[0];
-    c.planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, since: s.q, route: null, freq: 0 });
+    c.planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.q, legs: [] });
     c.cash = -30;
     c.crisis = 1;
     c.ads.eastasia = 50;
@@ -101,7 +105,7 @@ describe('컴퓨터 항공사', () => {
     const t = aiManage(s, 0, 'ai-normal', seededRandom(8));
     const after = t.companies[0];
     expect(after.cash).toBeGreaterThanOrEqual(0);
-    expect(after.planes.every((p) => p.route !== null)).toBe(true);
+    expect(after.planes.every((p) => p.legs.length > 0)).toBe(true);
     expect(Object.values(after.ads).every((v) => v === 0)).toBe(true);
   });
 

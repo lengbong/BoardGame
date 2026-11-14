@@ -147,6 +147,8 @@ export interface ModelDef {
   runway: 1 | 2 | 3 | 4;
   /** 편안함 1~5 */
   comfort: number;
+  /** 같은 계열 (조종사 자격·부품을 함께 쓴다: 정비·승무원비 할인) */
+  family: string;
   note: string;
 }
 
@@ -157,12 +159,126 @@ export interface Plane {
   leased: boolean;
   /** 리스기가 분기마다 내는 리스료 (억). 내 비행기는 0 */
   rent: number;
+  /** 리스 보증금 (억). 돌려줄 때 돌려받는다. 내 비행기는 0 */
+  deposit: number;
   /** 받은 분기 (q 번호). 나이 = (지금 q − since) / 4 년 */
   since: number;
-  /** 배정된 노선 (없으면 null = 쉬는 중) */
-  route: number | null;
-  /** 한 주에 몇 번 왕복하는지 (노선이 없으면 0) */
+  /** 띄우는 노선들 (한 대가 비행시간 안에서 여러 노선을 난다). 비면 쉬는 중 */
+  legs: Leg[];
+}
+
+/** 비행기 한 대가 한 노선을 한 주에 몇 번 왕복하는지 */
+export interface Leg {
+  route: number;
   freq: number;
+}
+
+/** 새 비행기 주문 (값은 주문할 때 내고, due 분기에 받는다) */
+export interface Order {
+  id: number;
+  model: string;
+  due: number;
+  price: number;
+}
+
+/** 중고 비행기 시장의 매물 */
+export interface UsedPlane {
+  id: number;
+  model: string;
+  /** 매물로 나온 때의 나이 (년) */
+  age: number;
+  price: number;
+  /** 매물로 나온 분기 */
+  listed: number;
+  /** 판 회사 (파산한 회사 등) */
+  from?: string;
+}
+
+/** 회사에만 걸리는 효과 (결정 사건 등). until 분기 전까지 */
+export type ModKind = 'crew' | 'fuelHedge' | 'fuel' | 'demand' | 'service' | 'sales' | 'slot' | 'discount' | 'subsidy';
+
+export interface Mod {
+  id: number;
+  kind: ModKind;
+  value: number;
+  until: number;
+  label: string;
+  city?: string;
+  region?: RegionId;
+  model?: string;
+  /** demand: 사업·관광 중 하나에만 */
+  seg?: 'biz' | 'leisure';
+}
+
+export type ChoiceEffect =
+  | { kind: 'cash'; amount: number }
+  | { kind: 'rep'; amount: number }
+  | { kind: 'mod'; mod: Omit<Mod, 'id'> }
+  | { kind: 'awareness'; region: RegionId; amount: number }
+  | { kind: 'alliance'; with: number }
+  | { kind: 'order'; model: string; discount: number };
+
+export interface ChoiceOption {
+  label: string;
+  /** 고르면 생기는 일 (미리 보여 준다) */
+  desc: string;
+  effects: ChoiceEffect[];
+  /** 고르는 데 드는 현금 (모자라면 못 고른다) */
+  cost: number;
+  /** 컴퓨터가 보는 좋아 보이는 정도 */
+  ai: number;
+}
+
+/** 회사에 온 결정 사건 */
+export interface Choice {
+  id: number;
+  scenario: string;
+  icon: string;
+  title: string;
+  text: string;
+  options: ChoiceOption[];
+  /** 제휴 제안을 한 회사 */
+  from?: number;
+}
+
+export type GoalKind = 'lf' | 'profit4' | 'region' | 'routes' | 'pax' | 'value' | 'fleet' | 'xfer';
+
+/** 연간 목표 */
+export interface YearGoal {
+  kind: GoalKind;
+  target: number;
+  text: string;
+  reward: { cash: number; rep: number };
+  /** null: 아직, true/false: 해가 끝나고 매긴 결과 */
+  done: boolean | null;
+}
+
+/** 올해 쌓은 숫자 (목표·평가용) */
+export interface YearAcc {
+  year: number;
+  pax: number;
+  seats: number;
+  xfer: number;
+  revenue: number;
+  profit: number;
+  profitQ: number;
+  quarters: number;
+  bought: number;
+  startValue: number;
+  startRegions: number;
+  startRoutes: number;
+  /** 지난해 손님 (손님 목표용) */
+  lastPax: number;
+}
+
+export type Grade = 'S' | 'A' | 'B' | 'C' | 'D';
+
+export interface Review {
+  year: number;
+  grade: Grade;
+  text: string;
+  met: number;
+  total: number;
 }
 
 /** 노선 지난 분기 결과 (컴퓨터와 화면이 함께 본다) */
@@ -177,6 +293,10 @@ export interface RouteStats {
   lossStreak: number;
   /** 같은 두 도시를 나는 회사들 가운데 손님 비율 0~1 */
   share: number;
+  /** 이 노선에 탄 갈아타는 손님 (한 방향 주간) */
+  xfer: number;
+  /** 갈아타는 손님에게 받은 주간 수입 (억) */
+  xferRev: number;
 }
 
 export interface Route {
@@ -238,7 +358,30 @@ export interface Company {
   /** 돈이 모자란 채로 끝난 분기가 이어진 수 (2가 되면 파산) */
   crisis: number;
   stats: CompanyStats;
+  /** 주문해서 기다리는 새 비행기 */
+  orders: Order[];
+  /** 회사에만 걸린 효과 */
+  mods: Mod[];
+  /** 아직 고르지 않은 결정 사건 */
+  choice: Choice | null;
+  /** 다음 결정 사건이 올 분기 */
+  nextChoiceQ: number;
+  /** 제휴(코드셰어) 상대 회사 */
+  partner: number | null;
+  /** 올해 목표 */
+  goals: YearGoal[];
+  /** 올해 쌓은 숫자 */
+  acc: YearAcc;
+  /** 해마다 받은 경영 평가 */
+  reviews: Review[];
+  /** 이번 분기에 바로 받은 비행기 수 (리스 + 중고) */
+  taken: number;
+  /** 마지막으로 제휴를 제안한 분기 */
+  lastProposal: number;
 }
+
+/** 컴퓨터 성향: 느긋 / 보통 / 치열 */
+export type AiStyle = 'relaxed' | 'normal' | 'fierce';
 
 export type StartEra = 1963 | 1983 | 2003;
 export type WinMode = 'goal' | 'years' | 'challenge';
@@ -256,6 +399,8 @@ export interface AirlineOptions {
   money: MoneyLevel;
   /** 도전 과제 id (mode가 challenge일 때) */
   challenge: string | null;
+  /** 컴퓨터 성향 */
+  aiStyle: AiStyle;
 }
 
 export interface AirlineSetup {
@@ -283,6 +428,8 @@ export interface NewsItem {
   tone: NewsTone;
   /** 관련 도시 (지도에서 보여 주기) */
   city?: string;
+  /** 특히 이 회사들에게 중요한 소식 (라이벌 진입 등) */
+  for?: number[];
 }
 
 /** 회사 한 곳의 분기 손익 (억) */
@@ -325,6 +472,23 @@ export interface CompanyReport {
   sstProfit: number;
   /** 본사 도시를 오간 손님 */
   hubPax: number;
+  /** 우리 노선에서 갈아탄 손님 (분기, 출발지–도착지 기준) */
+  xferPax: number;
+  /** 경영 평가 (4분기 결산에만) */
+  review?: Review;
+  /** 연간 목표 결과 (4분기 결산에만) */
+  goals?: YearGoal[];
+}
+
+/** 갈아타는 손님 기록: 출발지 a에서 via를 거쳐 b로 */
+export interface TransferReport {
+  via: string;
+  a: string;
+  b: string;
+  /** 분기 손님 (양방향) */
+  pax: number;
+  /** 두 구간을 나른 회사들 */
+  companies: number[];
 }
 
 export interface RouteReport {
@@ -346,6 +510,8 @@ export interface QuarterReport {
   routes: RouteReport[];
   /** 이번 분기에 생긴 뉴스 id */
   news: number[];
+  /** 갈아타는 손님이 많은 연결 (많은 순, 일부) */
+  xfers: TransferReport[];
 }
 
 /** 그래프용 분기 기록 */
@@ -385,12 +551,17 @@ export type AirlineAction =
   | { type: 'closeBranch'; city: string }
   | { type: 'openRoute'; a: string; b: string }
   | { type: 'closeRoute'; route: number }
+  /** 새 비행기 주문 (인도까지 1~4분기) */
   | { type: 'buy'; model: string }
+  | { type: 'cancelOrder'; order: number }
   | { type: 'lease'; model: string }
+  | { type: 'buyUsed'; listing: number }
   | { type: 'sell'; plane: number }
-  /** route가 null이면 쉬게 한다 */
+  /** 이 노선의 주간 왕복 수를 정한다 (0이면 이 노선에서 뺀다). route가 null이면 모든 노선에서 뺀다 */
   | { type: 'assign'; plane: number; route: number | null; freq: number }
-  | { type: 'setFreq'; plane: number; freq: number }
+  | { type: 'choose'; option: number }
+  | { type: 'propose'; to: number }
+  | { type: 'endAlliance' }
   | { type: 'setFare'; route: number; fare: number }
   | { type: 'setAds'; region: RegionId; amount: number }
   | { type: 'setService'; level: number }
@@ -407,6 +578,9 @@ export type GameEvent =
   | { id: number; type: 'route'; company: number; a: string; b: string }
   | { id: number; type: 'closeRoute'; company: number; a: string; b: string }
   | { id: number; type: 'plane'; company: number; model: string; leased: boolean }
+  | { id: number; type: 'order'; company: number; model: string; due: number }
+  | { id: number; type: 'choice'; company: number; option: number }
+  | { id: number; type: 'alliance'; company: number; with: number; ok: boolean }
   | { id: number; type: 'sell'; company: number; model: string; amount: number }
   | { id: number; type: 'assign'; company: number; route: number }
   | { id: number; type: 'money'; company: number; amount: number; what: 'borrow' | 'repay' }
@@ -425,6 +599,8 @@ export interface LogEntry {
 export type Phase = 'manage' | 'gameover';
 
 export interface AirlineState {
+  /** 저장 형식 판 (옛 저장은 버린다) */
+  version: 2;
   options: AirlineOptions;
   /** 시작한 해 */
   startYear: number;
@@ -445,6 +621,10 @@ export interface AirlineState {
   effects: Effect[];
   /** 공항 확장으로 늘어난 슬롯 비율 (도시마다, 0.3 = 30%) */
   slotBoost: Record<string, number>;
+  /** 중고 비행기 시장 */
+  market: UsedPlane[];
+  /** 이미 알린 가격 경쟁 (회사|회사|두 도시) */
+  priceWars: string[];
   news: NewsItem[];
   history: HistoryPoint[];
   report: QuarterReport | null;

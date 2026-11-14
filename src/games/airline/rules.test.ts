@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { seededRandom } from '../../lib/random';
-import { MODEL, availableModels } from './aircraft';
+import { MODEL, availableModels, commonalityMult, launchDiscount, leadTime } from './aircraft';
 import { CHALLENGE } from './challenges';
 import { CITY, citySize, dist } from './cities';
 import {
@@ -9,24 +9,41 @@ import {
   actor,
   applyAction,
   assignBlocker,
+  CANCEL_REFUND,
   bestFreq,
   branchBlocker,
   buyBlocker,
   companyName,
   createGame,
+  depositFor,
   endQ,
   rankings,
   routeBlocker,
   runQuarter,
 } from './rules';
-import { MAX_DELIVERIES, branchCost, companyValue, creditLimit, leaseDeposit, maxFreq, sellPrice, slotCapacity } from './simulate';
+import {
+  MAX_DELIVERIES,
+  WEEK_HOURS,
+  branchCost,
+  companyValue,
+  creditLimit,
+  estimateRoute,
+  leaseDeposit,
+  maxFreq,
+  maxFreqFor,
+  orderPrice,
+  planeHours,
+  sellPrice,
+  slotCapacity,
+  utilization,
+} from './simulate';
 import { qOf, yearOf } from './time';
 import type { AirlineOptions, AirlineSetup, AirlineState, SeatKind } from './types';
 
 function setup(kinds: SeatKind[], options: Partial<AirlineOptions> = {}, hubs: (string | null)[] = []): AirlineSetup {
   return {
     seats: [0, 1, 2, 3].map((i) => ({ kind: kinds[i] ?? 'empty', name: '' })) as AirlineSetup['seats'],
-    options: { era: 2003, mode: 'years', years: 20, goalValue: 20000, goalRegions: 6, money: 'normal', challenge: null, ...options },
+    options: { era: 2003, mode: 'years', years: 20, goalValue: 20000, goalRegions: 6, money: 'normal', challenge: null, aiStyle: 'normal', ...options },
     hubs: [0, 1, 2, 3].map((i) => hubs[i] ?? null),
   };
 }
@@ -118,8 +135,7 @@ describe('지점과 노선', () => {
     expect(applyAction(s, { type: 'closeBranch', city: 'tokyo' })).toBe(s);
     expect(applyAction(s, { type: 'closeBranch', city: 'seoul' })).toBe(s);
     s = act(s, { type: 'closeRoute', route: s.companies[0].routes[0].id });
-    expect(s.companies[0].planes[0].route).toBeNull();
-    expect(s.companies[0].planes[0].freq).toBe(0);
+    expect(s.companies[0].planes[0].legs).toEqual([]);
     s = act(s, { type: 'closeBranch', city: 'tokyo' });
     expect(s.companies[0].branches).toEqual(['seoul']);
   });
@@ -141,14 +157,75 @@ describe('지점과 노선', () => {
 });
 
 describe('비행기', () => {
-  it('새로 사면 값을 내고, 리스는 계약금만 낸다', () => {
+  it('새 비행기는 주문하고 값을 낸 뒤 몇 분기 뒤에 받고, 리스는 바로 받는다 (첫해 사람은 보증금 없음)', () => {
     let s = twoHumans();
     const m = MODEL['b737-800'];
+    const price = orderPrice(s, m, s.companies[0]);
     s = act(s, { type: 'buy', model: m.id });
-    expect(s.companies[0].cash).toBe(START_MONEY.normal.cash - m.price);
+    expect(s.companies[0].cash).toBeCloseTo(START_MONEY.normal.cash - price, 5);
+    expect(s.companies[0].planes).toHaveLength(0);
+    expect(s.companies[0].orders).toHaveLength(1);
+    expect(s.companies[0].orders[0].due).toBe(s.q + leadTime(m, 2003));
+    expect(depositFor(s, 0, m.id)).toBe(0);
     s = act(s, { type: 'lease', model: m.id });
-    expect(s.companies[0].cash).toBeCloseTo(START_MONEY.normal.cash - m.price - leaseDeposit(s, m), 5);
-    expect(s.companies[0].planes.map((p) => p.leased)).toEqual([false, true]);
+    expect(s.companies[0].cash).toBeCloseTo(START_MONEY.normal.cash - price, 5);
+    expect(s.companies[0].planes.map((p) => p.leased)).toEqual([true]);
+    // 첫해가 지나면 리스할 때 보증금(리스료 두 분기 치)을 내고, 돌려줄 때 돌려받는다
+    s.q += 4;
+    expect(depositFor(s, 0, m.id)).toBeCloseTo(leaseDeposit(s, m), 5);
+    const cash = s.companies[0].cash;
+    s = act(s, { type: 'lease', model: m.id });
+    const p = s.companies[0].planes[1];
+    expect(p.deposit).toBeCloseTo(leaseDeposit(s, m), 5);
+    expect(s.companies[0].cash).toBeCloseTo(cash - p.deposit, 5);
+    s = act(s, { type: 'sell', plane: p.id });
+    expect(s.companies[0].cash).toBeCloseTo(cash - p.rent, 5);
+  });
+
+  it('주문한 비행기는 정한 분기가 되면 들어오고, 주문을 무르면 70%를 돌려받는다', () => {
+    let s = twoHumans({ money: 'rich' });
+    const m = MODEL['a320'];
+    s = act(s, { type: 'buy', model: m.id }, { type: 'buy', model: m.id });
+    const [o1, o2] = s.companies[0].orders;
+    const cash = s.companies[0].cash;
+    s = act(s, { type: 'cancelOrder', order: o2.id });
+    expect(s.companies[0].cash).toBeCloseTo(cash + Math.round(o2.price * CANCEL_REFUND), 5);
+    const rng = seededRandom(3);
+    while (s.q < o1.due) s = runQuarter(s, rng);
+    const c = s.companies[0];
+    expect(c.orders).toHaveLength(0);
+    expect(c.planes.filter((p) => p.model === m.id && !p.leased)).toHaveLength(1);
+    expect(s.news.some((n) => n.title.includes('인도'))).toBe(true);
+  });
+
+  it('같은 계열 비행기가 많으면 정비·승무원비가 줄고, 새 기종 첫 손님은 할인을 받는다', () => {
+    const s = twoHumans({ money: 'rich' });
+    const crew = () => estimateRoute(s, 0, 'seoul', 'tokyo', [{ model: 'a320', freq: 10 }], 0).cost.crew;
+    const before = crew();
+    for (let i = 0; i < 4; i++) s.companies[0].planes.push({ id: s.nextId++, model: 'a321', leased: false, rent: 0, deposit: 0, since: s.q, legs: [] });
+    expect(MODEL.a321.family).toBe(MODEL.a320.family);
+    expect(commonalityMult(4)).toBeLessThan(1);
+    expect(crew()).toBeLessThan(before);
+    const fresh = availableModels(2003).find((x) => x.intro >= 2002);
+    if (fresh) {
+      expect(launchDiscount(fresh, 2003)).toBeGreaterThan(0);
+      expect(orderPrice(s, fresh, s.companies[0])).toBeLessThan(fresh.price);
+    }
+    expect(launchDiscount(MODEL['b737-800'], 2003)).toBe(0);
+    expect(leadTime(MODEL['b737-800'], 2003)).toBeLessThan(leadTime(MODEL['b737-800'], 1998));
+  });
+
+  it('중고 시장에서 바로 살 수 있고, 산 비행기는 매물에서 빠진다', () => {
+    let s = twoHumans({ money: 'rich' });
+    expect(s.market.length).toBeGreaterThan(0);
+    const u = s.market[0];
+    s = act(s, { type: 'buyUsed', listing: u.id });
+    expect(s.market.some((x) => x.id === u.id)).toBe(false);
+    const p = s.companies[0].planes[0];
+    expect(p.model).toBe(u.model);
+    expect(p.leased).toBe(false);
+    expect(Math.round((s.q - p.since) / 4)).toBe(Math.round(u.age));
+    expect(applyAction(s, { type: 'buyUsed', listing: u.id })).toBe(s);
   });
 
   it('그 해에 나오지 않았거나 생산이 끝난 기종은 살 수 없다', () => {
@@ -174,15 +251,44 @@ describe('비행기', () => {
 
   it('팔면 가치의 90%를 받고, 리스기를 돌려주면 위약금을 낸다', () => {
     let s = twoHumans();
-    s = act(s, { type: 'buy', model: 'a320' }, { type: 'lease', model: 'a320' });
+    s.companies[0].planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.q - 8, legs: [] });
+    s = act(s, { type: 'lease', model: 'a320' });
     const [own, leased] = s.companies[0].planes;
     const cash = s.companies[0].cash;
     const price = sellPrice(s, own);
     s = act(s, { type: 'sell', plane: own.id });
     expect(s.companies[0].cash).toBeCloseTo(cash + price, 5);
     s = act(s, { type: 'sell', plane: leased.id });
-    expect(s.companies[0].cash).toBeCloseTo(cash + price - leased.rent, 5);
+    expect(s.companies[0].cash).toBeCloseTo(cash + price + leased.deposit - leased.rent, 5);
     expect(s.companies[0].planes).toHaveLength(0);
+  });
+
+  it('비행기 한 대가 비행시간 안에서 여러 노선을 난다', () => {
+    let s = twoHumans({ money: 'rich' });
+    s = act(s, { type: 'openBranch', city: 'tokyo' }, { type: 'openBranch', city: 'osaka' });
+    s = act(s, { type: 'openRoute', a: 'seoul', b: 'tokyo' }, { type: 'openRoute', a: 'seoul', b: 'osaka' }, { type: 'lease', model: 'a320' });
+    const p = s.companies[0].planes[0];
+    const [tyo, osa] = s.companies[0].routes;
+    s = act(s, { type: 'assign', plane: p.id, route: tyo.id, freq: 10 });
+    const c1 = s.companies[0];
+    const used = planeHours(c1, c1.planes[0]);
+    expect(used).toBeGreaterThan(0);
+    const left = maxFreqFor(c1, c1.planes[0], osa.id);
+    expect(left).toBeGreaterThan(0);
+    expect(left).toBeLessThan(maxFreq(MODEL.a320, dist('seoul', 'osaka')));
+    s = act(s, { type: 'assign', plane: p.id, route: osa.id, freq: left });
+    const c2 = s.companies[0];
+    expect(c2.planes[0].legs).toHaveLength(2);
+    expect(planeHours(c2, c2.planes[0])).toBeLessThanOrEqual(WEEK_HOURS + 1e-6);
+    expect(utilization(c2, c2.planes[0])).toBeGreaterThan(0.9);
+    // 남은 시간이 없으면 더 늘릴 수 없다
+    expect(assignBlocker(s, 0, p.id, osa.id, left + 1)).toContain('비행시간');
+    // 0회로 정하면 그 노선에서만 빠진다
+    s = act(s, { type: 'assign', plane: p.id, route: tyo.id, freq: 0 });
+    expect(s.companies[0].planes[0].legs.map((l) => l.route)).toEqual([osa.id]);
+    // 두 노선 손님이 모두 생긴다
+    s = act(s, { type: 'assign', plane: p.id, route: tyo.id, freq: 4 }, { type: 'endTurn' }, { type: 'endTurn' });
+    expect(s.companies[0].routes.every((r) => r.stats!.pax > 0)).toBe(true);
   });
 
   it('항속 거리·공항 크기·주간 횟수·슬롯을 넘으면 띄울 수 없다', () => {
@@ -195,12 +301,12 @@ describe('비행기', () => {
     expect(assignBlocker(s, 0, small.id, ny.id, 3)).toContain('항속 거리가 모자라요');
     expect(assignBlocker(s, 0, jumbo.id, ktm.id, 3)).toContain('카트만두 공항');
     const max = maxFreq(MODEL['a320'], dist('seoul', 'tokyo'));
-    expect(assignBlocker(s, 0, small.id, tyo.id, max + 1)).toContain(`${max}번까지만`);
+    expect(assignBlocker(s, 0, small.id, tyo.id, max + 1)).toContain(`${max}번까지`);
     expect(assignBlocker(s, 0, small.id, tyo.id, max)).toBeNull();
     expect(bestFreq(s, 0, small.id, tyo.id)).toBe(max);
     // 도쿄 슬롯을 거의 다 쓴 것처럼 꾸민다
     const cap = slotCapacity(s, 0, 'tokyo');
-    s.companies[0].planes.push({ id: 999, model: 'a320', leased: true, rent: 1, since: s.q, route: tyo.id, freq: cap - 2 });
+    s.companies[0].planes.push({ id: 999, model: 'a320', leased: true, rent: 1, deposit: 0, since: s.q, legs: [{ route: tyo.id, freq: cap - 2 }] });
     s.nextId = 1000;
     expect(assignBlocker(s, 0, small.id, tyo.id, 3)).toContain('도쿄 슬롯이 모자라요');
     expect(bestFreq(s, 0, small.id, tyo.id)).toBe(2);
@@ -317,7 +423,7 @@ describe('승리 조건', () => {
       for (const city of [a, b]) if (!c.branches.includes(city)) c.branches.push(city);
       const rid = s.nextId++;
       c.routes.push({ id: rid, a, b, fare: 0, since: s.q, stats: null });
-      c.planes.push({ id: s.nextId++, model, leased: true, rent: 10, since: s.q, route: rid, freq: 2 });
+      c.planes.push({ id: s.nextId++, model, leased: true, rent: 10, deposit: 0, since: s.q, legs: [{ route: rid, freq: 2 }] });
     }
     s = runQuarter(s, seededRandom(1));
     expect(s.phase).toBe('gameover');
@@ -331,7 +437,7 @@ describe('승리 조건', () => {
     expect(me.hub).toBe('busan');
     expect(me.debt).toBe(def.debt);
     expect(me.planes).toHaveLength(def.fleet!.length);
-    expect(me.planes.every((p) => p.route !== null && p.freq > 0)).toBe(true);
+    expect(me.planes.every((p) => p.legs.length > 0 && p.legs.every((l) => l.freq > 0))).toBe(true);
     expect(s.companies).toHaveLength(1 + def.rivals.length);
     expect(s.challenge!.startValue).toBeLessThan(0);
     expect(endQ(s)).toBe(qOf(2007, 4));
@@ -377,10 +483,10 @@ describe('시대와 사건', () => {
     expect(titles).toMatch(/새 기종/);
   });
 
-  it('회사 가치는 현금 − 빚 + 내 비행기 가치', () => {
+  it('회사 가치는 현금 − 빚 + 내 비행기 가치 + 낸 주문 값', () => {
     let s = twoHumans();
     s = act(s, { type: 'buy', model: 'a320' }, { type: 'borrow', amount: 500 });
     const c = s.companies[0];
-    expect(companyValue(s, 0)).toBeCloseTo(c.cash - c.debt + MODEL.a320.price, 5);
+    expect(companyValue(s, 0)).toBeCloseTo(c.cash - c.debt + c.orders[0].price, 5);
   });
 });

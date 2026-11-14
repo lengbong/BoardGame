@@ -5,7 +5,7 @@ import { MODEL } from './aircraft';
 import { CHALLENGE } from './challenges';
 import { CITY, REGIONS } from './cities';
 import { DEFAULT_OPTIONS, GOAL_VALUES } from './rules';
-import type { AirlineOptions, AirlineSetup, AirlineState, Company } from './types';
+import type { AirlineOptions, AirlineSetup, AirlineState, Choice, Company, GoalKind, ModKind, YearAcc } from './types';
 
 const SAVE_KEY = 'family-boardgame.airline.save.v1';
 const SETUP_KEY = 'family-boardgame.airline.setup.v1';
@@ -45,6 +45,7 @@ export function parseOptions(v: unknown): AirlineOptions {
     goalRegions: isInt(o.goalRegions) && o.goalRegions >= 3 && o.goalRegions <= 6 ? o.goalRegions : DEFAULT_OPTIONS.goalRegions,
     money: o.money === 'rich' || o.money === 'tight' || o.money === 'normal' ? o.money : DEFAULT_OPTIONS.money,
     challenge: typeof o.challenge === 'string' && CHALLENGE[o.challenge] ? o.challenge : null,
+    aiStyle: o.aiStyle === 'relaxed' || o.aiStyle === 'fierce' || o.aiStyle === 'normal' ? o.aiStyle : DEFAULT_OPTIONS.aiStyle,
   };
 }
 
@@ -58,6 +59,18 @@ export function isValidSetup(v: unknown): v is AirlineSetup {
     isObj(s.options) &&
     (s.hubs === undefined || (Array.isArray(s.hubs) && s.hubs.every((h) => h === null || isCity(h))))
   );
+}
+
+const MOD_KINDS: ModKind[] = ['crew', 'fuelHedge', 'fuel', 'demand', 'service', 'sales', 'slot', 'discount', 'subsidy'];
+const GOAL_KINDS: GoalKind[] = ['lf', 'profit4', 'region', 'routes', 'pax', 'value', 'fleet', 'xfer'];
+const ACC_KEYS: (keyof YearAcc)[] = ['year', 'pax', 'seats', 'xfer', 'revenue', 'profit', 'profitQ', 'quarters', 'bought', 'startValue', 'startRegions', 'startRoutes', 'lastPax'];
+
+function isValidChoice(v: unknown): v is Choice {
+  if (!isObj(v)) return false;
+  const ch = v as unknown as Choice;
+  if (!isInt(ch.id) || typeof ch.title !== 'string' || typeof ch.text !== 'string' || typeof ch.icon !== 'string' || typeof ch.scenario !== 'string') return false;
+  if (!Array.isArray(ch.options) || ch.options.length < 1 || ch.options.length > 4) return false;
+  return ch.options.every((o) => isObj(o) && typeof o.label === 'string' && typeof o.desc === 'string' && Array.isArray(o.effects) && isNum(o.cost) && isNum(o.ai));
 }
 
 function isValidCompany(c: unknown, nextId: number): c is Company {
@@ -76,9 +89,17 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
   if (!Array.isArray(k.planes)) return false;
   for (const p of k.planes) {
     if (!isObj(p) || !isInt(p.id) || p.id >= nextId || typeof p.model !== 'string' || !MODEL[p.model] || typeof p.leased !== 'boolean') return false;
-    if (!isNum(p.rent) || !isInt(p.since) || !isInt(p.freq) || p.freq < 0) return false;
-    if (p.route !== null && !(isInt(p.route) && routeIds.has(p.route))) return false;
+    if (!isNum(p.rent) || !isNum(p.deposit) || !isInt(p.since) || !Array.isArray(p.legs)) return false;
+    if (!p.legs.every((l) => isObj(l) && isInt(l.route) && routeIds.has(l.route) && isInt(l.freq) && l.freq >= 1 && l.freq <= 28)) return false;
   }
+  if (!Array.isArray(k.orders) || !k.orders.every((o) => isObj(o) && isInt(o.id) && o.id < nextId && typeof o.model === 'string' && !!MODEL[o.model] && isInt(o.due) && isNum(o.price))) return false;
+  if (!Array.isArray(k.mods) || !k.mods.every((m) => isObj(m) && isInt(m.id) && MOD_KINDS.includes(m.kind) && isNum(m.value) && isInt(m.until) && typeof m.label === 'string')) return false;
+  if (k.choice !== null && !isValidChoice(k.choice)) return false;
+  if (!isInt(k.nextChoiceQ) || !isInt(k.lastProposal) || !isInt(k.taken)) return false;
+  if (k.partner !== null && !isInt(k.partner)) return false;
+  if (!Array.isArray(k.goals) || !k.goals.every((g) => isObj(g) && GOAL_KINDS.includes(g.kind) && isNum(g.target) && typeof g.text === 'string' && isObj(g.reward) && isNum(g.reward.cash) && isNum(g.reward.rep) && (g.done === null || typeof g.done === 'boolean'))) return false;
+  if (!isObj(k.acc) || !ACC_KEYS.every((key) => isNum((k.acc as unknown as Record<string, unknown>)[key]))) return false;
+  if (!Array.isArray(k.reviews) || !k.reviews.every((r) => isObj(r) && isInt(r.year) && ['S', 'A', 'B', 'C', 'D'].includes(r.grade) && typeof r.text === 'string')) return false;
   if (!isObj(k.ads) || !isObj(k.awareness) || !REGIONS.every((r) => isNum(k.ads[r]) && isNum(k.awareness[r]))) return false;
   if (!isInt(k.service) || k.service < 1 || k.service > 5 || !isNum(k.reputation)) return false;
   if (!Array.isArray(k.businesses) || !k.businesses.every((b) => isObj(b) && isCity(b.city) && (b.kind === 'hotel' || b.kind === 'agency') && isNum(b.cost))) return false;
@@ -90,6 +111,7 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
 export function isValidState(v: unknown): v is AirlineState {
   if (!isObj(v)) return false;
   const s = v as unknown as AirlineState;
+  if (s.version !== 2) return false;
   if (!isInt(s.nextId) || !isInt(s.q) || !isInt(s.startQ) || s.startQ > s.q || !isInt(s.startYear)) return false;
   if (s.phase !== 'manage' && s.phase !== 'gameover') return false;
   if (!Array.isArray(s.companies) || s.companies.length < 1 || s.companies.length > 4) return false;
@@ -98,9 +120,12 @@ export function isValidState(v: unknown): v is AirlineState {
   if (!Array.isArray(s.order) || s.order.length < 1 || !s.order.every((i) => isIndex(i, n))) return false;
   if (!isIndex(s.turnPos, s.order.length)) return false;
   if (!isNum(s.oil) || !isNum(s.rate)) return false;
+  if (!s.companies.every((c) => c.partner === null || (isIndex(c.partner, n) && c.partner !== s.companies.indexOf(c)))) return false;
+  if (!Array.isArray(s.market) || !s.market.every((u) => isObj(u) && isInt(u.id) && u.id < s.nextId && typeof u.model === 'string' && !!MODEL[u.model] && isNum(u.age) && isNum(u.price) && isInt(u.listed))) return false;
+  if (!Array.isArray(s.priceWars) || !s.priceWars.every((w) => typeof w === 'string')) return false;
   if (!Array.isArray(s.effects) || !isObj(s.slotBoost) || !Array.isArray(s.news) || !Array.isArray(s.history) || !Array.isArray(s.log)) return false;
   if (!s.history.every((h) => isObj(h) && isInt(h.q) && Array.isArray(h.value) && h.value.length === n)) return false;
-  if (s.report !== null && !(isObj(s.report) && Array.isArray(s.report.companies) && s.report.companies.length === n && Array.isArray(s.report.routes))) return false;
+  if (s.report !== null && !(isObj(s.report) && Array.isArray(s.report.companies) && s.report.companies.length === n && Array.isArray(s.report.routes) && Array.isArray(s.report.xfers))) return false;
   if (s.challenge !== null && !(isObj(s.challenge) && typeof s.challenge.id === 'string' && CHALLENGE[s.challenge.id] && isIndex(s.challenge.company, n))) return false;
   if (s.result !== null && !(isObj(s.result) && Array.isArray(s.result.winners))) return false;
   if (!isInt(s.nextEventId) || !isInt(s.nextLogId)) return false;
@@ -119,8 +144,13 @@ export function parseSaved(v: unknown): SavedAirlineGame | null {
   };
 }
 
+/** 저장된 게임을 읽는다. 옛 형식이거나 망가진 저장은 지우고 null */
 export function loadSavedAirlineGame(): SavedAirlineGame | null {
-  return parseSaved(loadJson<unknown>(SAVE_KEY));
+  const raw = loadJson<unknown>(SAVE_KEY);
+  if (raw === null || raw === undefined) return null;
+  const saved = parseSaved(raw);
+  if (!saved) removeKey(SAVE_KEY);
+  return saved;
 }
 
 export function saveAirlineGame(setup: AirlineSetup, state: AirlineState): void {

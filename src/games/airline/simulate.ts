@@ -1,7 +1,10 @@
 import { MODEL, commonalityMult, launchDiscount } from './aircraft';
-import { AIRPORT_INFO, CITY, FEE_INFO, REGIONS, SEASON_INFO, airportClass, citySize, dist, pairIndex, pairKey } from './cities';
+import { bizMonthMult, leisureMonthMult, weather } from './calendar';
+import { AIRPORT_INFO, CITY, FEE_INFO, REGIONS, airportClass, citySize, dist, pairIndex, pairKey } from './cities';
 import { effectMults, fixedEventMult, priceMult } from './events';
-import { quarterOf, yearOf } from './time';
+import { monthOf, quarterOf, yearOf } from './time';
+import type { WeatherCause } from './calendar';
+import type { Rng } from '../../lib/random';
 import type {
   AirlineState,
   Business,
@@ -10,6 +13,7 @@ import type {
   Mod,
   ModKind,
   ModelDef,
+  OpsIncident,
   Plane,
   RegionId,
   Route,
@@ -22,7 +26,8 @@ import type {
  * 숫자들은 실제와 비슷한 느낌이 나도록 어림한 게임용 값이다.
  */
 
-export const WEEKS = 13;
+/** 한 달은 52/12주 (한 차례 = 한 달) */
+export const WEEKS = 52 / 12;
 /** 비행기 한 대가 한 주에 날 수 있는 시간 (여러 노선에 나누어 쓴다) */
 export const WEEK_HOURS = 98;
 /** 한 번 날 때마다 더 드는 시간 (지상 이동·손님 타고 내리기) */
@@ -31,17 +36,17 @@ export const LEG_OVERHEAD = 0.75;
 export const MAX_FREQ = 28;
 /** 연료 1kg 값 (만 원, 유가 지수 1일 때) */
 export const FUEL_PRICE = 0.13;
-/** 리스료: 분기마다 새 값의 3.5% */
-export const LEASE_RATE = 0.035;
-/** 리스 보증금: 두 분기 치 리스료 (돌려줄 때 돌려받는다) */
-export const LEASE_DEPOSIT = 2;
-/** 보험·관리비: 비행기마다 분기에 새 값의 0.5% */
-export const INSURANCE = 0.005;
-/** 쉬는 내 비행기 보관·정비비: 분기마다 새 값의 0.4% */
-export const IDLE_RATE = 0.004;
-/** 한 분기에 바로 받을 수 있는 비행기 수 (리스 + 중고) */
-export const MAX_DELIVERIES = 4;
-/** 법인세: 분기 이익의 20% */
+/** 리스료: 달마다 새 값의 1.2% 남짓 (분기 3.5%) */
+export const LEASE_RATE = 0.035 / 3;
+/** 리스 보증금: 여섯 달 치 리스료 (돌려줄 때 돌려받는다) */
+export const LEASE_DEPOSIT = 6;
+/** 보험·관리비: 비행기마다 달에 새 값의 0.17% (분기 0.5%) */
+export const INSURANCE = 0.005 / 3;
+/** 쉬는 내 비행기 보관·정비비: 달마다 새 값의 0.13% */
+export const IDLE_RATE = 0.004 / 3;
+/** 한 달에 바로 받을 수 있는 비행기 수 (리스 + 중고) */
+export const MAX_DELIVERIES = 3;
+/** 법인세: 달 이익의 20% */
 export const TAX_RATE = 0.2;
 /** 착륙 한 번마다 드는 정비비 (기종 운항비의 몇 시간 치) */
 export const CYCLE_HOURS = 0.6;
@@ -105,7 +110,7 @@ const FARE: readonly (readonly [number, number])[] = [
   [2045, 0.8],
 ];
 
-const yearFrac = (q: number) => yearOf(q) + (quarterOf(q) - 1) / 4;
+const yearFrac = (q: number) => yearOf(q) + (quarterOf(q) - 1) / 4 + 0.125;
 
 /** 사람들이 비행기를 타는 정도 (2000년 무렵이 1) */
 export function travelFactor(q: number): number {
@@ -132,32 +137,32 @@ export function maxFreq(model: ModelDef, d: number): number {
   return Math.max(0, Math.min(MAX_FREQ, Math.floor(WEEK_HOURS / (2 * legHours(model, d)))));
 }
 
-export function planeAge(state: Pick<AirlineState, 'q'>, plane: Plane): number {
-  return Math.max(0, (state.q - plane.since) / 4);
+export function planeAge(state: Pick<AirlineState, 't'>, plane: Plane): number {
+  return Math.max(0, (state.t - plane.since) / 12);
 }
 
 // ------------------------------------------------------------------ 회사 효과 (결정 사건)
 
-const active = (m: Mod, q: number) => q < m.until;
+const active = (m: Mod, t: number) => t < m.until;
 
-/** 이 종류의 효과 배수를 모두 곱한다 */
-export function modMult(c: Company, kind: ModKind, q: number, match: (m: Mod) => boolean = () => true): number {
+/** 이 종류의 효과 배수를 모두 곱한다 (t: 지금 달) */
+export function modMult(c: Company, kind: ModKind, t: number, match: (m: Mod) => boolean = () => true): number {
   let v = 1;
-  for (const m of c.mods) if (m.kind === kind && active(m, q) && match(m)) v *= m.value;
+  for (const m of c.mods) if (m.kind === kind && active(m, t) && match(m)) v *= m.value;
   return v;
 }
 
 /** 유가 고정 계약이 있으면 그 값 */
-export function hedgedOil(c: Company, q: number, oil: number): number {
-  const h = c.mods.find((m) => m.kind === 'fuelHedge' && active(m, q));
+export function hedgedOil(c: Company, t: number, oil: number): number {
+  const h = c.mods.find((m) => m.kind === 'fuelHedge' && active(m, t));
   return h ? h.value : oil;
 }
 
 /** 이 노선에 걸린 손님 효과 (도시·지역·전체) */
-function demandMult(c: Company, a: string, b: string, q: number, seg: 'biz' | 'leisure'): number {
+function demandMult(c: Company, a: string, b: string, t: number, seg: 'biz' | 'leisure'): number {
   const ra = CITY[a].region;
   const rb = CITY[b].region;
-  return modMult(c, 'demand', q, (m) => {
+  return modMult(c, 'demand', t, (m) => {
     if (m.seg && m.seg !== seg) return false;
     if (m.city) return m.city === a || m.city === b;
     if (m.region) return m.region === ra || m.region === rb;
@@ -168,29 +173,29 @@ function demandMult(c: Company, a: string, b: string, q: number, seg: 'biz' | 'l
 // ------------------------------------------------------------------ 값·가치
 
 /** 지금 새로 주문할 때 값 (박람회 특가·론치 할인·제작사 할인 반영) */
-export function orderPrice(state: Pick<AirlineState, 'effects' | 'q'>, model: ModelDef, c?: Company): number {
+export function orderPrice(state: Pick<AirlineState, 'effects' | 'q' | 't'>, model: ModelDef, c?: Company): number {
   const year = yearOf(state.q);
-  const own = c ? modMult(c, 'discount', state.q, (m) => m.model === model.id) : 1;
+  const own = c ? modMult(c, 'discount', state.t, (m) => m.model === model.id) : 1;
   return Math.round(model.price * priceMult(state.effects) * (1 - launchDiscount(model, year)) * own);
 }
 
 /** 예전 이름 (화면·테스트): 새로 살 때 값 */
-export function modelPrice(state: Pick<AirlineState, 'effects' | 'q'>, model: ModelDef, c?: Company): number {
+export function modelPrice(state: Pick<AirlineState, 'effects' | 'q' | 't'>, model: ModelDef, c?: Company): number {
   return orderPrice(state, model, c);
 }
 
-/** 지금 리스하면 분기마다 내는 돈 */
+/** 지금 리스하면 달마다 내는 돈 */
 export function leaseRent(state: Pick<AirlineState, 'effects'>, model: ModelDef): number {
   return Math.round(model.price * LEASE_RATE * priceMult(state.effects) * 10) / 10;
 }
 
-/** 리스 보증금 (두 분기 치 리스료, 돌려줄 때 돌려받는다) */
+/** 리스 보증금 (여섯 달 치 리스료, 돌려줄 때 돌려받는다) */
 export function leaseDeposit(state: Pick<AirlineState, 'effects'>, model: ModelDef): number {
   return Math.round(leaseRent(state, model) * LEASE_DEPOSIT * 10) / 10;
 }
 
 /** 내 비행기의 지금 가치 (리스기는 0) */
-export function planeValue(state: Pick<AirlineState, 'q'>, plane: Plane): number {
+export function planeValue(state: Pick<AirlineState, 'q' | 't'>, plane: Plane): number {
   if (plane.leased) return 0;
   const m = MODEL[plane.model];
   const age = planeAge(state, plane);
@@ -198,7 +203,7 @@ export function planeValue(state: Pick<AirlineState, 'q'>, plane: Plane): number
   return m.price * Math.max(0.1, 1 - DEPRECIATION * age) * retired;
 }
 
-export function sellPrice(state: Pick<AirlineState, 'q'>, plane: Plane): number {
+export function sellPrice(state: Pick<AirlineState, 'q' | 't'>, plane: Plane): number {
   return Math.round(planeValue(state, plane) * SELL_RATE);
 }
 
@@ -207,7 +212,7 @@ export function businessValue(b: Business): number {
 }
 
 /** 회사 가치 = 현금 + 내 비행기·주문한 비행기·리스 보증금·부대사업 가치 − 빚 */
-export function companyValue(state: Pick<AirlineState, 'q' | 'companies'>, ci: number): number {
+export function companyValue(state: Pick<AirlineState, 'q' | 't' | 'companies'>, ci: number): number {
   const c = state.companies[ci];
   if (c.out) return 0;
   let v = c.cash - c.debt;
@@ -218,7 +223,7 @@ export function companyValue(state: Pick<AirlineState, 'q' | 'companies'>, ci: n
 }
 
 /** 은행이 빌려 줄 수 있는 최대 빚 */
-export function creditLimit(state: Pick<AirlineState, 'q' | 'companies'>, ci: number): number {
+export function creditLimit(state: Pick<AirlineState, 'q' | 't' | 'companies'>, ci: number): number {
   const c = state.companies[ci];
   let assets = 0;
   for (const p of c.planes) assets += planeValue(state, p);
@@ -232,9 +237,9 @@ export function branchCost(city: string, q: number): number {
   return Math.round(15 + 7 * citySize(CITY[city], yearOf(q)));
 }
 
-/** 지점 유지비 (억/분기) */
+/** 지점 유지비 (억/달) */
 export function branchUpkeep(city: string, q: number): number {
-  return 1.5 + 0.9 * citySize(CITY[city], yearOf(q));
+  return (1.5 + 0.9 * citySize(CITY[city], yearOf(q))) / 3;
 }
 
 export function businessCost(city: string, kind: Business['kind'], q: number): number {
@@ -297,11 +302,11 @@ export function planesOnRoute(c: Company, routeId: number): Plane[] {
 }
 
 /** 이 회사가 이 공항에서 한 주에 쓸 수 있는 운항 횟수 */
-export function slotCapacity(state: Pick<AirlineState, 'q' | 'slotBoost' | 'companies'>, ci: number, city: string): number {
+export function slotCapacity(state: Pick<AirlineState, 'q' | 't' | 'slotBoost' | 'companies'>, ci: number, city: string): number {
   const c = state.companies[ci];
   const cls = airportClass(CITY[city], yearOf(state.q));
   const hub = c.hub === city ? 2 : 1;
-  const bought = modMult(c, 'slot', state.q, (m) => m.city === city);
+  const bought = modMult(c, 'slot', state.t, (m) => m.city === city);
   return Math.round(AIRPORT_INFO[cls].slots * hub * (1 + (state.slotBoost[city] ?? 0)) * bought);
 }
 
@@ -344,7 +349,7 @@ export function familyCounts(c: Company): Map<string, number> {
   return m;
 }
 
-/** 분기마다 비행기 한 대가 무조건 내는 돈 (리스료 + 보험) */
+/** 달마다 비행기 한 대가 무조건 내는 돈 (리스료 + 보험) */
 export function planeFixed(p: Plane): number {
   return p.rent + MODEL[p.model].price * INSURANCE;
 }
@@ -368,38 +373,47 @@ export interface PairDemand {
   leisure: number;
 }
 
-/** 같은 분기·같은 사건 목록이면 다시 셈하지 않는다 (컴퓨터가 후보를 많이 볼 때 빠르게) */
+/** 같은 달·같은 사건 목록이면 다시 셈하지 않는다 (컴퓨터가 후보를 많이 볼 때 빠르게) */
 const demandCache = new WeakMap<readonly unknown[], Map<number, PairDemand>>();
 
-/** 두 도시 사이 한 방향 주간 잠재 손님 */
-export function pairDemand(state: Pick<AirlineState, 'q' | 'effects'>, a: string, b: string, q = state.q): PairDemand {
+/** 두 도시 사이 한 방향 주간 잠재 손님 (t: 그 달) */
+export function pairDemand(state: Pick<AirlineState, 't' | 'effects'>, a: string, b: string, t = state.t): PairDemand {
   let cache = demandCache.get(state.effects);
   if (!cache) {
     cache = new Map();
     demandCache.set(state.effects, cache);
   }
-  const key = q * 4096 + pairIndex(a, b);
+  const key = t * 4096 + pairIndex(a, b);
   const hit = cache.get(key);
   if (hit) return hit;
-  const d = computeDemand(state, a, b, q);
+  const d = computeDemand(state, a, b, t);
   cache.set(key, d);
   return d;
 }
 
-function computeDemand(state: Pick<AirlineState, 'q' | 'effects'>, a: string, b: string, q: number): PairDemand {
+/** 이 달 손님이 한 해 평균보다 얼마나 많은지 (두 도시 사이, 1이 평균) */
+export function monthDemandMult(a: string, b: string, month0: number): number {
   const A = CITY[a];
   const B = CITY[b];
+  const leisure = (A.fun * leisureMonthMult(b, month0) + B.fun * leisureMonthMult(a, month0)) / Math.max(1, A.fun + B.fun);
+  const biz = Math.sqrt(bizMonthMult(a, month0) * bizMonthMult(b, month0));
+  const w = (A.biz + B.biz) / 2;
+  return biz * w + leisure * (1 - w);
+}
+
+function computeDemand(state: Pick<AirlineState, 't' | 'effects'>, a: string, b: string, t: number): PairDemand {
+  const A = CITY[a];
+  const B = CITY[b];
+  const q = Math.floor(t / 3);
   const year = yearOf(q);
-  const quarter = quarterOf(q) - 1;
+  const m0 = monthOf(t) - 1;
   const sA = citySize(A, year);
   const sB = citySize(B, year);
   const eA = effectMults(state.effects, a);
   const eB = effectMults(state.effects, b);
-  const base = DEMAND_K * travelFactor(q) * distanceFactor(dist(a, b)) * (A.region === B.region ? 1.35 : 1) * fixedEventMult(a, q) * fixedEventMult(b, q);
-  const biz = BIZ_K * (sA * sB) ** 0.95 * Math.sqrt(A.biz * B.biz) * eA.biz * eB.biz;
-  const leisure =
-    LEISURE_K *
-    (sA ** 1.3 * B.fun * SEASON_INFO[B.season].mult[quarter] * eB.leisure + sB ** 1.3 * A.fun * SEASON_INFO[A.season].mult[quarter] * eA.leisure);
+  const base = DEMAND_K * travelFactor(q) * distanceFactor(dist(a, b)) * (A.region === B.region ? 1.35 : 1) * fixedEventMult(a, t) * fixedEventMult(b, t);
+  const biz = BIZ_K * (sA * sB) ** 0.95 * Math.sqrt(A.biz * B.biz) * eA.biz * eB.biz * Math.sqrt(bizMonthMult(a, m0) * bizMonthMult(b, m0));
+  const leisure = LEISURE_K * (sA ** 1.3 * B.fun * leisureMonthMult(b, m0) * eB.leisure + sB ** 1.3 * A.fun * leisureMonthMult(a, m0) * eA.leisure);
   return { biz: base * biz, leisure: base * leisure };
 }
 
@@ -415,6 +429,8 @@ interface OfferPlane {
 export interface Offer {
   company: number;
   fare: number;
+  /** 지난달 정시 운항률 (손님이 믿는 정도). 없으면 보통(0.85) */
+  rel?: number;
   planes: OfferPlane[];
 }
 
@@ -495,9 +511,11 @@ function attraction(
   }
   const p = (1 + offer.fare / 100) * premium;
   const common = quality(c, a, b) * hub * partnerBonus(state, c, a, b);
+  // 지연·결항이 잦으면 손님(특히 사업 손님)이 덜 고른다
+  const rel = Math.max(0.8, Math.min(1.06, 1 + 0.8 * ((offer.rel ?? 0.85) - 0.85)));
   return {
-    biz: freq ** 0.6 * p ** -0.8 * common * comfort ** 1.5 * speed * bizBonus * demandMult(c, a, b, state.q, 'biz'),
-    leisure: freq ** 0.5 * p ** -1.8 * common * comfort ** 0.5 * speed ** 0.3 * leisureBonus * demandMult(c, a, b, state.q, 'leisure'),
+    biz: freq ** 0.6 * p ** -0.8 * common * comfort ** 1.5 * speed * bizBonus * rel ** 1.5 * demandMult(c, a, b, state.t, 'biz'),
+    leisure: freq ** 0.5 * p ** -1.8 * common * comfort ** 0.5 * speed ** 0.3 * leisureBonus * rel * demandMult(c, a, b, state.t, 'leisure'),
     seats,
     hours,
     premium,
@@ -596,20 +614,30 @@ export interface CostCtx {
   families: Map<string, number>;
 }
 
-export function costCtx(state: Pick<AirlineState, 'q' | 'oil'>, c: Company): CostCtx {
+/** 정비 수준(1~5)마다 승무원·정비비 배수 */
+export const MAINT_COST = [0, 0.86, 0.93, 1, 1.09, 1.2];
+/** 정비 수준마다 지연·결항·기체 점검이 생기는 배수 */
+export const MAINT_RISK = [0, 1.7, 1.3, 1, 0.82, 0.68];
+export const MAINT_NAMES = ['', '아끼기', '조금 아끼기', '보통', '꼼꼼히', '아주 꼼꼼히'];
+/** 예비 승무원(0~2)마다 승무원비 배수와 지연·결항 배수 */
+export const RESERVE_COST = [1, 1.04, 1.08];
+export const RESERVE_RISK = [1.15, 1, 0.88];
+export const RESERVE_NAMES = ['없음', '조금', '넉넉히'];
+
+export function costCtx(state: Pick<AirlineState, 't' | 'oil'>, c: Company): CostCtx {
   return {
-    oil: hedgedOil(c, state.q, state.oil),
-    fuelMult: modMult(c, 'fuel', state.q),
-    serviceMult: modMult(c, 'service', state.q),
-    salesMult: modMult(c, 'sales', state.q),
-    crewMult: modMult(c, 'crew', state.q),
+    oil: hedgedOil(c, state.t, state.oil),
+    fuelMult: modMult(c, 'fuel', state.t),
+    serviceMult: modMult(c, 'service', state.t),
+    salesMult: modMult(c, 'sales', state.t),
+    crewMult: modMult(c, 'crew', state.t) * (MAINT_COST[c.maint] ?? 1) * (RESERVE_COST[c.crewReserve] ?? 1),
     families: familyCounts(c),
   };
 }
 
-/** 노선 하나의 분기 비용 (억). paxWeek: 한 방향 주간 손님, revenue: 분기 운임 수입 */
+/** 노선 하나의 달 비용 (억). paxWeek: 한 방향 주간 손님, revenue: 달 운임 수입 */
 export function routeCost(
-  state: Pick<AirlineState, 'q' | 'oil' | 'companies'>,
+  state: Pick<AirlineState, 'q' | 't' | 'oil' | 'companies'>,
   ci: number,
   a: string,
   b: string,
@@ -675,14 +703,15 @@ export interface RouteEstimate {
   rivals: number;
 }
 
-function offerFromRoute(state: Pick<AirlineState, 'q' | 'companies'>, ci: number, route: Route): Offer {
+/** 노선의 운항 (lost: 결항·기체 점검으로 못 뜬 비율) */
+function offerFromRoute(state: Pick<AirlineState, 't' | 'companies'>, ci: number, route: Route, lost = 0): Offer {
   const c = state.companies[ci];
   const planes: OfferPlane[] = [];
   for (const p of c.planes) {
     const f = legFreq(p, route.id);
-    if (f > 0) planes.push({ model: MODEL[p.model], freq: f, age: planeAge(state, p) });
+    if (f > 0) planes.push({ model: MODEL[p.model], freq: f * (1 - lost), age: planeAge(state, p) });
   }
-  return { company: ci, fare: route.fare, planes };
+  return { company: ci, fare: route.fare, planes, rel: route.stats?.onTime };
 }
 
 /** 회사마다 두 도시 → 노선 (회사 객체가 바뀌지 않으면 다시 만들지 않는다) */
@@ -711,7 +740,7 @@ export function rivalOffers(state: AirlineState, ci: number, a: string, b: strin
   return out;
 }
 
-/** 새로 리스할 비행기 한 대의 분기 고정비 */
+/** 새로 리스할 비행기 한 대의 달 고정비 */
 export function newLeaseFixed(state: Pick<AirlineState, 'effects'>, model: ModelDef): number {
   return leaseRent(state, model) + model.price * INSURANCE;
 }
@@ -727,11 +756,11 @@ export function estimateRoute(
   b: string,
   planes: readonly DraftPlane[],
   fare: number,
-  extra?: { xfer: number; xferRev: number },
+  extra?: { xfer: number; xferRev: number; rel?: number },
 ): RouteEstimate {
   const offers = rivalOffers(state, ci, a, b);
   const models = planes.map((p) => MODEL[p.model]);
-  const mine: Offer = { company: ci, fare, planes: planes.map((p, i) => ({ model: models[i], freq: p.freq, age: p.age ?? 0 })) };
+  const mine: Offer = { company: ci, fare, planes: planes.map((p, i) => ({ model: models[i], freq: p.freq, age: p.age ?? 0 })), rel: extra?.rel };
   const demand = pairDemand(state, a, b);
   const results = splitMarket(state, a, b, [...offers, mine], demand);
   const r = results[results.length - 1];
@@ -765,7 +794,7 @@ export function estimateRoute(
 }
 
 /** 이 노선을 나는 비행기들을 어림용으로 (고정비는 비행시간 비율만큼) */
-export function draftsOf(state: Pick<AirlineState, 'q'>, c: Company, routeId: number): DraftPlane[] {
+export function draftsOf(state: Pick<AirlineState, 't'>, c: Company, routeId: number): DraftPlane[] {
   const out: DraftPlane[] = [];
   for (const p of c.planes) {
     const f = legFreq(p, routeId);
@@ -787,7 +816,7 @@ export function fixedShare(c: Company, p: Plane, routeId: number): number {
 export function estimateExisting(state: AirlineState, ci: number, route: Route, override?: { fare?: number; planes?: DraftPlane[] }): RouteEstimate {
   const c = state.companies[ci];
   const planes = override?.planes ?? draftsOf(state, c, route.id);
-  const extra = route.stats ? { xfer: route.stats.xfer, xferRev: route.stats.xferRev } : undefined;
+  const extra = route.stats ? { xfer: route.stats.xfer, xferRev: route.stats.xferRev, rel: route.stats.onTime } : undefined;
   return estimateRoute(state, ci, route.a, route.b, planes, override?.fare ?? route.fare, extra);
 }
 
@@ -808,12 +837,28 @@ export interface RouteRun {
   xferRev: number;
 }
 
+export interface RouteMonthStats {
+  lf: number;
+  pax: number;
+  revenue: number;
+  profit: number;
+  share: number;
+  xfer: number;
+  xferRev: number;
+  onTime: number;
+  cancel: number;
+}
+
 export interface QuarterOutcome {
   reports: CompanyReport[];
   routes: RouteReport[];
   /** 회사마다 노선 결과 (노선 id → 결과) */
-  routeStats: Map<number, { lf: number; pax: number; revenue: number; profit: number; share: number; xfer: number; xferRev: number }>[];
+  routeStats: Map<number, RouteMonthStats>[];
   xfers: TransferReport[];
+  /** 운항 현장 사건 (노선마다) */
+  ops: OpsIncident[];
+  /** 날씨로 공항이 하루 이틀 닫힌 도시 */
+  closures: { city: string; days: number; cause: WeatherCause }[];
 }
 
 const emptyRegion = (): Record<RegionId, number> => ({ eastasia: 0, seaoc: 0, southmid: 0, europe: 0, africa: 0, americas: 0 });
@@ -949,15 +994,183 @@ function assignTransfers(state: AirlineState, runs: RouteRun[], unserved: Map<nu
   return out;
 }
 
-/** 이번 분기 손님·수입·비용 (상태는 바꾸지 않는다) */
-export function computeQuarter(state: AirlineState): QuarterOutcome {
+// ------------------------------------------------------------------ 운항 현장 (지연·결항·회항·기체 점검)
+
+/** 노선 한 달의 지연·결항이 생기는 정도 (기대값) */
+export interface OpsRates {
+  /** 늦게 뜨는 비율 */
+  late: number;
+  /** 결항 비율 (날씨로 공항이 닫히는 것은 빼고) */
+  cancel: number;
+  /** 다른 공항으로 돌아가는 비율 */
+  divert: number;
+  /** 큰 원인 */
+  cause: string;
+  /** 날씨가 원인일 때 그 도시 */
+  city?: string;
+  /** 날씨 배수 (1 보통) */
+  weather: number;
+}
+
+/** 비행기 한 대가 한 달에 기체 점검으로 쉬게 될 확률 */
+export function groundingChance(state: Pick<AirlineState, 't'>, c: Company, p: Plane): number {
+  const ageF = 1 + 0.035 * planeAge(state, p);
+  return Math.min(0.25, 0.012 * ageF ** 1.5 * (MAINT_RISK[c.maint] ?? 1) ** 1.5);
+}
+
+/** 예비기로 쓸 수 있는 쉬는 비행기가 얼마나 있는지 (0~1: 한 달 기체 점검·결항을 메울 정도) */
+export function spareCover(c: Company): number {
+  const flying = c.planes.filter((p) => p.legs.length > 0).length;
+  if (flying === 0) return 0;
+  const spares = c.planes.length - flying;
+  return Math.min(1, spares / Math.max(1, flying * 0.08));
+}
+
+/** 이 회사 이 노선의 이 달 운항 위험 (t: 그 달). 날씨·비행기 나이·정비·가동률·공항 혼잡·예비기·예비 승무원 */
+export function opsRates(state: Pick<AirlineState, 't' | 'q' | 'slotBoost' | 'companies'>, ci: number, routeId: number, extra = 1): OpsRates {
+  const c = state.companies[ci];
+  const r = routeOf(c, routeId);
+  if (!r) return { late: 0, cancel: 0, divert: 0, cause: 'tech', weather: 1 };
+  const m0 = monthOf(state.t) - 1;
+  let freq = 0;
+  let age = 0;
+  let util = 0;
+  for (const p of c.planes) {
+    const f = legFreq(p, routeId);
+    if (f <= 0) continue;
+    freq += f;
+    age += planeAge(state, p) * f;
+    util += (planeHours(c, p) / WEEK_HOURS) * f;
+  }
+  if (freq > 0) {
+    age /= freq;
+    util /= freq;
+  }
+  const cong = Math.max(slotsUsed(c, r.a) / Math.max(1, slotCapacity(state, ci, r.a)), slotsUsed(c, r.b) / Math.max(1, slotCapacity(state, ci, r.b)));
+  const wa = weather(r.a, m0);
+  const wb = weather(r.b, m0);
+  const w = wa.factor >= wb.factor ? wa : wb;
+  const ageF = 1 + 0.035 * age;
+  const maintF = MAINT_RISK[c.maint] ?? 1;
+  const utilF = 1 + Math.max(0, util - 0.75) * 2.4;
+  const congF = 1 + Math.max(0, cong - 0.7) * 1.6;
+  const crewF = (RESERVE_RISK[c.crewReserve] ?? 1) * extra;
+  const spareF = 1 - 0.45 * spareCover(c);
+  const late = Math.min(0.6, 0.075 * ageF * maintF ** 0.6 * utilF * congF * crewF * w.factor ** 0.9);
+  const cancel = Math.min(0.3, 0.0045 * ageF ** 1.2 * maintF * utilF * congF ** 0.5 * crewF * spareF * w.factor ** 2.2);
+  const divert = Math.min(0.05, 0.0012 * w.factor ** 1.6);
+  // 큰 원인 고르기
+  const parts: [string, number][] = [
+    ['tech', (ageF - 1) * 2 + (maintF - 1) * 2],
+    ['crew', (crewF - 1) * 4 + (utilF - 1) * 2],
+    ['congestion', (congF - 1) * 3],
+  ];
+  if (w.cause) parts.push([w.cause, (w.factor - 1) * 4]);
+  parts.sort((x, y) => y[1] - x[1]);
+  const cause = parts[0][1] > 0.05 ? parts[0][0] : 'tech';
+  return { late, cancel, divert, cause, city: w.cause && cause === w.cause ? (wa.factor >= wb.factor ? r.a : r.b) : undefined, weather: w.factor };
+}
+
+/** 푸아송 표본 (평균이 크면 정규 근사) */
+function poisson(mean: number, rng: Rng): number {
+  if (mean <= 0) return 0;
+  if (mean > 30) return Math.max(0, Math.round(mean + Math.sqrt(mean) * (rng() + rng() + rng() - 1.5) * 2));
+  const L = Math.exp(-mean);
+  let k = 0;
+  let p = 1;
+  do {
+    k++;
+    p *= rng();
+  } while (p > L && k < 200);
+  return k - 1;
+}
+
+interface RouteOps {
+  flights: number;
+  late: number;
+  cancelled: number;
+  diverted: number;
+  grounded: number;
+  cause: string;
+  city?: string;
+  /** 못 뜬 비율 (좌석·손님이 준다) */
+  lost: number;
+}
+
+/**
+ * 이번 달 운항 현장 사건을 뽑는다. rng가 없으면 사건 없이 (어림과 같게) 셈한다.
+ */
+function rollOps(state: AirlineState, rng: Rng | undefined): { byRoute: Map<number, RouteOps>[]; closures: QuarterOutcome['closures'] } {
+  const byRoute: Map<number, RouteOps>[] = state.companies.map(() => new Map());
+  const closures: QuarterOutcome['closures'] = [];
+  if (!rng) return { byRoute, closures };
+  const m0 = monthOf(state.t) - 1;
+  // 날씨가 아주 나쁜 도시는 하루 이틀 공항이 닫힌다 (노선이 닿은 도시만)
+  const cities = new Set<string>();
+  for (const c of state.companies) if (!c.out) for (const r of c.routes) if (routeFreq(c, r.id) > 0) cities.add(r.a).add(r.b);
+  const closed = new Map<string, number>();
+  for (const city of cities) {
+    const w = weather(city, m0);
+    if (!w.cause || w.factor < 1.5) continue;
+    if (rng() < (w.factor - 1.4) * 0.5) {
+      const days = 1 + (rng() < 0.4 ? 1 : 0);
+      closed.set(city, days);
+      closures.push({ city, days, cause: w.cause });
+    }
+  }
+  state.companies.forEach((c, ci) => {
+    if (c.out) return;
+    // 기체 점검: 비행기마다 (예비기가 있으면 그 비행기가 대신 난다)
+    let spares = c.planes.filter((p) => p.legs.length === 0).length;
+    const lostWeeks = new Map<number, number>();
+    const groundedOn = new Map<number, number>();
+    for (const p of c.planes) {
+      if (p.legs.length === 0) continue;
+      if (rng() >= groundingChance(state, c, p)) continue;
+      if (spares > 0) {
+        spares--;
+        continue;
+      }
+      const weeks = 0.5 + rng() * 1.5;
+      for (const l of p.legs) {
+        lostWeeks.set(l.route, (lostWeeks.get(l.route) ?? 0) + l.freq * weeks);
+        groundedOn.set(l.route, (groundedOn.get(l.route) ?? 0) + 1);
+      }
+    }
+    for (const r of c.routes) {
+      const freq = routeFreq(c, r.id);
+      if (freq <= 0) continue;
+      const flights = freq * 2 * WEEKS;
+      const rates = opsRates(state, ci, r.id);
+      const closedDays = Math.max(closed.get(r.a) ?? 0, closed.get(r.b) ?? 0);
+      const groundLost = Math.min(flights, Math.round((lostWeeks.get(r.id) ?? 0) * 2));
+      const closeLost = (flights * closedDays) / 30;
+      const cancelled = Math.min(flights, Math.round(poisson(flights * rates.cancel, rng) + groundLost + closeLost));
+      const flown = flights - cancelled;
+      const late = Math.min(flown, poisson(flown * rates.late, rng));
+      const diverted = Math.min(flown - late, poisson(flown * rates.divert, rng));
+      let cause = rates.cause;
+      let city = rates.city;
+      if (closedDays > 0) {
+        city = (closed.get(r.a) ?? 0) >= (closed.get(r.b) ?? 0) ? r.a : r.b;
+        cause = weather(city, m0).cause ?? cause;
+      } else if (groundLost > flights * 0.05) cause = 'tech';
+      byRoute[ci].set(r.id, { flights, late, cancelled, diverted, grounded: groundedOn.get(r.id) ?? 0, cause, city, lost: flights > 0 ? cancelled / flights : 0 });
+    }
+  });
+  return { byRoute, closures };
+}
+
+/** 이번 달 손님·수입·비용 (상태는 바꾸지 않는다). rng를 주면 운항 현장 사건도 뽑는다 */
+export function computeMonth(state: AirlineState, rng?: Rng): QuarterOutcome {
   const n = state.companies.length;
+  const { byRoute, closures } = rollOps(state, rng);
   // 1) 곧장 가는 손님: 두 도시마다 운항을 모아 나눈다
   const pairs = new Map<string, { a: string; b: string; offers: Offer[]; routes: Route[] }>();
   state.companies.forEach((c, ci) => {
     if (c.out) return;
     for (const r of c.routes) {
-      const o = offerFromRoute(state, ci, r);
+      const o = offerFromRoute(state, ci, r, byRoute[ci].get(r.id)?.lost ?? 0);
       if (o.planes.length === 0) continue;
       const key = pairKey(r.a, r.b);
       let entry = pairs.get(key);
@@ -983,8 +1196,134 @@ export function computeQuarter(state: AirlineState): QuarterOutcome {
   const xfers = assignTransfers(state, runs, unserved);
 
   // 3) 노선마다 비용과 회사 합계
-  const quarter = quarterOf(state.q) - 1;
-  const reports: CompanyReport[] = state.companies.map(() => ({
+  const m0 = monthOf(state.t) - 1;
+  const reports: CompanyReport[] = state.companies.map(() => emptyReport());
+  const routeReports: RouteReport[] = [];
+  const routeStats: QuarterOutcome['routeStats'] = state.companies.map(() => new Map());
+  const arrivals: Map<string, number>[] = state.companies.map(() => new Map());
+  const ctxs = state.companies.map((c) => costCtx(state, c));
+  const activeRoutes = new Set<number>();
+  const ops: OpsIncident[] = [];
+
+  for (const run of runs) {
+    const ci = run.ci;
+    const c = state.companies[ci];
+    const { a, b } = run.route;
+    activeRoutes.add(run.route.id);
+    const o = byRoute[ci].get(run.route.id);
+    const keep = 1 - (o?.lost ?? 0);
+    const planes: CostPlane[] = [];
+    let seatSum = 0;
+    let freqSum = 0;
+    for (const p of c.planes) {
+      const f = legFreq(p, run.route.id);
+      if (f <= 0) continue;
+      planes.push({ model: MODEL[p.model], freq: f * keep, age: planeAge(state, p), fixed: fixedShare(c, p, run.route.id) });
+      seatSum += MODEL[p.model].seats * f;
+      freqSum += f;
+    }
+    const paxWeek = run.biz + run.leisure + run.xfer;
+    const revenue = (run.revenue + run.xferRev) * WEEKS;
+    const cost = routeCost(state, ci, a, b, planes, paxWeek, revenue, ctxs[ci]);
+    // 지연·결항 보상, 돌아간 비행 비용
+    const seatsPer = freqSum > 0 ? seatSum / freqSum : 150;
+    const disrupt = o ? (o.late * seatsPer * 0.00012 + o.cancelled * seatsPer * 0.0012 + o.diverted * (0.15 + seatsPer * 0.0012)) : 0;
+    const pax = paxWeek * 2 * WEEKS;
+    const rep = reports[ci];
+    rep.ticket += revenue;
+    rep.fuel += cost.fuel;
+    rep.crew += cost.crew;
+    rep.airport += cost.airport;
+    rep.service += cost.service;
+    rep.sales += cost.sales;
+    rep.lease += cost.lease;
+    rep.disrupt += disrupt;
+    rep.pax += pax;
+    rep.seats += run.seats * 2 * WEEKS;
+    const flights = o ? o.flights : freqSum * 2 * WEEKS;
+    rep.flights += flights;
+    if (o) {
+      rep.late += o.late;
+      rep.cancelled += o.cancelled;
+      rep.diverted += o.diverted;
+      if (o.late + o.cancelled + o.diverted + o.grounded > 0) ops.push({ company: ci, route: run.route.id, a, b, flights: o.flights, late: o.late, cancelled: o.cancelled, diverted: o.diverted, grounded: o.grounded, cause: o.cause, city: o.city });
+    }
+    const ra = CITY[a].region;
+    const rb = CITY[b].region;
+    rep.regionPax[ra] += pax;
+    if (rb !== ra) rep.regionPax[rb] += pax;
+    if (isPacific(a, b)) rep.pacificPax += pax;
+    if (isResort(a) || isResort(b)) rep.resortPax += pax;
+    if (c.hub === a || c.hub === b) rep.hubPax += pax;
+    const profit = revenue - cost.total - disrupt;
+    if (planes.some((p) => p.model.body === 'sst')) rep.sstProfit += profit;
+    const leisureM = run.leisure * WEEKS;
+    arrivals[ci].set(a, (arrivals[ci].get(a) ?? 0) + leisureM);
+    arrivals[ci].set(b, (arrivals[ci].get(b) ?? 0) + leisureM);
+    const flown = o ? o.flights - o.cancelled : flights;
+    routeStats[ci].set(run.route.id, {
+      lf: run.seats > 0 ? paxWeek / run.seats : 0,
+      pax,
+      revenue,
+      profit,
+      share: run.share,
+      xfer: run.xfer,
+      xferRev: run.xferRev,
+      onTime: o ? (flown > 0 ? 1 - (o.late + o.diverted) / flown : 0) : expectedOnTime(state, ci, run.route.id),
+      cancel: o ? (o.flights > 0 ? o.cancelled / o.flights : 0) : 0,
+    });
+    routeReports.push({ company: ci, route: run.route.id, a, b, pax, seats: run.seats * 2 * WEEKS, revenue, cost: cost.total + disrupt, profit });
+  }
+  for (const x of xfers) for (const ci of x.companies) reports[ci].xferPax += x.pax;
+
+  for (let ci = 0; ci < n; ci++) {
+    const c = state.companies[ci];
+    const rep = reports[ci];
+    if (c.out) continue;
+    // 쉬는 비행기: 리스료 + 보험 + (내 비행기면) 보관비
+    for (const p of c.planes) {
+      if (p.legs.some((l) => l.freq > 0 && activeRoutes.has(l.route))) continue;
+      const price = MODEL[p.model].price;
+      rep.fleet += planeFixed(p) + (p.leased ? 0 : price * IDLE_RATE);
+    }
+    for (const city of c.branches) rep.branch += branchUpkeep(city, state.q);
+    for (const r of REGIONS) rep.ads += c.ads[r];
+    const limit = creditLimit(state, ci);
+    const premium = c.debt > limit * 0.8 ? 2 : 0;
+    rep.interest = (c.debt * (state.rate + premium)) / 100 / 12;
+    for (const biz of c.businesses) {
+      const city = CITY[biz.city];
+      const arrivalsM = arrivals[ci].get(biz.city) ?? 0;
+      if (biz.kind === 'hotel') rep.side += (biz.cost * (0.016 + 0.003 * city.fun) * leisureMonthMult(biz.city, m0)) / 3 + arrivalsM * 0.0003;
+      else rep.side += (biz.cost * 0.02) / 3 + arrivalsM * 0.0001;
+    }
+    // 노선 보조금 (달마다): 그 도시를 오가는 노선을 날고 있으면
+    for (const m of c.mods) {
+      if (m.kind !== 'subsidy' || !active(m, state.t) || !m.city) continue;
+      if (c.routes.some((r) => (r.a === m.city || r.b === m.city) && routeFreq(c, r.id) > 0)) rep.side += m.value;
+    }
+    rep.onTime = rep.flights - rep.cancelled > 0 ? 1 - (rep.late + rep.diverted) / (rep.flights - rep.cancelled) : c.onTime;
+    const before =
+      rep.ticket + rep.side - rep.fuel - rep.crew - rep.airport - rep.service - rep.sales - rep.lease - rep.fleet - rep.branch - rep.ads - rep.interest - rep.disrupt;
+    rep.tax = Math.max(0, before) * TAX_RATE;
+    rep.profit = before - rep.tax;
+  }
+  ops.sort((x, y) => y.cancelled * 3 + y.late + y.diverted * 4 + y.grounded * 6 - (x.cancelled * 3 + x.late + x.diverted * 4 + x.grounded * 6));
+  return { reports, routes: routeReports, routeStats, xfers: xfers.slice(0, 60), ops: ops.slice(0, 80), closures };
+}
+
+/** 예전 이름: 분기 대신 이번 달 (테스트·화면 어림) */
+export const computeQuarter = computeMonth;
+
+/** 운항 사건 없이 셈할 때 쓰는 기대 정시율 */
+export function expectedOnTime(state: AirlineState, ci: number, routeId: number): number {
+  const r = opsRates(state, ci, routeId);
+  return Math.max(0, 1 - r.late - r.divert);
+}
+
+/** 빈 결산 한 줄 */
+export function emptyReport(): CompanyReport {
+  return {
     ticket: 0,
     side: 0,
     fuel: 0,
@@ -1012,98 +1351,39 @@ export function computeQuarter(state: AirlineState): QuarterOutcome {
     sstProfit: 0,
     hubPax: 0,
     xferPax: 0,
-  }));
-  const routeReports: RouteReport[] = [];
-  const routeStats: QuarterOutcome['routeStats'] = state.companies.map(() => new Map());
-  const arrivals: Map<string, number>[] = state.companies.map(() => new Map());
-  const ctxs = state.companies.map((c) => costCtx(state, c));
-  const activeRoutes = new Set<number>();
+    flights: 0,
+    late: 0,
+    cancelled: 0,
+    diverted: 0,
+    disrupt: 0,
+    onTime: 0,
+  };
+}
 
-  for (const run of runs) {
-    const ci = run.ci;
-    const c = state.companies[ci];
-    const { a, b } = run.route;
-    activeRoutes.add(run.route.id);
-    const planes: CostPlane[] = [];
-    for (const p of c.planes) {
-      const f = legFreq(p, run.route.id);
-      if (f > 0) planes.push({ model: MODEL[p.model], freq: f, age: planeAge(state, p), fixed: fixedShare(c, p, run.route.id) });
-    }
-    const paxWeek = run.biz + run.leisure + run.xfer;
-    const revenue = (run.revenue + run.xferRev) * WEEKS;
-    const cost = routeCost(state, ci, a, b, planes, paxWeek, revenue, ctxs[ci]);
-    const pax = paxWeek * 2 * WEEKS;
-    const rep = reports[ci];
-    rep.ticket += revenue;
-    rep.fuel += cost.fuel;
-    rep.crew += cost.crew;
-    rep.airport += cost.airport;
-    rep.service += cost.service;
-    rep.sales += cost.sales;
-    rep.lease += cost.lease;
-    rep.pax += pax;
-    rep.seats += run.seats * 2 * WEEKS;
-    const ra = CITY[a].region;
-    const rb = CITY[b].region;
-    rep.regionPax[ra] += pax;
-    if (rb !== ra) rep.regionPax[rb] += pax;
-    if (isPacific(a, b)) rep.pacificPax += pax;
-    if (isResort(a) || isResort(b)) rep.resortPax += pax;
-    if (c.hub === a || c.hub === b) rep.hubPax += pax;
-    const profit = revenue - cost.total;
-    if (planes.some((p) => p.model.body === 'sst')) rep.sstProfit += profit;
-    const leisureQ = run.leisure * WEEKS;
-    arrivals[ci].set(a, (arrivals[ci].get(a) ?? 0) + leisureQ);
-    arrivals[ci].set(b, (arrivals[ci].get(b) ?? 0) + leisureQ);
-    routeStats[ci].set(run.route.id, {
-      lf: run.seats > 0 ? paxWeek / run.seats : 0,
-      pax,
-      revenue,
-      profit,
-      share: run.share,
-      xfer: run.xfer,
-      xferRev: run.xferRev,
-    });
-    routeReports.push({ company: ci, route: run.route.id, a, b, pax, seats: run.seats * 2 * WEEKS, revenue, cost: cost.total, profit });
+/** 결산 여러 개를 더한다 (분기·해). 돈·손님은 합, 현금·빚·가치는 마지막 값, 정시율은 편수로 다시 셈한다 */
+export function sumReports(list: readonly CompanyReport[]): CompanyReport {
+  const out = emptyReport();
+  if (list.length === 0) return out;
+  const add: (keyof CompanyReport)[] = [
+    'ticket', 'side', 'fuel', 'crew', 'airport', 'service', 'sales', 'lease', 'fleet', 'tax', 'branch', 'ads', 'interest', 'profit',
+    'pax', 'seats', 'autoLoan', 'pacificPax', 'resortPax', 'sstProfit', 'hubPax', 'xferPax', 'flights', 'late', 'cancelled', 'diverted', 'disrupt',
+  ];
+  for (const r of list) {
+    for (const k of add) (out[k] as number) += r[k] as number;
+    for (const reg of REGIONS) out.regionPax[reg] += r.regionPax[reg];
+    out.bankrupt = out.bankrupt || r.bankrupt;
   }
-  for (const x of xfers) for (const ci of x.companies) reports[ci].xferPax += x.pax;
-
-  for (let ci = 0; ci < n; ci++) {
-    const c = state.companies[ci];
-    const rep = reports[ci];
-    if (c.out) continue;
-    // 쉬는 비행기: 리스료 + 보험 + (내 비행기면) 보관비
-    for (const p of c.planes) {
-      if (p.legs.some((l) => l.freq > 0 && activeRoutes.has(l.route))) continue;
-      const price = MODEL[p.model].price;
-      rep.fleet += planeFixed(p) + (p.leased ? 0 : price * IDLE_RATE);
-    }
-    for (const city of c.branches) rep.branch += branchUpkeep(city, state.q);
-    for (const r of REGIONS) rep.ads += c.ads[r];
-    const limit = creditLimit(state, ci);
-    const premium = c.debt > limit * 0.8 ? 2 : 0;
-    rep.interest = (c.debt * (state.rate + premium)) / 100 / 4;
-    for (const biz of c.businesses) {
-      const city = CITY[biz.city];
-      const arrivalsQ = arrivals[ci].get(biz.city) ?? 0;
-      if (biz.kind === 'hotel') rep.side += biz.cost * (0.016 + 0.003 * city.fun) * SEASON_INFO[city.season].mult[quarter] + arrivalsQ * 0.0003;
-      else rep.side += biz.cost * 0.02 + arrivalsQ * 0.0001;
-    }
-    // 노선 보조금: 그 도시를 오가는 노선을 날고 있으면
-    for (const m of c.mods) {
-      if (m.kind !== 'subsidy' || !active(m, state.q) || !m.city) continue;
-      if (c.routes.some((r) => (r.a === m.city || r.b === m.city) && routeFreq(c, r.id) > 0)) rep.side += m.value;
-    }
-    const before =
-      rep.ticket + rep.side - rep.fuel - rep.crew - rep.airport - rep.service - rep.sales - rep.lease - rep.fleet - rep.branch - rep.ads - rep.interest;
-    rep.tax = Math.max(0, before) * TAX_RATE;
-    rep.profit = before - rep.tax;
-  }
-  return { reports, routes: routeReports, routeStats, xfers: xfers.slice(0, 60) };
+  const last = list[list.length - 1];
+  out.value = last.value;
+  out.cash = last.cash;
+  out.debt = last.debt;
+  const flown = out.flights - out.cancelled;
+  out.onTime = flown > 0 ? 1 - (out.late + out.diverted) / flown : last.onTime;
+  return out;
 }
 
 /** 비행기들의 좌석 가중 평균 나이 */
-export function fleetAge(state: Pick<AirlineState, 'q'>, c: Company): number {
+export function fleetAge(state: Pick<AirlineState, 't'>, c: Company): number {
   let seats = 0;
   let sum = 0;
   for (const p of c.planes) {
@@ -1114,8 +1394,8 @@ export function fleetAge(state: Pick<AirlineState, 'q'>, c: Company): number {
   return seats > 0 ? sum / seats : 0;
 }
 
-/** 평판이 향하는 값 (서비스·비행기 나이·편안함) */
-export function reputationTarget(state: Pick<AirlineState, 'q'>, c: Company): number {
+/** 평판이 향하는 값 (서비스·비행기 나이·편안함·정시 운항) */
+export function reputationTarget(state: Pick<AirlineState, 't'>, c: Company): number {
   if (c.planes.length === 0) return 50;
   const age = fleetAge(state, c);
   let comfort = 0;
@@ -1127,10 +1407,11 @@ export function reputationTarget(state: Pick<AirlineState, 'q'>, c: Company): nu
   }
   comfort /= seats;
   const ageAdj = age < 5 ? 8 : age < 10 ? 2 : age < 16 ? -6 : -14;
-  return Math.max(0, Math.min(100, 25 + 9 * c.service + ageAdj + (comfort - 3) * 4));
+  const onTimeAdj = Math.max(-12, Math.min(6, (c.onTime - 0.85) * 80));
+  return Math.max(0, Math.min(100, 25 + 9 * c.service + ageAdj + (comfort - 3) * 4 + onTimeAdj));
 }
 
-/** 광고가 알려진 정도로 바뀌는 크기 (억/분기) */
+/** 광고가 알려진 정도로 바뀌는 크기 (억/분기 기준. 달 광고비는 세 배로 견준다) */
 export function adScale(q: number): number {
   return 12 * travelFactor(q) ** 0.8;
 }

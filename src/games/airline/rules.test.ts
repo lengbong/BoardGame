@@ -19,10 +19,14 @@ import {
   endQ,
   rankings,
   routeBlocker,
+  runMonth,
   runQuarter,
+  CRISIS_MONTHS,
+  endT,
 } from './rules';
 import {
   MAX_DELIVERIES,
+  computeMonth,
   WEEK_HOURS,
   branchCost,
   companyValue,
@@ -37,7 +41,7 @@ import {
   slotCapacity,
   utilization,
 } from './simulate';
-import { qOf, yearOf } from './time';
+import { mOf, qOf, yearOf } from './time';
 import type { AirlineOptions, AirlineSetup, AirlineState, SeatKind } from './types';
 
 function setup(kinds: SeatKind[], options: Partial<AirlineOptions> = {}, hubs: (string | null)[] = []): AirlineSetup {
@@ -85,7 +89,9 @@ describe('새 게임', () => {
         expect(c.planes).toHaveLength(0);
       }
       expect(s.q).toBe(qOf(2003, 1));
+      expect(s.t).toBe(mOf(2003, 1));
       expect(s.history).toHaveLength(1);
+      expect(s.months).toHaveLength(1);
     }
   });
 
@@ -158,7 +164,7 @@ describe('지점과 노선', () => {
 });
 
 describe('비행기', () => {
-  it('새 비행기는 주문하고 값을 낸 뒤 몇 분기 뒤에 받고, 리스는 바로 받는다 (첫해 사람은 보증금 없음)', () => {
+  it('새 비행기는 주문하고 값을 낸 뒤 몇 달 뒤에 받고, 리스는 바로 받는다 (첫해 사람은 보증금 없음)', () => {
     let s = twoHumans();
     const m = MODEL['b737-800'];
     const price = orderPrice(s, m, s.companies[0]);
@@ -166,13 +172,16 @@ describe('비행기', () => {
     expect(s.companies[0].cash).toBeCloseTo(START_MONEY.normal.cash - price, 5);
     expect(s.companies[0].planes).toHaveLength(0);
     expect(s.companies[0].orders).toHaveLength(1);
-    expect(s.companies[0].orders[0].due).toBe(s.q + leadTime(m, 2003));
+    expect(s.companies[0].orders[0].due).toBe(s.t + leadTime(m, 2003));
+    expect(leadTime(m, 2003)).toBeGreaterThanOrEqual(3);
+    expect(leadTime(m, 2003)).toBeLessThanOrEqual(12);
     expect(depositFor(s, 0, m.id)).toBe(0);
     s = act(s, { type: 'lease', model: m.id });
     expect(s.companies[0].cash).toBeCloseTo(START_MONEY.normal.cash - price, 5);
     expect(s.companies[0].planes.map((p) => p.leased)).toEqual([true]);
     // 첫해가 지나면 리스할 때 보증금(리스료 두 분기 치)을 내고, 돌려줄 때 돌려받는다
-    s.q += 4;
+    s.t += 12;
+    s.q = Math.floor(s.t / 3);
     expect(depositFor(s, 0, m.id)).toBeCloseTo(leaseDeposit(s, m), 5);
     const cash = s.companies[0].cash;
     s = act(s, { type: 'lease', model: m.id });
@@ -183,7 +192,7 @@ describe('비행기', () => {
     expect(s.companies[0].cash).toBeCloseTo(cash - p.rent, 5);
   });
 
-  it('주문한 비행기는 정한 분기가 되면 들어오고, 주문을 무르면 70%를 돌려받는다', () => {
+  it('주문한 비행기는 정한 달이 되면 들어오고, 주문을 무르면 70%를 돌려받는다', () => {
     let s = twoHumans({ money: 'rich' });
     const m = MODEL['a320'];
     s = act(s, { type: 'buy', model: m.id }, { type: 'buy', model: m.id });
@@ -192,7 +201,8 @@ describe('비행기', () => {
     s = act(s, { type: 'cancelOrder', order: o2.id });
     expect(s.companies[0].cash).toBeCloseTo(cash + Math.round(o2.price * CANCEL_REFUND), 5);
     const rng = seededRandom(3);
-    while (s.q < o1.due) s = runQuarter(s, rng);
+    while (s.t < o1.due && s.phase === 'manage') s = runMonth(s, rng);
+    expect(s.t).toBe(o1.due);
     const c = s.companies[0];
     expect(c.orders).toHaveLength(0);
     expect(c.planes.filter((p) => p.model === m.id && !p.leased)).toHaveLength(1);
@@ -203,7 +213,7 @@ describe('비행기', () => {
     const s = twoHumans({ money: 'rich' });
     const crew = () => estimateRoute(s, 0, 'seoul', 'tokyo', [{ model: 'a320', freq: 10 }], 0).cost.crew;
     const before = crew();
-    for (let i = 0; i < 4; i++) s.companies[0].planes.push({ id: s.nextId++, model: 'a321', leased: false, rent: 0, deposit: 0, since: s.q, legs: [] });
+    for (let i = 0; i < 4; i++) s.companies[0].planes.push({ id: s.nextId++, model: 'a321', leased: false, rent: 0, deposit: 0, since: s.t, legs: [] });
     expect(MODEL.a321.family).toBe(MODEL.a320.family);
     expect(commonalityMult(4)).toBeLessThan(1);
     expect(crew()).toBeLessThan(before);
@@ -225,7 +235,7 @@ describe('비행기', () => {
     const p = s.companies[0].planes[0];
     expect(p.model).toBe(u.model);
     expect(p.leased).toBe(false);
-    expect(Math.round((s.q - p.since) / 4)).toBe(Math.round(u.age));
+    expect(Math.round((s.t - p.since) / 12)).toBe(Math.round(u.age));
     expect(applyAction(s, { type: 'buyUsed', listing: u.id })).toBe(s);
   });
 
@@ -243,16 +253,16 @@ describe('비행기', () => {
     expect(availableModels(1977).map((m) => m.id)).toContain('concorde');
   });
 
-  it(`한 분기에 ${MAX_DELIVERIES}대까지만 받는다`, () => {
+  it(`한 달에 ${MAX_DELIVERIES}대까지만 바로 받는다`, () => {
     let s = twoHumans({ money: 'rich' });
     for (let i = 0; i < MAX_DELIVERIES; i++) s = act(s, { type: 'lease', model: 'atr72' });
     expect(applyAction(s, { type: 'lease', model: 'atr72' })).toBe(s);
-    expect(buyBlocker(s, 0, 'atr72', true)).toContain('한 분기에');
+    expect(buyBlocker(s, 0, 'atr72', true)).toContain('한 달에');
   });
 
   it('팔면 가치의 90%를 받고, 리스기를 돌려주면 위약금을 낸다', () => {
     let s = twoHumans();
-    s.companies[0].planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.q - 8, legs: [] });
+    s.companies[0].planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.t - 24, legs: [] });
     s = act(s, { type: 'lease', model: 'a320' });
     const [own, leased] = s.companies[0].planes;
     const cash = s.companies[0].cash;
@@ -307,7 +317,7 @@ describe('비행기', () => {
     expect(bestFreq(s, 0, small.id, tyo.id)).toBe(max);
     // 도쿄 슬롯을 거의 다 쓴 것처럼 꾸민다
     const cap = slotCapacity(s, 0, 'tokyo');
-    s.companies[0].planes.push({ id: 999, model: 'a320', leased: true, rent: 1, deposit: 0, since: s.q, legs: [{ route: tyo.id, freq: cap - 2 }] });
+    s.companies[0].planes.push({ id: 999, model: 'a320', leased: true, rent: 1, deposit: 0, since: s.t, legs: [{ route: tyo.id, freq: cap - 2 }] });
     s.nextId = 1000;
     expect(assignBlocker(s, 0, small.id, tyo.id, 3)).toContain('도쿄 슬롯이 모자라요');
     expect(bestFreq(s, 0, small.id, tyo.id)).toBe(2);
@@ -352,35 +362,60 @@ describe('운임·광고·서비스·대출·부대사업', () => {
   });
 });
 
-describe('분기 진행', () => {
-  it('지금 회사만 행동하고, 모두 마치면 분기를 계산해 다음 분기로', () => {
+describe('달 진행', () => {
+  it('지금 회사만 행동하고, 모두 마치면 이번 달을 계산해 다음 달로', () => {
     let s = withTokyoRoute();
     expect(actor(s)).toBe(0);
     s = act(s, { type: 'endTurn' });
     expect(actor(s)).toBe(1);
     // 1번 회사 차례에 0번 노선을 바꿀 수 없다
     expect(applyAction(s, { type: 'setFare', route: s.companies[0].routes[0].id, fare: 10 })).toBe(s);
-    const q = s.q;
+    const t = s.t;
     s = act(s, { type: 'endTurn' });
-    expect(s.q).toBe(q + 1);
-    expect(s.report!.q).toBe(q);
-    expect(s.history).toHaveLength(2);
+    expect(s.t).toBe(t + 1);
+    expect(s.q).toBe(Math.floor((t + 1) / 3));
+    expect(s.report!.t).toBe(t);
+    expect(s.report!.span).toBe(1);
+    expect(s.months).toHaveLength(2);
     expect(s.report!.companies[0].pax).toBeGreaterThan(0);
     expect(s.companies[0].routes[0].stats!.lf).toBeGreaterThan(0);
-    // 다음 분기는 순서가 한 칸 돈다
+    expect(s.companies[0].routes[0].stats!.hist).toHaveLength(1);
+    // 다음 달은 순서가 한 칸 돈다
     expect(actor(s)).toBe(1);
-    expect(s.events.some((e) => e.type === 'quarter')).toBe(true);
+    expect(s.events.some((e) => e.type === 'month')).toBe(true);
+    expect(s.events.some((e) => e.type === 'quarter')).toBe(false);
   });
 
-  it('두 분기 내내 돈이 모자라면 파산해서 빠진다', () => {
+  it('석 달이 지나면 분기 결산이, 열두 달이 지나면 한 해 결산이 나오고, 모두 달 결산의 합이다', () => {
     let s = withTokyoRoute();
-    s.companies[0].cash = -5000;
+    const rng = seededRandom(4);
+    for (let k = 0; k < 3; k++) s = runMonth(s, rng);
+    expect(s.qReport).not.toBeNull();
+    expect(s.qReport!.span).toBe(3);
+    expect(s.history).toHaveLength(2);
+    const months = s.ledger.slice(-3);
+    for (const key of ['ticket', 'fuel', 'profit', 'pax', 'flights', 'cancelled'] as const) {
+      const sum = months.reduce((acc, m) => acc + (m.companies[0][key] as number), 0);
+      expect(s.qReport!.companies[0][key]).toBeCloseTo(sum, 6);
+    }
+    for (let k = 0; k < 9; k++) s = runMonth(s, rng);
+    expect(s.years).toHaveLength(1);
+    const year = s.ledger.filter((l) => yearOf(Math.floor(l.t / 3)) === 2003);
+    expect(year).toHaveLength(12);
+    const sumProfit = year.reduce((acc, m) => acc + m.companies[0].profit, 0);
+    expect(s.years[0].companies[0].profit).toBeCloseTo(sumProfit, 6);
+    expect(s.companies[0].reviews).toHaveLength(1);
+  });
+
+  it(`${CRISIS_MONTHS}달 내내 돈이 모자라면 운항을 멈추고 빠진다`, () => {
+    let s = withTokyoRoute();
+    s.companies[0].cash = -50000;
     s.companies[0].baseCredit = 0;
     s.companies[0].debt = 0;
-    s = runQuarter(s, seededRandom(1));
+    for (let k = 0; k < CRISIS_MONTHS - 1; k++) s = runMonth(s, seededRandom(1));
     expect(s.companies[0].out).toBe(false);
-    expect(s.companies[0].crisis).toBe(1);
-    s = runQuarter(s, seededRandom(1));
+    expect(s.companies[0].crisis).toBe(CRISIS_MONTHS - 1);
+    s = runMonth(s, seededRandom(1));
     expect(s.companies[0].out).toBe(true);
     expect(s.companies[0].planes).toHaveLength(0);
     // 남은 회사가 하나면 끝
@@ -391,10 +426,19 @@ describe('분기 진행', () => {
   it('돈이 모자라면 대출 한도 안에서 저절로 빌린다', () => {
     let s = withTokyoRoute();
     s.companies[0].cash = -100;
-    s = runQuarter(s, seededRandom(1));
+    s = runMonth(s, seededRandom(1));
     expect(s.report!.companies[0].autoLoan).toBeGreaterThan(0);
     expect(s.companies[0].cash).toBeGreaterThanOrEqual(0);
     expect(s.companies[0].crisis).toBe(0);
+  });
+
+  it('리스료·이자·지점 유지비는 달마다 낸다', () => {
+    const s = withTokyoRoute();
+    s.companies[0].debt = 600;
+    const r = computeMonth(s).reports[0];
+    expect(r.interest).toBeCloseTo((600 * s.rate) / 100 / 12, 6);
+    expect(r.lease).toBeGreaterThan(0);
+    expect(r.lease).toBeLessThan(s.companies[0].planes[0].rent * 1.5 + 5);
   });
 });
 
@@ -402,9 +446,13 @@ describe('승리 조건', () => {
   it('정해진 해까지: 그 해 마지막 분기가 끝나면 회사 가치 1등이 이긴다', () => {
     let s = twoHumans({ mode: 'years', years: 10 });
     expect(endQ(s)).toBe(qOf(2012, 4));
+    expect(endT(s)).toBe(mOf(2012, 12));
     s.companies[1].cash = 9999;
-    s.q = endQ(s);
-    s = runQuarter(s, seededRandom(1));
+    s.t = endT(s) - 1;
+    s.q = Math.floor(s.t / 3);
+    s = runMonth(s, seededRandom(1));
+    expect(s.phase).toBe('manage');
+    s = runMonth(s, seededRandom(1));
     expect(s.phase).toBe('gameover');
     expect(s.result!.winners).toEqual([1]);
     expect(rankings(s)[0]).toBe(1);
@@ -423,10 +471,10 @@ describe('승리 조건', () => {
     for (const [a, b, model] of pairs) {
       for (const city of [a, b]) if (!c.branches.includes(city)) c.branches.push(city);
       const rid = s.nextId++;
-      c.routes.push({ id: rid, a, b, fare: 0, since: s.q, stats: null });
-      c.planes.push({ id: s.nextId++, model, leased: true, rent: 10, deposit: 0, since: s.q, legs: [{ route: rid, freq: 2 }] });
+      c.routes.push({ id: rid, a, b, fare: 0, since: s.t, stats: null });
+      c.planes.push({ id: s.nextId++, model, leased: true, rent: 3, deposit: 0, since: s.t, legs: [{ route: rid, freq: 2 }] });
     }
-    s = runQuarter(s, seededRandom(1));
+    s = runMonth(s, seededRandom(1));
     expect(s.phase).toBe('gameover');
     expect(s.result!.winners).toEqual([0]);
   });
@@ -446,8 +494,9 @@ describe('승리 조건', () => {
 
   it('도전 과제: 조건을 이루면 성공, 기한이 지나면 실패', () => {
     let s = createGame(setup(['human'], { mode: 'challenge', challenge: 'sixregions' }), seededRandom(1));
-    s.q = endQ(s);
-    s = runQuarter(s, seededRandom(1));
+    s.t = endT(s);
+    s.q = Math.floor(s.t / 3);
+    s = runMonth(s, seededRandom(1));
     expect(s.phase).toBe('gameover');
     expect(s.result!.success).toBe(false);
     expect(s.result!.winners).toEqual([]);
@@ -471,8 +520,10 @@ describe('시대와 사건', () => {
   it('여러 분기 동안 사건과 뉴스가 생기고 유가는 정해진 범위에 있다', () => {
     let s = createGame(setup(['human', 'human'], { era: 1983, years: 30 }, ['seoul', 'london']), seededRandom(5));
     const rng = seededRandom(6);
-    for (let i = 0; i < 48; i++) {
-      s = runQuarter(s, rng);
+    const oils: number[] = [];
+    for (let i = 0; i < 144; i++) {
+      s = runMonth(s, rng);
+      oils.push(s.oil);
       expect(s.oil).toBeGreaterThanOrEqual(0.5);
       expect(s.oil).toBeLessThanOrEqual(3);
       expect(s.rate).toBeGreaterThanOrEqual(2);
@@ -482,6 +533,8 @@ describe('시대와 사건', () => {
     expect(s.news.length).toBeGreaterThan(20);
     // 새 기종 소식
     expect(titles).toMatch(/새 기종/);
+    // 유가는 달마다 조금씩 움직인다 (같은 값만 이어지지 않는다)
+    expect(new Set(oils).size).toBeGreaterThan(30);
   });
 
   it('회사 가치는 현금 − 빚 + 내 비행기 가치 + 낸 주문 값', () => {

@@ -161,7 +161,7 @@ export interface Plane {
   rent: number;
   /** 리스 보증금 (억). 돌려줄 때 돌려받는다. 내 비행기는 0 */
   deposit: number;
-  /** 받은 분기 (q 번호). 나이 = (지금 q − since) / 4 년 */
+  /** 받은 달 (t 번호). 나이 = (지금 t − since) / 12 년 */
   since: number;
   /** 띄우는 노선들 (한 대가 비행시간 안에서 여러 노선을 난다). 비면 쉬는 중 */
   legs: Leg[];
@@ -173,7 +173,7 @@ export interface Leg {
   freq: number;
 }
 
-/** 새 비행기 주문 (값은 주문할 때 내고, due 분기에 받는다) */
+/** 새 비행기 주문 (값은 주문할 때 내고, due 달에 받는다) */
 export interface Order {
   id: number;
   model: string;
@@ -188,13 +188,13 @@ export interface UsedPlane {
   /** 매물로 나온 때의 나이 (년) */
   age: number;
   price: number;
-  /** 매물로 나온 분기 */
+  /** 매물로 나온 달 */
   listed: number;
   /** 판 회사 (파산한 회사 등) */
   from?: string;
 }
 
-/** 회사에만 걸리는 효과 (결정 사건 등). until 분기 전까지 */
+/** 회사에만 걸리는 효과 (결정 사건 등). until 달 전까지 */
 export type ModKind = 'crew' | 'fuelHedge' | 'fuel' | 'demand' | 'service' | 'sales' | 'slot' | 'discount' | 'subsidy';
 
 export interface Mod {
@@ -262,6 +262,8 @@ export interface YearAcc {
   revenue: number;
   profit: number;
   profitQ: number;
+  /** 이번 분기에 쌓은 이익 (분기가 끝나면 profitQ를 센다) */
+  qProfit: number;
   quarters: number;
   bought: number;
   startValue: number;
@@ -297,6 +299,12 @@ export interface RouteStats {
   xfer: number;
   /** 갈아타는 손님에게 받은 주간 수입 (억) */
   xferRev: number;
+  /** 제때 뜬 비율 0~1 (결항은 빼고 센다) */
+  onTime: number;
+  /** 결항 비율 0~1 */
+  cancel: number;
+  /** 최근 열두 달 [탑승률, 이익] (그래프) */
+  hist: [number, number][];
 }
 
 export interface Route {
@@ -305,7 +313,7 @@ export interface Route {
   b: string;
   /** 운임 조정 (%) −30 … +30 */
   fare: number;
-  /** 연 분기 */
+  /** 연 달 */
   since: number;
   stats: RouteStats | null;
 }
@@ -344,7 +352,7 @@ export interface Company {
   branches: string[];
   routes: Route[];
   planes: Plane[];
-  /** 지역마다 분기 광고비 (억) */
+  /** 지역마다 달 광고비 (억) */
   ads: Record<RegionId, number>;
   /** 지역마다 알려진 정도 0~1 (광고가 쌓인다) */
   awareness: Record<RegionId, number>;
@@ -364,8 +372,8 @@ export interface Company {
   mods: Mod[];
   /** 아직 고르지 않은 결정 사건 */
   choice: Choice | null;
-  /** 다음 결정 사건이 올 분기 */
-  nextChoiceQ: number;
+  /** 다음 결정 사건이 올 달 */
+  nextChoiceT: number;
   /** 제휴(코드셰어) 상대 회사 */
   partner: number | null;
   /** 올해 목표 */
@@ -374,10 +382,16 @@ export interface Company {
   acc: YearAcc;
   /** 해마다 받은 경영 평가 */
   reviews: Review[];
-  /** 이번 분기에 바로 받은 비행기 수 (리스 + 중고) */
+  /** 이번 달에 바로 받은 비행기 수 (리스 + 중고) */
   taken: number;
-  /** 마지막으로 제휴를 제안한 분기 */
+  /** 마지막으로 제휴를 제안한 달 */
   lastProposal: number;
+  /** 정비 수준 1~5 (3이 보통). 높을수록 돈이 들지만 지연·결항·기체 점검이 준다 */
+  maint: number;
+  /** 예비 승무원 0~2 (없음·조금·넉넉). 승무원비가 늘지만 지연·결항이 준다 */
+  crewReserve: number;
+  /** 최근 석 달 정시 운항률 (평판·손님에 영향) */
+  onTime: number;
   /** 실제 항공사 id (realAirlines.ts). 가상 항공사면 null */
   airline: string | null;
   /** 회사 색 (실제 항공사의 칠 색에서 고른 것). null이면 자리 색 */
@@ -421,7 +435,7 @@ export interface AirlineSetup {
   airlines: (string | null)[];
 }
 
-/** 사건의 효과 (기한이 지나면 없어진다) */
+/** 사건의 효과 (until 달이 되면 없어진다) */
 export type Effect =
   | { id: number; kind: 'boom' | 'slump'; region: RegionId; mult: number; until: number }
   | { id: number; kind: 'tourism'; city: string; mult: number; until: number }
@@ -432,7 +446,8 @@ export type NewsTone = 'good' | 'bad' | 'info' | 'big';
 
 export interface NewsItem {
   id: number;
-  q: number;
+  /** 소식이 난 달 */
+  t: number;
   icon: string;
   title: string;
   text: string;
@@ -445,7 +460,7 @@ export interface NewsItem {
   company?: number;
 }
 
-/** 회사 한 곳의 분기 손익 (억) */
+/** 회사 한 곳의 한 기간(달·분기·해) 손익 (억) */
 export interface CompanyReport {
   ticket: number;
   side: number;
@@ -485,8 +500,20 @@ export interface CompanyReport {
   sstProfit: number;
   /** 본사 도시를 오간 손님 */
   hubPax: number;
-  /** 우리 노선에서 갈아탄 손님 (분기, 출발지–도착지 기준) */
+  /** 우리 노선에서 갈아탄 손님 (출발지–도착지 기준) */
   xferPax: number;
+  /** 뜬 편수 (한 방향 한 번이 한 편) */
+  flights: number;
+  /** 늦게 뜬 편 */
+  late: number;
+  /** 결항한 편 */
+  cancelled: number;
+  /** 다른 공항으로 돌아간 편 */
+  diverted: number;
+  /** 지연·결항 보상과 돌아간 비행 비용 */
+  disrupt: number;
+  /** 정시 운항률 (결항은 빼고 뜬 편 가운데 제때 뜬 비율) */
+  onTime: number;
   /** 경영 평가 (4분기 결산에만) */
   review?: Review;
   /** 연간 목표 결과 (4분기 결산에만) */
@@ -516,8 +543,32 @@ export interface RouteReport {
   profit: number;
 }
 
+/** 운항 현장 사건 (이번 달, 노선마다) */
+export interface OpsIncident {
+  company: number;
+  route: number;
+  a: string;
+  b: string;
+  flights: number;
+  late: number;
+  cancelled: number;
+  diverted: number;
+  /** 기체 점검으로 쉰 비행기 수 */
+  grounded: number;
+  /** 큰 원인: 날씨(typhoon·snow·monsoon·fog·storm)·tech(기체)·crew(승무원)·congestion(혼잡)·staff(인력 부족) */
+  cause: string;
+  /** 날씨가 원인일 때 그 도시 */
+  city?: string;
+}
+
+/** 한 기간(달·분기·해)의 결산 */
 export interface QuarterReport {
+  /** 그 기간이 든 분기 */
   q: number;
+  /** 그 기간의 마지막 달 */
+  t: number;
+  /** 몇 달 치 (1·3·12) */
+  span: number;
   companies: CompanyReport[];
   /** 모든 회사의 노선 결과 (가장 좋은·나쁜 노선 보기) */
   routes: RouteReport[];
@@ -525,6 +576,28 @@ export interface QuarterReport {
   news: number[];
   /** 갈아타는 손님이 많은 연결 (많은 순, 일부) */
   xfers: TransferReport[];
+  /** 운항 현장 사건 (달 결산에만, 큰 것부터 일부) */
+  ops: OpsIncident[];
+}
+
+/** 그래프용 달 기록 */
+export interface MonthPoint {
+  t: number;
+  oil: number;
+  value: number[];
+  profit: number[];
+  revenue: number[];
+  pax: number[];
+  /** 탑승률 */
+  lf: number[];
+  /** 정시 운항률 */
+  onTime: number[];
+}
+
+/** 한 해 결산 (회사마다 열두 달 합) */
+export interface YearReport {
+  year: number;
+  companies: CompanyReport[];
 }
 
 /** 그래프용 분기 기록 */
@@ -547,7 +620,7 @@ export interface ChallengeProgress {
   id: string;
   /** 도전하는 회사 */
   company: number;
-  /** 끝나는 분기 (q) */
+  /** 끝나는 달 (t, 그 분기의 마지막 달) */
   deadline: number;
   /** 지금까지의 진행 글 */
   progress: string;
@@ -578,6 +651,10 @@ export type AirlineAction =
   | { type: 'setFare'; route: number; fare: number }
   | { type: 'setAds'; region: RegionId; amount: number }
   | { type: 'setService'; level: number }
+  /** 정비 수준 1~5 */
+  | { type: 'setMaint'; level: number }
+  /** 예비 승무원 0~2 */
+  | { type: 'setCrewReserve'; level: number }
   | { type: 'borrow'; amount: number }
   | { type: 'repay'; amount: number }
   | { type: 'build'; city: string; kind: BusinessKind }
@@ -599,6 +676,7 @@ export type GameEvent =
   | { id: number; type: 'money'; company: number; amount: number; what: 'borrow' | 'repay' }
   | { id: number; type: 'build'; company: number; city: string; kind: BusinessKind }
   | { id: number; type: 'turn'; company: number }
+  | { id: number; type: 'month'; t: number }
   | { id: number; type: 'quarter'; q: number }
   | { id: number; type: 'bankrupt'; company: number }
   | { id: number; type: 'gameover' };
@@ -612,18 +690,22 @@ export interface LogEntry {
 export type Phase = 'manage' | 'gameover';
 
 export interface AirlineState {
-  /** 저장 형식 판 (옛 저장은 버린다) */
-  version: 2;
+  /** 저장 형식 판 (2판 저장은 3판으로 바꿔 읽는다) */
+  version: 3;
   options: AirlineOptions;
   /** 시작한 해 */
   startYear: number;
-  /** 지금 분기 번호 = 해 × 4 + (분기 − 1) */
+  /** 지금 달 번호 = 해 × 12 + (달 − 1). 한 차례가 한 달 */
+  t: number;
+  /** 시작한 달 */
+  startT: number;
+  /** 지금 분기 번호 = 해 × 4 + (분기 − 1) (늘 floor(t / 3)) */
   q: number;
   /** 시작한 분기 번호 */
   startQ: number;
   phase: Phase;
   companies: Company[];
-  /** 이번 분기에 경영하는 순서 (회사 번호) */
+  /** 이번 달에 경영하는 순서 (회사 번호) */
   order: number[];
   /** order에서 지금 몇 번째인지 */
   turnPos: number;
@@ -639,8 +721,18 @@ export interface AirlineState {
   /** 이미 알린 가격 경쟁 (회사|회사|두 도시) */
   priceWars: string[];
   news: NewsItem[];
+  /** 분기 기록 (그래프) */
   history: HistoryPoint[];
+  /** 달 기록 (그래프) */
+  months: MonthPoint[];
+  /** 지난달 결산 */
   report: QuarterReport | null;
+  /** 지난 분기 결산 (석 달 합) */
+  qReport: QuarterReport | null;
+  /** 최근 달 결산들 (달별 손익표, 최근 24달) */
+  ledger: QuarterReport[];
+  /** 해마다 결산 */
+  years: YearReport[];
   nextId: number;
   result: GameResult | null;
   challenge: ChallengeProgress | null;

@@ -31,6 +31,7 @@ import {
   maxFreq,
   newLeaseFixed,
   orderPrice,
+  planeFixed,
   pairDemand,
   planeAge,
   planeHours,
@@ -44,6 +45,9 @@ import { yearOf } from './time';
 import type { AirlineAction, AirlineState, Company, ModelDef, RegionId, Rng } from './types';
 
 export type AiLevel = 'ai-easy' | 'ai-normal';
+
+/** 어림(달 값)을 예전 분기 기준 문턱과 견줄 때 곱하는 수 */
+const Q = 3;
 
 /**
  * 컴퓨터 항공사. 한 분기 경영을 행동 목록으로 정한다 (끝에 endTurn은 넣지 않는다).
@@ -115,16 +119,28 @@ export class Planner {
     return true;
   }
 
-  /** 지난 분기 비용 합 (현금 여유 계산) */
+  /** 지난달 비용 합 (현금 여유 계산) */
   private lastCosts(): number {
     const r = this.s.report?.companies[this.ci];
     if (!r) return 0;
-    return r.fuel + r.crew + r.airport + r.service + r.sales + r.lease + r.fleet + r.branch + r.ads + r.interest;
+    return r.fuel + r.crew + r.airport + r.service + r.sales + r.lease + r.fleet + r.branch + r.ads + r.interest + r.disrupt;
   }
 
+  /** 남겨 둘 현금 (석 달 치 비용의 일부) */
   reserve(): number {
     const styleMult = this.style === 'relaxed' ? 1.6 : this.style === 'fierce' ? 0.8 : 1;
-    return Math.max(60, this.lastCosts() * (this.normal ? 0.25 : 0.4) * styleMult);
+    return Math.max(60, this.lastCosts() * Q * (this.normal ? 0.25 : 0.4) * styleMult);
+  }
+
+  /** 이 회사가 크게 계획을 세우는 달 (석 달에 한 번, 회사마다 다른 달) */
+  get planning(): boolean {
+    return (this.s.t + this.ci) % 3 === 0 || this.c.routes.length === 0 || this.c.planes.length === 0;
+  }
+
+  /** 이번 분기에 이미 연 노선 수 */
+  private openedThisQuarter(): number {
+    const from = this.s.q * 3;
+    return this.c.routes.filter((r) => r.since >= from).length;
   }
 
   private creditLeft(): number {
@@ -144,18 +160,26 @@ export class Planner {
     if (this.c.out) return;
     this.decide();
     this.emergency();
+    if (!this.planning) {
+      // 계획 달이 아니면 가볍게: 쉬는 비행기, 아주 차거나 빈 노선의 운임, 광고
+      this.quickFares();
+      this.useIdlePlanes();
+      if (this.normal) this.setAds();
+      return;
+    }
     this.tuneRoutes();
     if (this.normal) this.closeUnusedBranches();
     this.useIdlePlanes();
     if (this.normal) {
       this.useSpareHours();
       this.manageLoans(true);
-      this.expand(this.maxNewRoutes());
+      this.expand(this.maxNewRoutes() - this.openedThisQuarter());
       this.addCapacity();
       this.renewFleet();
       this.orderAhead();
       this.setAds();
       this.setService();
+      this.setOps();
       this.maybePropose();
       this.manageLoans(false);
     } else {
@@ -163,6 +187,29 @@ export class Planner {
       this.easyAds();
       if (this.c.cash > 1500 && this.c.debt > 0) this.act({ type: 'repay', amount: Math.min(this.c.debt, this.c.cash - 1000) });
     }
+  }
+
+  /** 아주 꽉 차거나 많이 빈 노선만 운임을 한 칸 고친다 */
+  private quickFares(): void {
+    const cap = this.style === 'relaxed' ? 10 : this.normal ? 25 : 15;
+    for (const r of this.c.routes) {
+      const st = r.stats;
+      if (!st || st.pax <= 0) continue;
+      if (st.lf > 0.985 && r.fare + 5 <= cap) this.act({ type: 'setFare', route: r.id, fare: r.fare + 5 });
+      else if (st.lf < 0.5 && r.fare - 5 >= -25) this.act({ type: 'setFare', route: r.id, fare: r.fare - 5 });
+    }
+  }
+
+  /** 정비 수준·예비 승무원: 비행기가 낡거나 지연이 잦으면 꼼꼼히, 돈이 급하면 아끼기 */
+  private setOps(): void {
+    const c = this.c;
+    const age = c.planes.length ? c.planes.reduce((sum, p) => sum + planeAge(this.s, p), 0) / c.planes.length : 0;
+    let maint = 3;
+    if (c.crisis > 0 || c.cash < this.reserve()) maint = 2;
+    else if (c.onTime < 0.8 || age > 14) maint = 4;
+    if (maint !== c.maint) this.act({ type: 'setMaint', level: maint });
+    const reserve = c.crisis > 0 ? 0 : c.onTime < 0.78 ? 2 : 1;
+    if (reserve !== c.crewReserve) this.act({ type: 'setCrewReserve', level: reserve });
   }
 
   // ---------------------------------------------------------------- 결정 사건
@@ -230,13 +277,13 @@ export class Planner {
       const planes = this.c.planes.filter((p) => legFreq(p, r.id) > 0);
       const st = r.stats;
       if (planes.length === 0) {
-        if (this.s.q - r.since >= 2) this.act({ type: 'closeRoute', route: r.id });
+        if (this.s.t - r.since >= 6) this.act({ type: 'closeRoute', route: r.id });
         continue;
       }
       if (!this.normal) {
         if (st && st.lf >= 0.95 && r.fare < 15) this.act({ type: 'setFare', route: r.id, fare: r.fare + 5 });
         else if (st && st.lf < 0.6 && r.fare > -15) this.act({ type: 'setFare', route: r.id, fare: r.fare - 5 });
-        if (st && st.lossStreak >= 4) this.act({ type: 'closeRoute', route: r.id });
+        if (st && st.lossStreak >= 10) this.act({ type: 'closeRoute', route: r.id });
         continue;
       }
       // 운임: 몇 가지를 어림해 보고 가장 이익이 큰 쪽으로 (좌석이 아주 차거나 비지 않으면 두 분기에 한 번)
@@ -248,7 +295,7 @@ export class Planner {
       for (const f of steps) {
         if (f < -25 || f > fareCap) continue;
         const e = estimateExisting(this.s, this.ci, r, { fare: f });
-        if (e.profit > bestProfit + 0.5) {
+        if (e.profit > bestProfit + 0.2) {
           bestProfit = e.profit;
           bestFare = f;
         }
@@ -271,7 +318,7 @@ export class Planner {
         let best = -Infinity;
         for (const f of options) {
           const e = estimateExisting(this.s, this.ci, route, { planes: this.draftOf(route.id, cur.id, f) });
-          if (e.profit > best + 0.5) {
+          if (e.profit > best + 0.2) {
             best = e.profit;
             pick = f;
           }
@@ -281,7 +328,7 @@ export class Planner {
       // 계속 손해면 닫는다 (비행기는 다른 곳에 쓴다)
       const now = routeById(this.c, r.id);
       if (!now) continue;
-      if (!st || st.lossStreak < 2) continue;
+      if (!st || st.lossStreak < 5) continue;
       const after = this.estimate(now.id);
       const fixed = this.c.planes.reduce((sum, p) => sum + (legFreq(p, r.id) > 0 ? fixedShare(this.c, p, r.id) : 0), 0);
       if (after < -fixed * 0.5) this.act({ type: 'closeRoute', route: r.id });
@@ -315,7 +362,7 @@ export class Planner {
       const before = this.estimate(r.id);
       const opts = this.normal ? [...new Set([f, Math.max(1, Math.round(f * 0.6))])] : [f];
       for (const freq of opts) {
-        const fixed = marginal ? 0 : p.rent + m.price * 0.005;
+        const fixed = marginal ? 0 : planeFixed(p);
         const after = estimateExisting(this.s, this.ci, r, { planes: this.draftOf(r.id, null, 0, { model: m.id, freq, age: planeAge(this.s, p), fixed }) }).profit;
         const gain = after - before;
         if (!best || gain > best.gain) best = { route: r.id, freq, gain };
@@ -325,12 +372,19 @@ export class Planner {
   }
 
   private useIdlePlanes(): void {
+    // 보통 컴퓨터는 비행기가 많으면 내 비행기 몇 대를 예비기로 남겨 둔다 (기체 점검·결항을 메운다)
+    const flying = this.c.planes.filter((p) => p.legs.length > 0).length;
+    let spares = this.normal ? Math.floor(flying * 0.05) : 0;
     for (const p0 of idlePlanes(this.c)) {
       const p = planeById(this.c, p0.id);
       if (!p) continue;
       const m = MODEL[p.model];
+      if (spares > 0 && !p.leased && planeAge(this.s, p) < 22) {
+        spares--;
+        continue;
+      }
       const best = this.bestExistingLeg(p.id, false);
-      if (best && best.gain > -(p.rent + m.price * 0.005) * 0.3) {
+      if (best && best.gain > -planeFixed(p) * 0.3) {
         this.act({ type: 'assign', plane: p.id, route: best.route, freq: best.freq });
         continue;
       }
@@ -371,7 +425,7 @@ export class Planner {
       .slice(0, 3);
     for (const x of spare) {
       const best = this.bestExistingLeg(x.id, true);
-      if (best && best.gain > 3) this.act({ type: 'assign', plane: x.id, route: best.route, freq: best.freq });
+      if (best && best.gain > 3 / Q) this.act({ type: 'assign', plane: x.id, route: best.route, freq: best.freq });
     }
   }
 
@@ -492,7 +546,7 @@ export class Planner {
       const profit = e.profit * hubBonus - upkeep;
       const capital = branchMoney + depositFor(this.s, this.ci, m.id);
       let score = profit * (0.7 + 0.3 * Math.min(1, e.lf / 0.8));
-      if (newRegion) score += Math.max(30, e.revenue * 0.25);
+      if (newRegion) score += Math.max(30 / Q, e.revenue * 0.25);
       if (!this.normal) score = profit;
       if (!best || score > best.score) best = { a, b, model: m, freq, fare: 0, profit, capital, needBranch, score };
       return score;
@@ -564,7 +618,7 @@ export class Planner {
       if (routeOnPair(this.c, cand.a, cand.b)) continue;
       let c2: Candidate | null = cand;
       if (usedCities.has(cand.a) || usedCities.has(cand.b)) c2 = this.evaluatePair(cand.a, cand.b, [cand.model], false);
-      if (!c2 || c2.profit <= 5 || c2.capital > budget) continue;
+      if (!c2 || c2.profit <= 5 / Q || c2.capital > budget) continue;
       if (this.openCandidate(c2)) {
         usedCities.add(cand.a);
         usedCities.add(cand.b);
@@ -603,7 +657,7 @@ export class Planner {
         if (max < 1) continue;
         const after = estimateExisting(this.s, this.ci, route, { planes: this.draftOf(route.id, null, 0, { model: m.id, freq: max, fixed: newLeaseFixed(this.s, m) }) }).profit;
         const gain = after - before;
-        if (gain > 8 && (!best || gain > best.gain)) best = { m, freq: max, gain };
+        if (gain > 8 / Q && (!best || gain > best.gain)) best = { m, freq: max, gain };
       }
       if (!best || depositFor(this.s, this.ci, best.m.id) > budget) continue;
       if (!this.act({ type: 'lease', model: best.m.id })) continue;
@@ -634,7 +688,7 @@ export class Planner {
         const prof = estimateExisting(this.s, this.ci, r, { planes: draft }).profit;
         if (!best || prof > best.profit) best = { m, profit: prof };
       }
-      if (!best || best.profit < before + 5) continue;
+      if (!best || best.profit < before + 5 / Q) continue;
       if (buyBlocker(this.s, this.ci, best.m.id, true)) continue;
       const legs = p.legs.map((l) => ({ ...l }));
       if (!this.act({ type: 'sell', plane: p.id })) continue;
@@ -659,7 +713,7 @@ export class Planner {
     const m = MODEL[model];
     const price = orderPrice(this.s, m, this.c);
     if (this.c.cash - price < this.reserve() * 4 + 200) return;
-    if (fleetCount(this.c) >= 58 || leadTime(m, this.year) > 3) return;
+    if (fleetCount(this.c) >= 58 || leadTime(m, this.year) > 9) return;
     this.act({ type: 'buy', model });
   }
 
@@ -699,7 +753,7 @@ export class Planner {
       const need = this.reserve() + 150 - c.cash;
       if (need <= 0) return;
       const cands = this.candidates();
-      if (cands.length === 0 || cands[0].profit < 20) return;
+      if (cands.length === 0 || cands[0].profit < 20 / Q) return;
       const amount = Math.floor(Math.min(need + 100, limit * 0.6 - c.debt));
       if (amount >= 20) this.act({ type: 'borrow', amount });
       return;

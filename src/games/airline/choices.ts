@@ -3,11 +3,11 @@ import { availableModels, MODEL } from './aircraft';
 import { CITIES, CITY, REGION_INFO, airportClass, citySize, dist, pairKey } from './cities';
 import { FIXED_EVENTS } from './events';
 import { companyValue, isIdle, orderPrice, slotCapacity, slotsUsed } from './simulate';
-import { qOf, yearOf } from './time';
+import { mOf, yearOf } from './time';
 import type { AirlineState, Choice, ChoiceOption, Company, Rng } from './types';
 
 /**
- * 결정 사건: 회사마다 서너 분기에 한 번, 고를 수 있는 일이 생긴다.
+ * 결정 사건: 회사마다 아홉 달에서 한 해에 한 번쯤, 고를 수 있는 일이 생긴다.
  * 모두 이 게임을 위해 지은 이야기이고 전쟁·정치·재난·질병은 다루지 않는다.
  * 고르면 무엇이 어떻게 바뀌는지 숫자로 미리 보여 준다.
  */
@@ -18,6 +18,8 @@ interface Ctx {
   c: Company;
   year: number;
   q: number;
+  /** 지금 달 */
+  t: number;
   /** 회사 크기에 맞춘 돈 단위 (억) */
   s: number;
   rng: Rng;
@@ -33,7 +35,7 @@ interface Scenario {
 
 const round = (v: number) => Math.max(5, Math.round(v / 5) * 5);
 const pct = (m: number) => `${m > 1 ? '+' : '−'}${Math.round(Math.abs(m - 1) * 100)}%`;
-const years = (quarters: number) => (quarters % 4 === 0 ? `${quarters / 4}년` : `${quarters}분기`);
+const years = (months: number) => (months % 12 === 0 ? `${months / 12}년` : `${months}달`);
 
 /** 회사 크기에 맞춘 결정 사건 돈 단위 */
 export function choiceScale(state: AirlineState, ci: number): number {
@@ -56,9 +58,9 @@ const SCENARIOS: Scenario[] = [
       title: '조종사·승무원 임금 협상',
       text: '조종사와 승무원 모임이 임금을 올려 달라고 해요. 어떻게 할까요?',
       options: [
-        { label: '넉넉히 올려 주기', desc: `승무원·정비비 ${pct(1.06)} (${years(12)}) · 평판 +5`, cost: 0, ai: 0.8, effects: [{ kind: 'mod', mod: { kind: 'crew', value: 1.06, until: x.q + 12, label: '임금 인상' } }, { kind: 'rep', amount: 5 }] },
-        { label: '조금만 올리기', desc: `승무원·정비비 ${pct(1.03)} (${years(12)})`, cost: 0, ai: 1, effects: [{ kind: 'mod', mod: { kind: 'crew', value: 1.03, until: x.q + 12, label: '임금 조금 인상' } }] },
-        { label: '거절하기', desc: '평판 −8 · 일하는 분위기가 나빠져 두 분기 동안 손님 −8%', cost: 0, ai: 0.3, effects: [{ kind: 'rep', amount: -8 }, { kind: 'mod', mod: { kind: 'demand', value: 0.92, until: x.q + 2, label: '협상 결렬' } }] },
+        { label: '넉넉히 올려 주기', desc: `승무원·정비비 ${pct(1.06)} (${years(36)}) · 평판 +5`, cost: 0, ai: 0.8, effects: [{ kind: 'mod', mod: { kind: 'crew', value: 1.06, until: x.t + 36, label: '임금 인상' } }, { kind: 'rep', amount: 5 }] },
+        { label: '조금만 올리기', desc: `승무원·정비비 ${pct(1.03)} (${years(36)})`, cost: 0, ai: 1, effects: [{ kind: 'mod', mod: { kind: 'crew', value: 1.03, until: x.t + 36, label: '임금 조금 인상' } }] },
+        { label: '거절하기', desc: '평판 −8 · 일하는 분위기가 나빠져 여섯 달 동안 손님 −8%', cost: 0, ai: 0.3, effects: [{ kind: 'rep', amount: -8 }, { kind: 'mod', mod: { kind: 'demand', value: 0.92, until: x.t + 6, label: '협상 결렬' } }] },
       ],
     }),
   },
@@ -74,8 +76,8 @@ const SCENARIOS: Scenario[] = [
         title: '연료 값 미리 정하기',
         text: `기름 회사가 지금 유가(지수 ${oil.toFixed(2)})로 연료 값을 미리 정해 두자고 해요. 기름값이 오르면 이득, 내리면 손해예요.`,
         options: [
-          { label: '1년 동안 정하기', desc: `수수료 ${round(x.s * 0.4)}억 · 4분기 동안 유가 ${oil.toFixed(2)}로 고정`, cost: round(x.s * 0.4), ai: good ? 1.2 : 0.1, effects: [{ kind: 'mod', mod: { kind: 'fuelHedge', value: oil, until: x.q + 4, label: `유가 ${oil.toFixed(2)} 고정` } }] },
-          { label: '반년만 정하기', desc: `수수료 ${round(x.s * 0.2)}억 · 2분기 동안 유가 ${oil.toFixed(2)}로 고정`, cost: round(x.s * 0.2), ai: good ? 0.9 : 0.15, effects: [{ kind: 'mod', mod: { kind: 'fuelHedge', value: oil, until: x.q + 2, label: `유가 ${oil.toFixed(2)} 고정` } }] },
+          { label: '1년 동안 정하기', desc: `수수료 ${round(x.s * 0.4)}억 · 열두 달 동안 유가 ${oil.toFixed(2)}로 고정`, cost: round(x.s * 0.4), ai: good ? 1.2 : 0.1, effects: [{ kind: 'mod', mod: { kind: 'fuelHedge', value: oil, until: x.t + 12, label: `유가 ${oil.toFixed(2)} 고정` } }] },
+          { label: '반년만 정하기', desc: `수수료 ${round(x.s * 0.2)}억 · 여섯 달 동안 유가 ${oil.toFixed(2)}로 고정`, cost: round(x.s * 0.2), ai: good ? 0.9 : 0.15, effects: [{ kind: 'mod', mod: { kind: 'fuelHedge', value: oil, until: x.t + 6, label: `유가 ${oil.toFixed(2)} 고정` } }] },
           decline('안 해요', '유가가 오르내리는 대로 내요'),
         ],
       };
@@ -95,8 +97,8 @@ const SCENARIOS: Scenario[] = [
         title: `${CITY[city].name} 공항 시간대 경매`,
         text: `붐비는 ${CITY[city].name} 공항이 남는 이착륙 시간대(슬롯)를 경매에 붙였어요. 지금 내 슬롯을 ${Math.round(full * 100)}% 쓰고 있어요.`,
         options: [
-          { label: '많이 사기', desc: `${round(x.s * 1.2)}억 · ${CITY[city].name} 내 슬롯 +50% (계속)`, cost: round(x.s * 1.2), ai: full > 0.75 ? 1.3 : 0.4, effects: [{ kind: 'mod', mod: { kind: 'slot', value: 1.5, until: x.q + 400, city, label: `${CITY[city].name} 슬롯 +50%` } }] },
-          { label: '조금 사기', desc: `${round(x.s * 0.6)}억 · ${CITY[city].name} 내 슬롯 +25% (계속)`, cost: round(x.s * 0.6), ai: full > 0.6 ? 1 : 0.3, effects: [{ kind: 'mod', mod: { kind: 'slot', value: 1.25, until: x.q + 400, city, label: `${CITY[city].name} 슬롯 +25%` } }] },
+          { label: '많이 사기', desc: `${round(x.s * 1.2)}억 · ${CITY[city].name} 내 슬롯 +50% (계속)`, cost: round(x.s * 1.2), ai: full > 0.75 ? 1.3 : 0.4, effects: [{ kind: 'mod', mod: { kind: 'slot', value: 1.5, until: x.t + 1200, city, label: `${CITY[city].name} 슬롯 +50%` } }] },
+          { label: '조금 사기', desc: `${round(x.s * 0.6)}억 · ${CITY[city].name} 내 슬롯 +25% (계속)`, cost: round(x.s * 0.6), ai: full > 0.6 ? 1 : 0.3, effects: [{ kind: 'mod', mod: { kind: 'slot', value: 1.25, until: x.t + 1200, city, label: `${CITY[city].name} 슬롯 +25%` } }] },
           decline('안 사요'),
         ],
       };
@@ -104,11 +106,11 @@ const SCENARIOS: Scenario[] = [
   },
   {
     id: 'olympic',
-    when: (x) => FIXED_EVENTS.some((e) => qOf(e.year, e.quarters[0]) > x.q && qOf(e.year, e.quarters[0]) - x.q <= 6),
+    when: (x) => FIXED_EVENTS.some((e) => mOf(e.year, e.months[0]) > x.t && mOf(e.year, e.months[0]) - x.t <= 18),
     build: (x) => {
-      const e = FIXED_EVENTS.find((f) => qOf(f.year, f.quarters[0]) > x.q && qOf(f.year, f.quarters[0]) - x.q <= 6)!;
+      const e = FIXED_EVENTS.find((f) => mOf(f.year, f.months[0]) > x.t && mOf(f.year, f.months[0]) - x.t <= 18)!;
       const has = x.c.branches.includes(e.city);
-      const until = qOf(e.year + 1, 1);
+      const until = mOf(e.year + 1, 1);
       return {
         scenario: 'olympic',
         icon: e.kind === 'expo' ? '🎡' : '🏅',
@@ -134,8 +136,8 @@ const SCENARIOS: Scenario[] = [
         title: `제작사의 ${m.name} 할인 제안`,
         text: `${m.maker}가 새 기종 ${m.name}(${m.seats}석, ${m.range.toLocaleString()}km)을 먼저 사 주면 20% 깎아 주겠대요.`,
         options: [
-          { label: '1대 주문하기', desc: `${price.toLocaleString()}억 (20% 할인) · 인도까지 몇 분기 걸려요`, cost: price, ai: 0.9, effects: [{ kind: 'order', model: m.id, discount: 0.2 }] },
-          { label: '할인권만 받기', desc: `1년 동안 ${m.name}을 주문하면 10% 할인`, cost: 0, ai: 0.6, effects: [{ kind: 'mod', mod: { kind: 'discount', value: 0.9, until: x.q + 4, model: m.id, label: `${m.name} 10% 할인권` } }] },
+          { label: '1대 주문하기', desc: `${price.toLocaleString()}억 (20% 할인) · 인도까지 몇 달 걸려요`, cost: price, ai: 0.9, effects: [{ kind: 'order', model: m.id, discount: 0.2 }] },
+          { label: '할인권만 받기', desc: `1년 동안 ${m.name}을 주문하면 10% 할인`, cost: 0, ai: 0.6, effects: [{ kind: 'mod', mod: { kind: 'discount', value: 0.9, until: x.t + 12, model: m.id, label: `${m.name} 10% 할인권` } }] },
           decline('괜찮아요'),
         ],
       };
@@ -150,7 +152,7 @@ const SCENARIOS: Scenario[] = [
       title: '안전 점검 투자',
       text: '정비팀이 비행기를 더 꼼꼼히 점검하자고 해요. 돈은 들지만 손님이 믿고 타요.',
       options: [
-        { label: '꼼꼼히 점검하기', desc: `${round(x.s * 0.8)}억 · 평판 +6 · 정비비 −3% (${years(8)})`, cost: round(x.s * 0.8), ai: 0.9, effects: [{ kind: 'rep', amount: 6 }, { kind: 'mod', mod: { kind: 'crew', value: 0.97, until: x.q + 8, label: '꼼꼼한 정비' } }] },
+        { label: '꼼꼼히 점검하기', desc: `${round(x.s * 0.8)}억 · 평판 +6 · 정비비 −3% (${years(24)})`, cost: round(x.s * 0.8), ai: 0.9, effects: [{ kind: 'rep', amount: 6 }, { kind: 'mod', mod: { kind: 'crew', value: 0.97, until: x.t + 24, label: '꼼꼼한 정비' } }] },
         { label: '기본만 하기', desc: `${round(x.s * 0.3)}억 · 평판 +2`, cost: round(x.s * 0.3), ai: 0.7, effects: [{ kind: 'rep', amount: 2 }] },
         { label: '다음에 하기', desc: '평판 −4', cost: 0, ai: 0.2, effects: [{ kind: 'rep', amount: -4 }] },
       ],
@@ -165,8 +167,8 @@ const SCENARIOS: Scenario[] = [
       title: '기내식 업체 바꾸기',
       text: '기내식 업체 두 곳이 제안을 보냈어요.',
       options: [
-        { label: '싼 업체로', desc: `기내 서비스비 −20% (${years(12)}) · 평판 −4`, cost: 0, ai: 0.8, effects: [{ kind: 'mod', mod: { kind: 'service', value: 0.8, until: x.q + 12, label: '싼 기내식' } }, { kind: 'rep', amount: -4 }] },
-        { label: '고급 업체로', desc: `기내 서비스비 +25% (${years(12)}) · 평판 +6`, cost: 0, ai: 0.7, effects: [{ kind: 'mod', mod: { kind: 'service', value: 1.25, until: x.q + 12, label: '고급 기내식' } }, { kind: 'rep', amount: 6 }] },
+        { label: '싼 업체로', desc: `기내 서비스비 −20% (${years(36)}) · 평판 −4`, cost: 0, ai: 0.8, effects: [{ kind: 'mod', mod: { kind: 'service', value: 0.8, until: x.t + 36, label: '싼 기내식' } }, { kind: 'rep', amount: -4 }] },
+        { label: '고급 업체로', desc: `기내 서비스비 +25% (${years(36)}) · 평판 +6`, cost: 0, ai: 0.7, effects: [{ kind: 'mod', mod: { kind: 'service', value: 1.25, until: x.t + 36, label: '고급 기내식' } }, { kind: 'rep', amount: 6 }] },
         decline('지금 그대로', '바뀌는 것 없어요'),
       ],
     }),
@@ -195,14 +197,14 @@ const SCENARIOS: Scenario[] = [
     build: (x) => {
       const city = pickOne(smallCities(x), x.rng);
       if (!city) return null;
-      const pay = round(x.s * 0.25);
+      const pay = Math.max(2, Math.round((x.s * 0.25) / 3));
       return {
         scenario: 'subsidy',
         icon: '🤝',
         title: `${CITY[city].name}의 노선 보조금`,
-        text: `${CITY[city].name}에서 우리 비행기가 와 주면 2년 동안 분기마다 ${pay}억을 주겠대요. ${CITY[city].name}을 오가는 노선을 날고 있을 때만 받아요.`,
+        text: `${CITY[city].name}에서 우리 비행기가 와 주면 2년 동안 달마다 ${pay}억을 주겠대요. ${CITY[city].name}을 오가는 노선을 날고 있을 때만 받아요.`,
         options: [
-          { label: '받아들이기', desc: `${CITY[city].name} 노선을 나는 동안 분기마다 +${pay}억 (2년)`, cost: 0, ai: 0.9, effects: [{ kind: 'mod', mod: { kind: 'subsidy', value: pay, until: x.q + 8, city, label: `${CITY[city].name} 보조금` } }] },
+          { label: '받아들이기', desc: `${CITY[city].name} 노선을 나는 동안 달마다 +${pay}억 (2년)`, cost: 0, ai: 0.9, effects: [{ kind: 'mod', mod: { kind: 'subsidy', value: pay, until: x.t + 24, city, label: `${CITY[city].name} 보조금` } }] },
           decline('거절하기'),
         ],
       };
@@ -217,7 +219,7 @@ const SCENARIOS: Scenario[] = [
       title: '조종사 학교 세우기',
       text: '우리 회사만의 조종사·정비사 학교를 세우면 오랫동안 사람 구하는 돈이 줄어요.',
       options: [
-        { label: '세우기', desc: `${round(x.s * 1)}억 · 승무원·정비비 −4% (${years(16)})`, cost: round(x.s * 1), ai: 0.9, effects: [{ kind: 'mod', mod: { kind: 'crew', value: 0.96, until: x.q + 16, label: '조종사 학교' } }] },
+        { label: '세우기', desc: `${round(x.s * 1)}억 · 승무원·정비비 −4% (${years(48)})`, cost: round(x.s * 1), ai: 0.9, effects: [{ kind: 'mod', mod: { kind: 'crew', value: 0.96, until: x.t + 48, label: '조종사 학교' } }] },
         decline('안 해요'),
       ],
     }),
@@ -231,7 +233,7 @@ const SCENARIOS: Scenario[] = [
       title: `${CITY[x.c.hub].name} 공항 라운지`,
       text: `본사 ${CITY[x.c.hub].name} 공항에 사업 손님이 쉬어 갈 라운지를 열 수 있어요.`,
       options: [
-        { label: '열기', desc: `${round(x.s * 0.6)}억 · ${CITY[x.c.hub].name} 노선 사업 손님 +8% (${years(16)})`, cost: round(x.s * 0.6), ai: 0.9, effects: [{ kind: 'mod', mod: { kind: 'demand', value: 1.08, until: x.q + 16, city: x.c.hub, seg: 'biz', label: '본사 라운지' } }] },
+        { label: '열기', desc: `${round(x.s * 0.6)}억 · ${CITY[x.c.hub].name} 노선 사업 손님 +8% (${years(48)})`, cost: round(x.s * 0.6), ai: 0.9, effects: [{ kind: 'mod', mod: { kind: 'demand', value: 1.08, until: x.t + 48, city: x.c.hub, seg: 'biz', label: '본사 라운지' } }] },
         decline('안 해요'),
       ],
     }),
@@ -245,21 +247,21 @@ const SCENARIOS: Scenario[] = [
       title: '단골 손님 제도',
       text: '탈 때마다 점수를 쌓아 주는 단골 손님 제도를 만들면 손님이 우리 회사를 더 자주 골라요.',
       options: [
-        { label: '만들기', desc: `${round(x.s * 0.8)}억 · 모든 노선 손님 +5% · 기내 서비스비 +5% (${years(16)})`, cost: round(x.s * 0.8), ai: 1, effects: [{ kind: 'mod', mod: { kind: 'demand', value: 1.05, until: x.q + 16, label: '단골 손님 제도' } }, { kind: 'mod', mod: { kind: 'service', value: 1.05, until: x.q + 16, label: '단골 손님 혜택' } }] },
+        { label: '만들기', desc: `${round(x.s * 0.8)}억 · 모든 노선 손님 +5% · 기내 서비스비 +5% (${years(48)})`, cost: round(x.s * 0.8), ai: 1, effects: [{ kind: 'mod', mod: { kind: 'demand', value: 1.05, until: x.t + 48, label: '단골 손님 제도' } }, { kind: 'mod', mod: { kind: 'service', value: 1.05, until: x.t + 48, label: '단골 손님 혜택' } }] },
         decline('안 해요'),
       ],
     }),
   },
   {
     id: 'online',
-    when: (x) => x.year >= 1996 && !x.c.mods.some((m) => m.kind === 'sales' && m.until > x.q),
+    when: (x) => x.year >= 1996 && !x.c.mods.some((m) => m.kind === 'sales' && m.until > x.t),
     build: (x) => ({
       scenario: 'online',
       icon: '💻',
       title: '인터넷 예약 만들기',
       text: '손님이 인터넷으로 직접 표를 사게 하면 표 판매 수수료가 줄어요.',
       options: [
-        { label: '만들기', desc: `${round(x.s * 1.2)}억 · 표 판매 수수료 −30% (계속)`, cost: round(x.s * 1.2), ai: 1.1, effects: [{ kind: 'mod', mod: { kind: 'sales', value: 0.7, until: x.q + 400, label: '인터넷 예약' } }] },
+        { label: '만들기', desc: `${round(x.s * 1.2)}억 · 표 판매 수수료 −30% (계속)`, cost: round(x.s * 1.2), ai: 1.1, effects: [{ kind: 'mod', mod: { kind: 'sales', value: 0.7, until: x.t + 1200, label: '인터넷 예약' } }] },
         decline('나중에'),
       ],
     }),
@@ -275,7 +277,7 @@ const SCENARIOS: Scenario[] = [
         title: '엔진 손질로 연료 아끼기',
         text: `엔진 회사가 우리 비행기 ${x.c.planes.length}대의 엔진을 손봐 주겠대요.`,
         options: [
-          { label: '모두 손보기', desc: `${cost}억 · 연료 −5% (${years(16)})`, cost, ai: 0.9, effects: [{ kind: 'mod', mod: { kind: 'fuel', value: 0.95, until: x.q + 16, label: '엔진 손질' } }] },
+          { label: '모두 손보기', desc: `${cost}억 · 연료 −5% (${years(48)})`, cost, ai: 0.9, effects: [{ kind: 'mod', mod: { kind: 'fuel', value: 0.95, until: x.t + 48, label: '엔진 손질' } }] },
           decline('안 해요'),
         ],
       };
@@ -304,7 +306,7 @@ const SCENARIOS: Scenario[] = [
       title: '정비 맡기기',
       text: '정비 전문 회사가 우리 비행기 정비를 맡겠대요. 싸지만 손님들은 조금 불안해해요.',
       options: [
-        { label: '맡기기', desc: `승무원·정비비 −6% (${years(16)}) · 평판 −3`, cost: 0, ai: 0.8, effects: [{ kind: 'mod', mod: { kind: 'crew', value: 0.94, until: x.q + 16, label: '정비 외주' } }, { kind: 'rep', amount: -3 }] },
+        { label: '맡기기', desc: `승무원·정비비 −6% (${years(48)}) · 평판 −3`, cost: 0, ai: 0.8, effects: [{ kind: 'mod', mod: { kind: 'crew', value: 0.94, until: x.t + 48, label: '정비 외주' } }, { kind: 'rep', amount: -3 }] },
         decline('직접 하기', '바뀌는 것 없어요'),
       ],
     }),
@@ -321,7 +323,7 @@ const SCENARIOS: Scenario[] = [
         title: `${CITY[city].name} 관광청 공동 광고`,
         text: `${CITY[city].name} 관광청이 광고비를 반씩 내서 함께 광고하자고 해요.`,
         options: [
-          { label: '함께 하기', desc: `${round(x.s * 0.3)}억 · ${CITY[city].name} 노선 관광 손님 +15% (1년)`, cost: round(x.s * 0.3), ai: 1, effects: [{ kind: 'mod', mod: { kind: 'demand', value: 1.15, until: x.q + 4, city, seg: 'leisure', label: `${CITY[city].name} 공동 광고` } }] },
+          { label: '함께 하기', desc: `${round(x.s * 0.3)}억 · ${CITY[city].name} 노선 관광 손님 +15% (1년)`, cost: round(x.s * 0.3), ai: 1, effects: [{ kind: 'mod', mod: { kind: 'demand', value: 1.15, until: x.t + 12, city, seg: 'leisure', label: `${CITY[city].name} 공동 광고` } }] },
           decline('안 해요'),
         ],
       };
@@ -373,7 +375,7 @@ function funCities(x: Ctx): string[] {
 /** 이번에 이 회사에 올 결정 사건 (없으면 null) */
 export function makeChoice(state: AirlineState, ci: number, rng: Rng): Draft | null {
   const c = state.companies[ci];
-  const ctx: Ctx = { state, ci, c, year: yearOf(state.q), q: state.q, s: choiceScale(state, ci), rng };
+  const ctx: Ctx = { state, ci, c, year: yearOf(state.q), q: state.q, t: state.t, s: choiceScale(state, ci), rng };
   const pool = SCENARIOS.filter((sc) => sc.when(ctx));
   // 섞어서 처음으로 만들어지는 것
   for (let tries = 0; tries < 6 && pool.length; tries++) {
@@ -426,7 +428,7 @@ export function aiChoose(choice: Choice, cash: number, reserve: number, easy: bo
   return ok[0].i;
 }
 
-/** 다음 결정 사건까지 (3~4분기) */
+/** 다음 결정 사건까지 (9~12달) */
 export function nextChoiceGap(rng: Rng): number {
-  return 3 + (rng() < 0.5 ? 1 : 0);
+  return 9 + Math.floor(rng() * 4);
 }

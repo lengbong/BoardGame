@@ -4,13 +4,13 @@ import { advise } from './advisor';
 import { aiTurn, planTurn } from './ai';
 import { SCENARIO_IDS, allianceScore, makeChoice } from './choices';
 import { goalMet, gradeYear, newGoals } from './goals';
-import { MAX_PLANES, actor, applyAction, choiceBlocker, createGame, hubCandidates, proposeBlocker, routeOnPair, runQuarter } from './rules';
+import { CRISIS_MONTHS, MAX_PLANES, actor, applyAction, choiceBlocker, createGame, hubCandidates, proposeBlocker, routeOnPair, runMonth } from './rules';
 import { computeQuarter, networks } from './simulate';
 import { isValidState, parseSaved } from './storage';
 import { colorDistance, coColors, gameHub, pickColors, usableColor } from './brand';
 import { CITY } from './cities';
 import { REAL_AIRLINE, airlinesAt } from './realAirlines';
-import { qOf, quarterOf, yearOf } from './time';
+import { monthOf, qOf, yearOfM } from './time';
 import type { AirlineOptions, AirlineSetup, AirlineState, Company, SeatKind } from './types';
 
 function setup(kinds: SeatKind[], options: Partial<AirlineOptions> = {}, hubs: (string | null)[] = []): AirlineSetup {
@@ -36,8 +36,8 @@ function addRoute(s: AirlineState, ci: number, a: string, b: string, model: stri
   const c = s.companies[ci];
   for (const city of [a, b]) if (!c.branches.includes(city)) c.branches.push(city);
   const rid = s.nextId++;
-  c.routes.push({ id: rid, a, b, fare: 0, since: s.q, stats: null });
-  c.planes.push({ id: s.nextId++, model, leased: true, rent: 10, deposit: 0, since: s.q, legs: [{ route: rid, freq }] });
+  c.routes.push({ id: rid, a, b, fare: 0, since: s.t, stats: null });
+  c.planes.push({ id: s.nextId++, model, leased: true, rent: 3, deposit: 0, since: s.t, legs: [{ route: rid, freq }] });
   return rid;
 }
 
@@ -101,7 +101,7 @@ describe('제휴 제안', () => {
   it('사람에게 제안하면 결정 사건이 오고, 받아들이면 제휴, 끝낼 수도 있다', () => {
     let s = twoHumans();
     s = act(s, { type: 'propose', to: 1 });
-    expect(proposeBlocker(s, 0, 1)).toContain('이미 제안');
+    expect(proposeBlocker(s, 0, 1)).toContain('석 달에 한 번');
     expect(s.companies[1].choice?.scenario).toBe('alliance');
     s = act(s, { type: 'endTurn' });
     expect(actor(s)).toBe(1);
@@ -148,7 +148,7 @@ describe('결정 사건', () => {
       ]) {
         addRoute(s, 0, a, b, era === 1963 ? 'b707' : era === 1983 ? 'b737-200' : 'a320', 3);
       }
-      s.companies[0].planes.push({ id: s.nextId++, model: era === 1963 ? 'b707' : 'a320', leased: false, rent: 0, deposit: 0, since: s.q, legs: [] });
+      s.companies[0].planes.push({ id: s.nextId++, model: era === 1963 ? 'b707' : 'a320', leased: false, rent: 0, deposit: 0, since: s.t, legs: [] });
       const here = new Set<string>();
       for (let k = 0; k < 60; k++) {
         const d = makeChoice(s, 0, seededRandom(k * 7 + era));
@@ -176,7 +176,7 @@ describe('결정 사건', () => {
       text: '시험',
       options: [
         { label: '비싼 안', desc: '현금 −9999', cost: 9999, ai: 1, effects: [{ kind: 'rep', amount: 10 }] },
-        { label: '값싼 안', desc: '평판 +4, 연료 −5%', cost: 10, ai: 0.5, effects: [{ kind: 'rep', amount: 4 }, { kind: 'mod', mod: { kind: 'fuel', value: 0.95, until: s.q + 4, label: '연료 절약' } }] },
+        { label: '값싼 안', desc: '평판 +4, 연료 −5%', cost: 10, ai: 0.5, effects: [{ kind: 'rep', amount: 4 }, { kind: 'mod', mod: { kind: 'fuel', value: 0.95, until: s.t + 12, label: '연료 절약' } }] },
         { label: '안 해요', desc: '없음', cost: 0, ai: 0, effects: [] },
       ],
     };
@@ -195,21 +195,21 @@ describe('결정 사건', () => {
     expect(u.companies[0].reputation).toBe(rep);
   });
 
-  it('회사마다 서너 분기에 한 번쯤 결정 사건이 오고, 컴퓨터는 알아서 고른다', () => {
+  it('회사마다 아홉 달~한 해에 한 번쯤 결정 사건이 오고, 컴퓨터는 알아서 고른다', () => {
     const rng = seededRandom(5);
     let s = createGame(setup(['ai-normal', 'ai-easy', 'ai-normal']), rng);
     const got = [0, 0, 0];
-    while (s.q < s.startQ + 16) {
+    while (s.t < s.startT + 48) {
       const ci = actor(s);
       if (s.companies[ci].choice) {
         got[ci]++;
-        const actions = planTurn(s, ci, s.companies[ci].kind === 'ai-easy' ? 'ai-easy' : 'ai-normal', seededRandom(s.q));
+        const actions = planTurn(s, ci, s.companies[ci].kind === 'ai-easy' ? 'ai-easy' : 'ai-normal', seededRandom(s.t));
         expect(actions.some((a) => a.type === 'choose')).toBe(true);
       }
       s = aiTurn(s, rng);
     }
     for (const n of got) {
-      expect(n).toBeGreaterThanOrEqual(2);
+      expect(n).toBeGreaterThanOrEqual(3);
       expect(n).toBeLessThanOrEqual(6);
     }
   });
@@ -219,11 +219,11 @@ describe('파산과 중고 시장', () => {
   it('파산한 회사의 내 비행기는 중고 시장에 나오고, 슬롯이 비었다는 소식이 뜬다', () => {
     let s = createGame(setup(['human', 'human', 'human']), seededRandom(1));
     const c = s.companies[0];
-    for (let i = 0; i < 3; i++) c.planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.q - 8, legs: [] });
+    for (let i = 0; i < 3; i++) c.planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.t - 24, legs: [] });
     c.cash = -99999;
     c.baseCredit = 0;
-    c.crisis = 1;
-    s = runQuarter(s, seededRandom(2));
+    c.crisis = CRISIS_MONTHS - 1;
+    s = runMonth(s, seededRandom(2));
     expect(s.companies[0].out).toBe(true);
     const fromIt = s.market.filter((u) => u.from === c.name);
     expect(fromIt).toHaveLength(3);
@@ -288,14 +288,15 @@ describe('경영 비서', () => {
 });
 
 describe('연간 목표와 평가', () => {
-  it('해마다 목표 셋을 받고, 4분기가 끝나면 등급과 평을 받고 이룬 목표만큼 상을 받는다', () => {
+  it('해마다 목표 셋을 받고, 12월이 끝나면 등급과 평을 받고 이룬 목표만큼 상을 받는다', () => {
     const rng = seededRandom(3);
     let s = createGame(setup(['ai-normal', 'ai-easy']), rng);
     expect(s.companies.every((c) => c.goals.length === 3 && c.goals.every((g) => g.done === null))).toBe(true);
-    while (quarterOf(s.q) !== 4 || s.turnPos !== 0) s = aiTurn(s, rng);
+    while (monthOf(s.t) !== 12 || s.turnPos !== 0) s = aiTurn(s, rng);
     for (let i = 0; i < s.order.length - 1; i++) s = aiTurn(s, rng);
     s = aiTurn(s, rng);
-    expect(yearOf(s.q)).toBe(2004);
+    expect(yearOfM(s.t)).toBe(2004);
+    expect(s.qReport!.companies[0].review).toBeTruthy();
     const rep = s.report!;
     for (const [ci, r] of rep.companies.entries()) {
       expect(r.review).toBeTruthy();
@@ -335,7 +336,7 @@ describe('컴퓨터 성향과 기타', () => {
       for (const seed of [1, 2]) {
         const rng = seededRandom(seed);
         let s = createGame(setup(['ai-normal', 'ai-normal'], { aiStyle }), rng);
-        while (s.q < s.startQ + 8) s = aiTurn(s, rng);
+        while (s.t < s.startT + 24) s = aiTurn(s, rng);
         total += s.companies.reduce((sum, c) => sum + c.routes.length, 0);
       }
       return total;
@@ -345,7 +346,7 @@ describe('컴퓨터 성향과 기타', () => {
 
   it(`비행기는 주문까지 ${MAX_PLANES}대까지`, () => {
     const s = twoHumans();
-    for (let i = 0; i < MAX_PLANES; i++) s.companies[0].planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.q, legs: [] });
+    for (let i = 0; i < MAX_PLANES; i++) s.companies[0].planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.t, legs: [] });
     s.companies[0].cash = 1e6;
     expect(applyAction(s, { type: 'buy', model: 'a320' })).toBe(s);
     expect(applyAction(s, { type: 'lease', model: 'a320' })).toBe(s);
@@ -354,7 +355,7 @@ describe('컴퓨터 성향과 기타', () => {
   it('시작 분기 정보', () => {
     const s = twoHumans();
     expect(s.q).toBe(qOf(2003, 1));
-    expect(s.version).toBe(2);
+    expect(s.version).toBe(3);
     expect(isValidState(JSON.parse(JSON.stringify(s)))).toBe(true);
   });
 });
@@ -437,7 +438,7 @@ describe('실제 항공사', () => {
     let s = createGame({ ...realSetup(['ai-normal', 'ai-easy', 'ai-normal', 'ai-easy'], [], 1983), options: { ...realSetup([]).options, era: 1983, years: 10, names: 'real' } }, rng);
     const names = s.companies.map((c) => c.name);
     let guard = 0;
-    while (s.phase !== 'gameover' && guard++ < 400) s = aiTurn(s, rng);
+    while (s.phase !== 'gameover' && guard++ < 2000) s = aiTurn(s, rng);
     expect(s.phase).toBe('gameover');
     expect(s.companies.map((c) => c.name)).toEqual(names);
     expect(s.news.every((n) => !n.title.includes('파산'))).toBe(true);

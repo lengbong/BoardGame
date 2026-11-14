@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { seededRandom } from '../../lib/random';
 import { MODEL } from './aircraft';
 import { dist } from './cities';
-import { createGame, runQuarter } from './rules';
+import { SEASON_MONTHS } from './calendar';
+import { createGame, runMonth } from './rules';
 import {
   SALES_RATE,
   SST_PREMIUM,
   TAX_RATE,
+  WEEKS,
   baseFare,
+  computeMonth,
   computeQuarter,
   creditLimit,
   distanceFactor,
@@ -19,7 +22,7 @@ import {
   splitMarket,
   type Offer,
 } from './simulate';
-import { qOf } from './time';
+import { mOf, qOf } from './time';
 import type { AirlineSetup, AirlineState } from './types';
 
 function base(era: 1963 | 1983 | 2003 = 2003): AirlineState {
@@ -44,23 +47,31 @@ describe('손님 수요', () => {
   it('두 도시 순서와 상관없이 같고, 시대가 지날수록 늘어난다', () => {
     const s = base();
     expect(total(pairDemand(s, 'seoul', 'tokyo'))).toBeCloseTo(total(pairDemand(s, 'tokyo', 'seoul')), 6);
-    const s63 = { ...s, q: qOf(1963, 2) };
-    const s23 = { ...s, q: qOf(2023, 2) };
+    const s63 = { ...s, t: mOf(1963, 5) };
+    const s23 = { ...s, t: mOf(2023, 5) };
     expect(total(pairDemand(s23, 'seoul', 'tokyo'))).toBeGreaterThan(total(pairDemand(s, 'seoul', 'tokyo')));
     expect(total(pairDemand(s, 'seoul', 'tokyo'))).toBeGreaterThan(total(pairDemand(s63, 'seoul', 'tokyo')) * 5);
     // 큰 두 도시 > 작은 두 도시
     expect(total(pairDemand(s, 'london', 'newyork'))).toBeGreaterThan(total(pairDemand(s, 'male', 'colombo')) * 3);
   });
 
-  it('관광 성수기: 하와이는 겨울, 아테네는 여름에 관광 손님이 많다', () => {
+  it('관광 성수기 (열두 달): 하와이·방콕은 겨울, 아테네는 여름에 관광 손님이 많다', () => {
     const s = base();
-    const at = (q: number, a: string, b: string) => pairDemand({ ...s, q }, a, b).leisure;
-    expect(at(qOf(2005, 1), 'tokyo', 'honolulu')).toBeGreaterThan(at(qOf(2005, 3), 'tokyo', 'honolulu') * 1.4);
-    expect(at(qOf(2005, 3), 'london', 'athens')).toBeGreaterThan(at(qOf(2005, 1), 'london', 'athens') * 1.4);
-    // 사업 손님은 계절을 타지 않는다 (해마다 조금씩 느는 것만)
-    const b1 = pairDemand({ ...s, q: qOf(2005, 1) }, 'london', 'frankfurt').biz;
-    const b3 = pairDemand({ ...s, q: qOf(2005, 3) }, 'london', 'frankfurt').biz;
-    expect(Math.abs(b3 / b1 - 1)).toBeLessThan(0.03);
+    const at = (t: number, a: string, b: string) => pairDemand({ ...s, t }, a, b).leisure;
+    expect(at(mOf(2005, 1), 'tokyo', 'honolulu')).toBeGreaterThan(at(mOf(2005, 8), 'tokyo', 'honolulu') * 1.4);
+    expect(at(mOf(2005, 12), 'seoul', 'bangkok')).toBeGreaterThan(at(mOf(2005, 6), 'seoul', 'bangkok') * 1.4);
+    expect(at(mOf(2005, 8), 'london', 'athens')).toBeGreaterThan(at(mOf(2005, 1), 'london', 'athens') * 1.6);
+    // 설 연휴(2월)엔 동아시아 여행이 붐빈다
+    expect(at(mOf(2005, 2), 'seoul', 'tokyo')).toBeGreaterThan(at(mOf(2005, 3), 'seoul', 'tokyo'));
+    // 사업 손님은 여름휴가철(8월) 유럽에서 줄어든다
+    const b8 = pairDemand({ ...s, t: mOf(2005, 8) }, 'london', 'frankfurt').biz;
+    const b10 = pairDemand({ ...s, t: mOf(2005, 10) }, 'london', 'frankfurt').biz;
+    expect(b8).toBeLessThan(b10 * 0.85);
+    // 열두 달 평균은 1 안팎
+    for (const season of ['flat', 'summer', 'winter', 'south'] as const) {
+      const avg = SEASON_MONTHS[season].reduce((x, y) => x + y, 0) / 12;
+      expect(Math.abs(avg - 1)).toBeLessThan(0.06);
+    }
   });
 
   it('아주 가까우면 기차·차를 타서 덜 날고, 아주 멀면 덜 간다', () => {
@@ -73,8 +84,8 @@ describe('손님 수요', () => {
 
   it('서울 올림픽 분기에는 서울을 오가는 손님이 크게 는다', () => {
     const s = base(1983);
-    const before = total(pairDemand({ ...s, q: qOf(1987, 3) }, 'seoul', 'tokyo'));
-    const during = total(pairDemand({ ...s, q: qOf(1988, 3) }, 'seoul', 'tokyo'));
+    const before = total(pairDemand({ ...s, t: mOf(1987, 9) }, 'seoul', 'tokyo'));
+    const during = total(pairDemand({ ...s, t: mOf(1988, 9) }, 'seoul', 'tokyo'));
     expect(during / before).toBeGreaterThan(1.5);
   });
 });
@@ -106,7 +117,7 @@ describe('손님 나누기', () => {
   });
 
   it('초음속기는 표가 비싸고 사업 손님을 빨리 데려간다', () => {
-    const s = { ...base(1983), q: qOf(1978, 2) };
+    const s = { ...base(1983), q: qOf(1978, 2), t: mOf(1978, 5) };
     const [sst] = splitMarket(s, 'paris', 'newyork', [offer(0, 'concorde', 7)]);
     const fare = baseFare(dist('paris', 'newyork'), s.q);
     const perPax = (sst.revenue * 10000) / (2 * (sst.biz + sst.leisure));
@@ -142,27 +153,29 @@ describe('비용과 이익', () => {
     expect(maxFreq(MODEL.concorde, d)).toBeGreaterThan(maxFreq(MODEL['b747-200'], d) * 1.5);
   });
 
-  it('어림한 노선 결과는 실제 분기 계산과 같다', () => {
+  it('어림한 노선 결과는 (운항 사건이 없을 때) 실제 달 계산과 같고, 사건이 나도 크게 다르지 않다', () => {
     let s = base();
     const c = s.companies[0];
     c.branches.push('tokyo');
-    c.routes.push({ id: 50, a: 'seoul', b: 'tokyo', fare: 10, since: s.q, stats: null });
-    c.planes.push({ id: 51, model: 'a321', leased: true, rent: 29, deposit: 0, since: s.q, legs: [{ route: 50, freq: 12 }] });
+    c.routes.push({ id: 50, a: 'seoul', b: 'tokyo', fare: 10, since: s.t, stats: null });
+    c.planes.push({ id: 51, model: 'a321', leased: true, rent: 10, deposit: 0, since: s.t, legs: [{ route: 50, freq: 12 }] });
     s.nextId = 60;
     const est = estimateRoute(s, 0, 'seoul', 'tokyo', [{ model: 'a321', freq: 12, fixed: planeFixed(c.planes[0]) }], 10);
-    const out = computeQuarter(s);
+    const out = computeMonth(s);
     const st = out.routeStats[0].get(50)!;
     expect(st.revenue).toBeCloseTo(est.revenue, 6);
     expect(st.profit).toBeCloseTo(est.profit, 6);
-    s = runQuarter(s, seededRandom(2));
-    expect(s.companies[0].routes[0].stats!.pax).toBe(Math.round(est.paxWeek * 26));
+    s = runMonth(s, seededRandom(2));
+    const pax = s.companies[0].routes[0].stats!.pax;
+    expect(pax).toBeLessThanOrEqual(Math.round(est.paxWeek * 2 * WEEKS) + 1);
+    expect(pax).toBeGreaterThan(est.paxWeek * 2 * WEEKS * 0.8);
   });
 
   it('이익이 날 때만 법인세를 내고, 대출 한도는 내 비행기 가치에 따라 는다', () => {
     const s = base();
     s.companies[0].branches.push('tokyo');
-    s.companies[0].routes.push({ id: 50, a: 'seoul', b: 'tokyo', fare: 0, since: s.q, stats: null });
-    s.companies[0].planes.push({ id: 51, model: 'b737-800', leased: false, rent: 0, deposit: 0, since: s.q, legs: [{ route: 50, freq: 20 }] });
+    s.companies[0].routes.push({ id: 50, a: 'seoul', b: 'tokyo', fare: 0, since: s.t, stats: null });
+    s.companies[0].planes.push({ id: 51, model: 'b737-800', leased: false, rent: 0, deposit: 0, since: s.t, legs: [{ route: 50, freq: 20 }] });
     s.nextId = 60;
     const r = computeQuarter(s).reports;
     expect(r[0].tax).toBeCloseTo(Math.max(0, (r[0].profit + r[0].tax) * TAX_RATE), 6);

@@ -50,7 +50,7 @@ function playOut(kinds: SeatKind[], seed: number, options: Partial<AirlineOption
   let s = createGame(setup(kinds, options), rng);
   let turns = 0;
   let worst = 0;
-  while (s.phase !== 'gameover' && turns < 1000) {
+  while (s.phase !== 'gameover' && turns < 4000) {
     const t0 = performance.now();
     s = aiTurn(s, rng);
     worst = Math.max(worst, performance.now() - t0);
@@ -98,7 +98,7 @@ describe('컴퓨터 항공사', () => {
     let s = createGame(setup(['ai-normal', 'human'], {}, [null, 'london']), seededRandom(7));
     s = aiManage(s, 0, 'ai-normal', seededRandom(7));
     const c = s.companies[0];
-    c.planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.q, legs: [] });
+    c.planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.t, legs: [] });
     c.cash = -30;
     c.crisis = 1;
     c.ads.eastasia = 50;
@@ -133,6 +133,7 @@ describe('컴퓨터끼리 끝까지', () => {
       expect(v).toBeLessThan(500000);
     }
     expect(s.history.length).toBe(81);
+    expect(s.months.length).toBe(241);
     expect(worst).toBeLessThan(300);
   });
 

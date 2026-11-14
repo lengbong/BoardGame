@@ -6,6 +6,7 @@ import { CHALLENGE } from './challenges';
 import { CITY, REGIONS } from './cities';
 import { REAL_AIRLINE } from './realAirlines';
 import { DEFAULT_OPTIONS, GOAL_VALUES } from './rules';
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { AirlineOptions, AirlineSetup, AirlineState, Choice, Company, GoalKind, ModKind, YearAcc } from './types';
 
 const SAVE_KEY = 'family-boardgame.airline.save.v1';
@@ -72,7 +73,7 @@ export function isValidSetup(v: unknown): v is AirlineSetup {
 
 const MOD_KINDS: ModKind[] = ['crew', 'fuelHedge', 'fuel', 'demand', 'service', 'sales', 'slot', 'discount', 'subsidy'];
 const GOAL_KINDS: GoalKind[] = ['lf', 'profit4', 'region', 'routes', 'pax', 'value', 'fleet', 'xfer'];
-const ACC_KEYS: (keyof YearAcc)[] = ['year', 'pax', 'seats', 'xfer', 'revenue', 'profit', 'profitQ', 'quarters', 'bought', 'startValue', 'startRegions', 'startRoutes', 'lastPax'];
+const ACC_KEYS: (keyof YearAcc)[] = ['year', 'pax', 'seats', 'xfer', 'revenue', 'profit', 'profitQ', 'qProfit', 'quarters', 'bought', 'startValue', 'startRegions', 'startRoutes', 'lastPax'];
 
 function isValidChoice(v: unknown): v is Choice {
   if (!isObj(v)) return false;
@@ -92,7 +93,7 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
   const routeIds = new Set<number>();
   for (const r of k.routes) {
     if (!isObj(r) || !isInt(r.id) || r.id >= nextId || !isCity(r.a) || !isCity(r.b) || r.a === r.b || !isInt(r.fare) || r.fare < -30 || r.fare > 30 || !isInt(r.since)) return false;
-    if (r.stats !== null && !(isObj(r.stats) && isNum(r.stats.lf) && isNum(r.stats.profit) && isInt(r.stats.lossStreak))) return false;
+    if (r.stats !== null && !(isObj(r.stats) && isNum(r.stats.lf) && isNum(r.stats.profit) && isInt(r.stats.lossStreak) && isNum(r.stats.onTime) && isNum(r.stats.cancel) && Array.isArray(r.stats.hist))) return false;
     routeIds.add(r.id);
   }
   if (!Array.isArray(k.planes)) return false;
@@ -104,7 +105,8 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
   if (!Array.isArray(k.orders) || !k.orders.every((o) => isObj(o) && isInt(o.id) && o.id < nextId && typeof o.model === 'string' && !!MODEL[o.model] && isInt(o.due) && isNum(o.price))) return false;
   if (!Array.isArray(k.mods) || !k.mods.every((m) => isObj(m) && isInt(m.id) && MOD_KINDS.includes(m.kind) && isNum(m.value) && isInt(m.until) && typeof m.label === 'string')) return false;
   if (k.choice !== null && !isValidChoice(k.choice)) return false;
-  if (!isInt(k.nextChoiceQ) || !isInt(k.lastProposal) || !isInt(k.taken)) return false;
+  if (!isInt(k.nextChoiceT) || !isInt(k.lastProposal) || !isInt(k.taken)) return false;
+  if (!isInt(k.maint) || k.maint < 1 || k.maint > 5 || !isInt(k.crewReserve) || k.crewReserve < 0 || k.crewReserve > 2 || !isNum(k.onTime)) return false;
   if (k.partner !== null && !isInt(k.partner)) return false;
   if (!Array.isArray(k.goals) || !k.goals.every((g) => isObj(g) && GOAL_KINDS.includes(g.kind) && isNum(g.target) && typeof g.text === 'string' && isObj(g.reward) && isNum(g.reward.cash) && isNum(g.reward.rep) && (g.done === null || typeof g.done === 'boolean'))) return false;
   if (!isObj(k.acc) || !ACC_KEYS.every((key) => isNum((k.acc as unknown as Record<string, unknown>)[key]))) return false;
@@ -123,8 +125,8 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
 export function isValidState(v: unknown): v is AirlineState {
   if (!isObj(v)) return false;
   const s = v as unknown as AirlineState;
-  if (s.version !== 2) return false;
-  if (!isInt(s.nextId) || !isInt(s.q) || !isInt(s.startQ) || s.startQ > s.q || !isInt(s.startYear)) return false;
+  if (s.version !== 3) return false;
+  if (!isInt(s.nextId) || !isInt(s.t) || !isInt(s.startT) || s.startT > s.t || s.q !== Math.floor(s.t / 3) || s.startQ !== Math.floor(s.startT / 3) || !isInt(s.startYear)) return false;
   if (s.phase !== 'manage' && s.phase !== 'gameover') return false;
   if (!Array.isArray(s.companies) || s.companies.length < 1 || s.companies.length > 4) return false;
   if (!s.companies.every((c) => isValidCompany(c, s.nextId))) return false;
@@ -137,16 +139,77 @@ export function isValidState(v: unknown): v is AirlineState {
   if (!Array.isArray(s.priceWars) || !s.priceWars.every((w) => typeof w === 'string')) return false;
   if (!Array.isArray(s.effects) || !isObj(s.slotBoost) || !Array.isArray(s.news) || !Array.isArray(s.history) || !Array.isArray(s.log)) return false;
   if (!s.history.every((h) => isObj(h) && isInt(h.q) && Array.isArray(h.value) && h.value.length === n)) return false;
-  if (s.report !== null && !(isObj(s.report) && Array.isArray(s.report.companies) && s.report.companies.length === n && Array.isArray(s.report.routes) && Array.isArray(s.report.xfers))) return false;
+  const okReport = (r: unknown) => r === null || (isObj(r) && Array.isArray((r as { companies: unknown[] }).companies) && (r as { companies: unknown[] }).companies.length === n && Array.isArray((r as { routes: unknown }).routes) && Array.isArray((r as { xfers: unknown }).xfers) && Array.isArray((r as { ops: unknown }).ops));
+  if (!okReport(s.report) || !okReport(s.qReport)) return false;
+  if (!Array.isArray(s.ledger) || !s.ledger.every(okReport)) return false;
+  if (!Array.isArray(s.months) || !s.months.every((m) => isObj(m) && isInt(m.t) && Array.isArray(m.value) && m.value.length === n)) return false;
+  if (!Array.isArray(s.years) || !s.years.every((y) => isObj(y) && isInt(y.year) && Array.isArray(y.companies))) return false;
+  if (!s.news.every((x) => isObj(x) && isInt(x.t))) return false;
   if (s.challenge !== null && !(isObj(s.challenge) && typeof s.challenge.id === 'string' && CHALLENGE[s.challenge.id] && isIndex(s.challenge.company, n))) return false;
   if (s.result !== null && !(isObj(s.result) && Array.isArray(s.result.winners))) return false;
   if (!isInt(s.nextEventId) || !isInt(s.nextLogId)) return false;
   return true;
 }
 
+/**
+ * 2판(한 차례 = 한 분기) 저장을 3판(한 차례 = 한 달)으로 바꾼다: 분기는 그 분기의 첫 달로,
+ * 분기 값(리스료·광고비)은 달 값으로. 결산은 비우고 그래프 기록은 분기 것만 남긴다.
+ */
+export function migrateV2(v: unknown): unknown {
+  if (!isObj(v) || v.version !== 2) return v;
+  const s = JSON.parse(JSON.stringify(v)) as Record<string, any>;
+  const m3 = (x: unknown) => (isInt(x) ? x * 3 : x);
+  s.version = 3;
+  s.t = m3(s.q);
+  s.startT = m3(s.startQ);
+  for (const c of Array.isArray(s.companies) ? s.companies : []) {
+    if (!isObj(c)) continue;
+    for (const p of Array.isArray(c.planes) ? c.planes : []) {
+      if (!isObj(p)) continue;
+      p.since = m3(p.since);
+      if (isNum(p.rent)) p.rent = Math.round((p.rent / 3) * 10) / 10;
+    }
+    for (const r of Array.isArray(c.routes) ? c.routes : []) {
+      if (!isObj(r)) continue;
+      r.since = m3(r.since);
+      if (isObj(r.stats)) {
+        const st = r.stats as Record<string, any>;
+        r.stats = { ...st, onTime: 0.85, cancel: 0, hist: [], lossStreak: isInt(st.lossStreak) ? st.lossStreak * 3 : 0 };
+      }
+    }
+    for (const m of Array.isArray(c.mods) ? c.mods : []) if (isObj(m)) m.until = m3(m.until);
+    for (const o of Array.isArray(c.orders) ? c.orders : []) if (isObj(o)) o.due = m3(o.due);
+    c.nextChoiceT = m3(c.nextChoiceQ);
+    delete c.nextChoiceQ;
+    c.lastProposal = m3(c.lastProposal);
+    c.maint = 3;
+    c.crewReserve = 1;
+    c.onTime = 0.85;
+    c.taken = 0;
+    if (isObj(c.ads)) for (const k of Object.keys(c.ads)) if (isNum(c.ads[k])) c.ads[k] = Math.round(c.ads[k] / 3);
+    if (isObj(c.acc)) c.acc.qProfit = 0;
+  }
+  for (const e of Array.isArray(s.effects) ? s.effects : []) if (isObj(e)) e.until = m3(e.until);
+  for (const u of Array.isArray(s.market) ? s.market : []) if (isObj(u)) u.listed = m3(u.listed);
+  for (const nItem of Array.isArray(s.news) ? s.news : []) {
+    if (!isObj(nItem)) continue;
+    nItem.t = m3(nItem.q);
+    delete nItem.q;
+  }
+  if (isObj(s.challenge) && isInt(s.challenge.deadline)) s.challenge.deadline = s.challenge.deadline * 3 + 2;
+  s.report = null;
+  s.qReport = null;
+  s.ledger = [];
+  s.months = [];
+  s.years = [];
+  s.events = [];
+  return s;
+}
+
 export function parseSaved(v: unknown): SavedAirlineGame | null {
   if (!isObj(v)) return null;
-  const saved = v as unknown as SavedAirlineGame;
+  const saved = { ...(v as unknown as SavedAirlineGame) };
+  saved.state = migrateV2(saved.state) as AirlineState;
   if (!isValidSetup(saved.setup) || !isValidState(saved.state)) return null;
   const options = parseOptions(saved.state.options);
   // 항공사 자료가 바뀌어 없어진 항공사는 가상 항공사로 (이름·색은 그대로)
@@ -189,7 +252,7 @@ export function saveAirlineSetup(setup: AirlineSetup): void {
  * think: 컴퓨터가 한 행동마다 쉬는 시간, turn: 차례 알림, sim: 분기 계산 연출(비행기가 나는 시간), fx: 연출을 보여 줄지
  */
 export const AIRLINE_DELAYS: Record<Speed, { think: number; step: number; turn: number; sim: number; fx: boolean }> = {
-  normal: { think: 700, step: 260, turn: 900, sim: 1800, fx: true },
-  fast: { think: 350, step: 110, turn: 600, sim: 1000, fx: true },
-  turbo: { think: 30, step: 0, turn: 0, sim: 0, fx: false },
+  normal: { think: 380, step: 140, turn: 520, sim: 900, fx: true },
+  fast: { think: 160, step: 60, turn: 260, sim: 450, fx: true },
+  turbo: { think: 20, step: 0, turn: 0, sim: 0, fx: false },
 };

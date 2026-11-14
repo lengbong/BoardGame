@@ -162,7 +162,7 @@ export function isAvailable(model: ModelDef, year: number): boolean {
 /** 새로 주문하면 인도까지 걸리는 분기 수: 막 나온 인기 기종일수록 오래 기다린다 */
 export function leadTime(model: ModelDef, year: number): number {
   const age = year - model.intro;
-  return age < 2 ? 4 : age < 4 ? 3 : age < 8 ? 2 : 1;
+  return age < 2 ? 12 : age < 4 ? 9 : age < 8 ? 6 : 3;
 }
 
 /** 처음 사는 손님(론치 고객) 할인: 나온 지 2년 안에는 15% 싸다 */

@@ -87,10 +87,11 @@ describe('기종', () => {
 });
 
 describe('사건과 도전 과제', () => {
-  it('올림픽·엑스포는 게임 도시에서 열린 진짜 해이고, 분기는 1~4', () => {
+  it('올림픽·엑스포는 게임 도시에서 열린 진짜 해이고, 달은 1~12', () => {
     for (const e of FIXED_EVENTS) {
       expect(CITY[e.city]).toBeTruthy();
-      expect(e.quarters.every((q) => q >= 1 && q <= 4)).toBe(true);
+      expect(e.months.length).toBeGreaterThan(0);
+      expect(e.months.every((m) => m >= 1 && m <= 12)).toBe(true);
     }
     const key = (e: (typeof FIXED_EVENTS)[number]) => `${e.year}-${e.city}-${e.kind}`;
     const keys = FIXED_EVENTS.map(key);

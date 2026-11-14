@@ -1,4 +1,6 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { FirstGuide, hasSeenGuide } from './components/FirstGuide';
+import { GUIDES } from './games/guides';
 import { CATEGORIES, GAMES } from './games/registry';
 import { loadStats, statsText } from './lib/stats';
 import { openFromHub, useHashRoute } from './lib/useHashRoute';
@@ -24,6 +26,12 @@ export function App() {
   const stats = useMemo(() => (game ? {} : loadStats()), [game]);
   const totalWins = Object.values(stats).reduce((n, st) => n + st.wins, 0);
 
+  /** 안내를 보여 줄 게임 (처음 여는 게임이면 저절로, ❓를 누르면 다시) */
+  const [guide, setGuide] = useState<string | null>(null);
+  useEffect(() => {
+    setGuide(gameId && GUIDES[gameId] && !hasSeenGuide(gameId) ? gameId : null);
+  }, [gameId]);
+
   // 게임을 열거나 닫을 때 맨 위에서 시작한다. (좁은 화면에서 처음 화면의 스크롤 위치가 남지 않게)
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -31,9 +39,16 @@ export function App() {
 
   if (game) {
     const Game = game.component;
+    const steps = GUIDES[game.id];
     return (
       <main className="app">
         <Game onExit={() => setGameId(null)} />
+        {steps && (
+          <button type="button" className="guide-open" onClick={() => setGuide(game.id)} aria-label="놀이 방법 보기" title="놀이 방법 보기" data-testid="guide-open">
+            ❓
+          </button>
+        )}
+        {steps && guide === game.id && <FirstGuide gameId={game.id} title={game.title} steps={steps} onClose={() => setGuide(null)} />}
       </main>
     );
   }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useScrollTop } from '../../lib/useScrollTop';
 import { useGameSettings } from '../common/settings';
 import { DominoGame } from './DominoGame';
 import { DominoSetup } from './DominoSetup';
@@ -14,6 +15,7 @@ export function DominoApp({ onExit }: { onExit: () => void }) {
   const [saved, setSaved] = useState<SavedDominoGame | null>(loadSavedDominoGame);
   const [lastSetup, setLastSetup] = useState<Setup>(loadDominoSetup);
   const [screen, setScreen] = useState<Screen>({ type: 'setup' });
+  useScrollTop('key' in screen ? screen.key : screen.type);
 
   const start = (setup: Setup) => {
     saveDominoSetup(setup);

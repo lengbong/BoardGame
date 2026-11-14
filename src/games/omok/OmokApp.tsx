@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useScrollTop } from '../../lib/useScrollTop';
 import { useGameSettings } from '../common/settings';
 import { OmokGame } from './OmokGame';
 import { OmokSetupScreen } from './OmokSetup';
@@ -15,11 +16,7 @@ export function OmokApp({ onExit }: { onExit: () => void }) {
   const [saved, setSaved] = useState<SavedOmokGame | null>(loadSavedOmokGame);
   const [lastSetup, setLastSetup] = useState<OmokSetup>(loadOmokSetup);
   const [screen, setScreen] = useState<Screen>({ type: 'setup' });
-
-  // 설정 화면 맨 아래에서 시작해도 게임은 맨 위부터 보이게 (좁은 화면에서 판이 가려지지 않게)
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [screen]);
+  useScrollTop('key' in screen ? screen.key : screen.type);
 
   const start = (setup: OmokSetup) => {
     saveOmokSetup(setup);

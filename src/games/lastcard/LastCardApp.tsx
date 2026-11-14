@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useScrollTop } from '../../lib/useScrollTop';
 import { setMuted } from '../../lib/sound';
 import { createGame } from './rules';
 import { LastCardGame } from './LastCardGame';
@@ -22,6 +23,7 @@ export function LastCardApp({ onExit }: { onExit: () => void }) {
   const [saved, setSaved] = useState<SavedLastCardGame | null>(loadSavedLastCardGame);
   const [lastSetup, setLastSetup] = useState<Setup>(loadLastCardSetup);
   const [screen, setScreen] = useState<Screen>({ type: 'setup' });
+  useScrollTop('key' in screen ? screen.key : screen.type);
 
   useEffect(() => {
     setMuted(settings.muted);

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useScrollTop } from '../../lib/useScrollTop';
 import { useGameSettings } from '../common/settings';
 import { BoxesGame } from './BoxesGame';
 import { BoxesSetup } from './BoxesSetup';
@@ -15,6 +16,7 @@ export function BoxesApp({ onExit }: { onExit: () => void }) {
   const [saved, setSaved] = useState<SavedBoxesGame | null>(loadSavedBoxesGame);
   const [lastSetup, setLastSetup] = useState<Setup>(loadBoxesSetup);
   const [screen, setScreen] = useState<Screen>({ type: 'setup' });
+  useScrollTop('key' in screen ? screen.key : screen.type);
 
   // 화면이 바뀌면 맨 위부터 보이게 (좁은 화면에서 설정 화면 아래쪽 시작 버튼을 누른 경우)
   const screenKey = screen.type === 'game' ? screen.key : 0;

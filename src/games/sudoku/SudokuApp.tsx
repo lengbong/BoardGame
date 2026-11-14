@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useScrollTop } from '../../lib/useScrollTop';
 import { useGameSettings } from '../common/settings';
 import { getPuzzle, randomSeed } from './generator';
 import { PrintStudio } from './PrintStudio';
@@ -27,6 +28,7 @@ export function SudokuApp({ onExit }: { onExit: () => void }) {
   const [saved, setSaved] = useState<SavedSudokuGame | null>(loadSavedGame);
   const [records, setRecords] = useState<SudokuRecords>(loadRecords);
   const [screen, setScreen] = useState<Screen>({ type: 'setup', busy: false });
+  useScrollTop('key' in screen ? screen.key : screen.type);
   const recordsRef = useRef(records);
   recordsRef.current = records;
   const genTimer = useRef(0);

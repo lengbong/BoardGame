@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useScrollTop } from '../../lib/useScrollTop';
 import { useGameSettings } from '../common/settings';
 import { FourLineGame } from './FourLineGame';
 import { FourLineSetup } from './FourLineSetup';
@@ -15,6 +16,7 @@ export function FourLineApp({ onExit }: { onExit: () => void }) {
   const [saved, setSaved] = useState<SavedFourLineGame | null>(loadSavedFourLineGame);
   const [lastSetup, setLastSetup] = useState<Setup>(loadFourLineSetup);
   const [screen, setScreen] = useState<Screen>({ type: 'setup' });
+  useScrollTop('key' in screen ? screen.key : screen.type);
 
   const start = (setup: Setup) => {
     saveFourLineSetup(setup);

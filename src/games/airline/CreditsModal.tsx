@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ALL_CREDITS } from './images';
 
-const KINDS: { id: 'all' | 'aircraft' | 'cities' | 'airlines'; label: string }[] = [
+const KINDS: { id: 'all' | 'cities' | 'airlines'; label: string }[] = [
   { id: 'all', label: '전체' },
-  { id: 'aircraft', label: '기종' },
   { id: 'cities', label: '도시' },
   { id: 'airlines', label: '항공사' },
 ];
@@ -30,8 +29,8 @@ export function CreditsModal({ onClose }: { onClose: () => void }) {
       <div className="result-card al-credits" onClick={(e) => e.stopPropagation()} data-testid="al-credits">
         <h2 id="al-credits-title">📷 사진 출처</h2>
         <p className="al-muted">
-          기종·도시·항공사 사진은 위키미디어 공용(Wikimedia Commons)에서 자유 라이선스로 공개된 사진을 작게 줄여 썼어요. 사진마다 지은이와 라이선스는 아래와 같아요. 항공사 로고는 쓰지 않았어요. 사진이 없는 곳은 직접 그린 그림을
-          보여 줘요.
+          도시·항공사 사진은 위키미디어 공용(Wikimedia Commons)에서 자유 라이선스로 공개된 사진을 작게 줄여 썼어요. 사진마다 지은이와 라이선스는 아래와 같아요. 항공사 로고는 쓰지 않았어요. 사진이 없는 곳은 직접 그린 그림을
+          보여 줘요. 기종 그림은 사진 대신 실제 길이·날개폭·엔진 자리를 바탕으로 직접 그린 그림이에요.
         </p>
         <div className="al-sort" role="group" aria-label="종류">
           {KINDS.map((k) => (

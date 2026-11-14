@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { coColors } from './brand';
 import { MODEL, availableModels } from './aircraft';
 import { openSuggestion, type Candidate } from './ai';
-import { PlaneArt, SEAT_SHAPES } from './Art';
+import { SEAT_SHAPES } from './Art';
+import { PlaneImage } from './PlaneImage';
 import { AIRPORT_INFO, CITIES, CITY, REGIONS, REGION_INFO, airportClass, dist, pairKey } from './cities';
 import { fareText, fmtMoney, fmtPax, km, pct, signedMoney } from './format';
 import { FARE_MAX, FARE_MIN, applyAction, assignBlocker, bestFreq, buyBlocker, depositFor, maxRangeNow, routeBlocker, routeOnPair, usedBlocker } from './rules';
@@ -224,7 +225,7 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
                 const use = planeHours(me, p) / WEEK_HOURS;
                 return (
                   <li key={p.id}>
-                    <PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={SEAT_SHAPES[me.seat]} width={58} />
+                    <PlaneImage model={m.id} paint={{ main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] }} className="al-plane-chip" />
                     <span className="al-pr-name">
                       <b>{m.name}</b>
                       <small>
@@ -612,7 +613,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                 <ul className="al-options">
                   {options.map((o) => (
                     <li key={o.m.id}>
-                      <PlaneArt body={o.m.body} engines={o.m.engines} color={color.main} dark={color.dark} shape={SEAT_SHAPES[me.seat]} width={70} />
+                      <PlaneImage model={o.m.id} paint={{ main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] }} className="al-plane-chip al-plane-chip-big" />
                       <span className="al-opt-text">
                         <b>{o.m.name}</b>
                         <small>
@@ -654,7 +655,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                   <ul className="al-options">
                     {mine.map((o) => (
                       <li key={o.p.id}>
-                        <PlaneArt body={o.m.body} engines={o.m.engines} color={color.main} dark={color.dark} shape={SEAT_SHAPES[me.seat]} width={70} />
+                        <PlaneImage model={o.m.id} paint={{ main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] }} className="al-plane-chip al-plane-chip-big" />
                         <span className="al-opt-text">
                           <b>{o.m.name}</b>
                           <small>

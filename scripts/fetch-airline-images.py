@@ -2,10 +2,11 @@
 """
 '하늘길 항공사' 사진을 위키미디어 공용(Wikimedia Commons)에서 받아온다.
 
-- 기종(aircraft) · 도시(cities) · 실제 항공사(airlines) 사진을 위키미디어 공용 검색으로 찾고,
+- 도시(cities) · 실제 항공사(airlines) 사진을 위키미디어 공용 검색으로 찾고,
   자유 라이선스(퍼블릭 도메인, CC0, CC BY, CC BY-SA) 사진만 쓴다. GFDL만 있는 것, NC/ND, 알 수 없는 것은 쓰지 않는다.
 - 로고·문장·도색 그림 같은 그림 파일은 받지 않고 사진(JPEG)만 받는다. 사람이 주인공인 사진도 피한다.
-- 기종·항공사는 16:9로 잘라 400x225, 도시는 4:3으로 잘라 320x240 WebP로 저장하고,
+- 기종 그림은 사진 대신 aircraftShapes.ts의 실제 치수로 그린 SVG를 쓴다 (이 스크립트는 받지 않는다).
+- 항공사는 16:9로 잘라 400x225, 도시는 4:3으로 잘라 320x240 WebP로 저장하고,
   출처/저작자/라이선스를 src/games/airline/imageCredits.ts로 기록한다.
 - 한 번 고른 사진은 아래 FILES에 파일 이름을 적어 두어서 다시 실행해도 같은 사진을 받는다.
   FILES에 없는 것만 검색해서 고른다.
@@ -13,8 +14,8 @@
 
 사용법:
   python3 scripts/fetch-airline-images.py                              # 전부 받기 (FILES에 고정한 사진)
-  python3 scripts/fetch-airline-images.py --only cities/seoul,aircraft # 일부만
-  python3 scripts/fetch-airline-images.py --list --search --only aircraft/f27 --preview /tmp/f27.png
+  python3 scripts/fetch-airline-images.py --only cities/seoul,airlines # 일부만
+  python3 scripts/fetch-airline-images.py --list --search --only airlines/klm --preview /tmp/klm.png
       # FILES를 무시하고 검색 후보를 번호와 함께 보여 주고, 후보 사진을 한 장으로 모아 저장 (받지는 않음)
       # → 마음에 드는 후보의 파일 이름을 FILES에 적고 --only 로 다시 받는다
   --cache 폴더를 주면 받은 응답·사진을 저장해 두어 여러 번 해 볼 때 서버에 다시 묻지 않는다.
@@ -49,7 +50,6 @@ TOTAL_LIMIT = 2_200_000
 
 # 종류마다: 저장 크기, id를 읽어 올 파일과 정규식
 KINDS = {
-    "aircraft": {"size": (400, 225), "ids": (GAME / "aircraft.ts", r"^\s*\['([a-z0-9-]+)',")},
     "cities": {"size": (320, 240), "ids": (GAME / "cities.ts", r"^\s*\['([a-z0-9-]+)',")},
     "airlines": {"size": (400, 225), "ids": (GAME / "realAirlines.ts", r"\bid: '([a-z0-9-]+)'")},
 }
@@ -62,56 +62,6 @@ KINDS = {
 #   zoom:  1보다 크면 그만큼 더 가까이 잘라 냄 (비행기가 작게 찍힌 사진)
 #   fit:   True면 자르지 않고 전체를 넣고 남는 곳은 흐린 배경으로 채움 (아주 높은 탑)
 #   author: 저작자 표시를 직접 지정 (원본 저작자 칸이 너무 길 때)
-AIRCRAFT = {
-    "f27": {"q": "Fokker F27 Friendship", "must": r"F\.? ?27|Fokker"},
-    "caravelle": {"q": "Sud Aviation Caravelle airliner", "must": r"Caravelle"},
-    # 남은 자유 라이선스 사진이 드물어 박물관 전시기. 옆으로 긴 사진이라 자르지 않고 전체를 넣는다
-    "dc8-50": {"q": "DC-8-53 OR DC-8-55 OR DC-8-52 OR DC-8-54", "must": r"DC-8-5\d", "fit": True},
-    "b707": {"q": "Boeing 707-320B", "must": r"707-3\w\w"},
-    "b727-100": {"q": "Boeing 727-100 airliner", "must": r"727-1\w\w", "not": r"[Mm]useum"},
-    "dc9": {"q": "McDonnell Douglas DC-9-30", "must": r"DC-9-3\d"},
-    "b727-200": {"q": "Boeing 727-200", "must": r"727-2\w\w"},
-    "dc8-63": {"q": "Douglas DC-8-63", "must": r"DC-8-6\d"},
-    "b737-200": {"q": "Boeing 737-200", "must": r"737-2\w\w"},
-    "b747-100": {"q": "Boeing 747-100", "must": r"747-1\w\w"},
-    "b747-200": {"q": "Boeing 747-200", "must": r"747-2\w\w"},
-    "dc10": {"q": "McDonnell Douglas DC-10-30", "must": r"DC-10"},
-    "l1011": {"q": "Lockheed L-1011 TriStar", "must": r"1011|Tri[Ss]tar"},
-    "a300b4": {"q": "Airbus A300B4", "must": r"A300 ?B4", "not": r"B4-6"},
-    "concorde": {"q": "Concorde airliner", "must": r"Concorde"},
-    "md82": {"q": "McDonnell Douglas MD-82", "must": r"MD-8[12]", "not": r"Volandia|[Mm]useum"},
-    "b767-200": {"q": "Boeing 767-200", "must": r"767-2\w\w"},
-    "b757": {"q": "Boeing 757-200", "must": r"757-2\w\w"},
-    "b737-300": {"q": "Boeing 737-300", "must": r"737-3\w\w"},
-    "a310": {"q": "Airbus A310-300", "must": r"A310"},
-    "a300-600": {"q": "Airbus A300-600R", "must": r"A300-6|A300B4-6|A300-600"},
-    "b767-300": {"q": "Boeing 767-300ER", "must": r"767-3\w\w"},
-    "a320": {"q": "Airbus A320-200", "must": r"A320-2\d\d|A320-200", "not": r"neo|A320-2\d\dN"},
-    "f100": {"q": "Fokker 100", "must": r"Fokker 100|F100|F-100"},
-    "atr72": {"q": "ATR 72-600", "must": r"ATR[ -]?72"},
-    "b747-400": {"q": "Boeing 747-400", "must": r"747-4\w\w"},
-    "md11": {"q": "McDonnell Douglas MD-11 landing", "must": r"MD-11"},
-    "crj200": {"q": "Bombardier CRJ200", "must": r"CRJ[ -]?200|CL-600-2B19"},
-    "a340-300": {"q": "Airbus A340-300", "must": r"A340-3\d\d"},
-    "a330-300": {"q": "Airbus A330-300", "must": r"A330-3\d\d", "not": r"neo|A330-9"},
-    "a321": {"q": "Airbus A321-200", "must": r"A321-[12]\d\d", "not": r"neo|A321-2\d\dN"},
-    "b777-200": {"q": "Boeing 777-200ER", "must": r"777-2\w\w ?\(?ER|777-200ER"},
-    "b737-800": {"q": "Boeing 737-800", "must": r"737-8\w\w\b", "not": r"MAX"},
-    "q400": {"q": "Bombardier Dash 8 Q400", "must": r"Q400|DHC-8-4\d\d|Dash 8-400", "zoom": 1.6, "fy": 0.55},
-    "a340-600": {"q": "Airbus A340-642", "must": r"A340-6\d\d"},
-    "b777-300": {"q": "Boeing 777-300ER", "must": r"777-3\w\w ?\(?ER|777-300ER"},
-    "e190": {"q": "Embraer E190", "must": r"E190|E-190|ERJ[ -]?190|Embraer 190"},
-    "a380": {"q": "Airbus A380-800", "must": r"A380"},
-    "b787-8": {"q": "Boeing 787-8 Dreamliner", "must": r"787-8"},
-    "b787-9": {"q": "Boeing 787-9 Dreamliner", "must": r"787-9"},
-    "a350-900": {"q": "Airbus A350-941 landing", "must": r"A350-9\d\d"},
-    "a220-300": {"q": "Airbus A220-300", "must": r"A220-300|BD-500-1A11|CS300"},
-    "a320neo": {"q": "Airbus A320neo", "must": r"A320 ?neo|A320-2\d\dN"},
-    "a321neo": {"q": "Airbus A321neo", "must": r"A321 ?neo|A321-2\d\dN"},
-    "a330-900": {"q": "Airbus A330-900neo", "must": r"A330-9\d\d|A330 ?neo"},
-    "a350-1000": {"q": "Airbus A350-1000", "must": r"A350-10\d\d|A350-1000"},
-}
-
 CITIES = {
     "seoul": {"q": "Gyeongbokgung Geunjeongjeon", "must": r"Gyeongbok|Geunjeong"},
     "busan": {"q": "Haeundae Busan skyline"},
@@ -226,57 +176,10 @@ AIRLINES = {
     "aerolineas": {"q": "Aerolineas Argentinas Airbus A330", "must": r"Aerol[ií]neas Argentinas"},
 }
 
-CONFIG = {"aircraft": AIRCRAFT, "cities": CITIES, "airlines": AIRLINES}
+CONFIG = {"cities": CITIES, "airlines": AIRLINES}
 
 # 고른 사진 (다시 실행해도 같은 사진을 받도록 고정). 키는 '종류/id'
 FILES: dict[str, str] = {
-    # aircraft
-    "aircraft/a220-300": "File:JetBlue Airways Airbus A220-300 N3132J departing Boston November 2025.jpg",
-    "aircraft/a300-600": "File:Airbus A300-600R Egyptair SU-GAR.jpg",
-    "aircraft/a300b4": "File:Airbus A300B4-203 Airbus Industrie (AIB) F-WUAB - MSN 238 (3291919477).jpg",
-    "aircraft/a310": "File:Leipzig Halle Airport Pakistan International Airlines Airbus A310-308 AP-BEQ (DSC07738).jpg",
-    "aircraft/a320": "File:Lufthansa Airbus A320-211 D-AIQT 01.jpg",
-    "aircraft/a320neo": "File:IndiGo VT-IJB A320neo Mumbai Apr22 R16 05934.jpg",
-    "aircraft/a321": "File:Middle East Airlines A321-200 (F-ORMF) landing at London Heathrow Airport.jpg",
-    "aircraft/a321neo": "File:China Airlines Airbus A321neo B-18102 departing Taoyuan February 2026.jpg",
-    "aircraft/a330-300": "File:Oman Air Airbus A330-343 A4O-DI MUC 2015 02.jpg",
-    "aircraft/a330-900": "File:Virgin Atlantic Airbus A330-900neo G-VLDY on final approach to Boston Feb 2025.jpg",
-    "aircraft/a340-300": "File:South African Airways Airbus A340-313 ZS-SXE MUC 2015 02.jpg",
-    "aircraft/a340-600": "File:Airbus A340-642 - Iberia - EC-JLE.jpg",
-    "aircraft/a350-1000": "File:Starlux Airbus A350-1000 B-58551 departing Taoyuan February 2026 4.jpg",
-    "aircraft/a350-900": "File:Lufthansa Airbus A350-941 D-AIXA STR 2016 02.jpg",
-    "aircraft/a380": "File:Emirates Airbus A380-861 A6-EER MUC 2015 01.jpg",
-    "aircraft/atr72": "File:Indigo ATR72 VT-IYG Approach Chennai Aug22 A7C 02270.jpg",
-    "aircraft/b707": "File:Boeing 707-330B (Lufthansa D-ABUF \"Hannover\", Anfang 1980er Jahre).jpg",
-    "aircraft/b727-100": "File:Avianca Boeing 727-100 HK-1272.jpg",
-    "aircraft/b727-200": "File:VR-CBQ Boeing 727-212 STN.jpg",
-    "aircraft/b737-200": "File:YV2559 Conviasa Boeing 737-200.jpg",
-    "aircraft/b737-300": "File:Lufthansa - Boeing 737-300 (D-ABEP).jpg",
-    "aircraft/b737-800": "File:Southwest Boeing 737-800 N8676A BWI MD1.jpg",
-    "aircraft/b747-100": "File:Sabena Boeing 747-100 Marmet.jpg",
-    "aircraft/b747-200": "File:Southern Air Boeing 747-230B(SF) N760SA 01.jpg",
-    "aircraft/b747-400": "File:Thai Airways International Boeing 747-4D7 HS-TGP MUC 2015 03.jpg",
-    "aircraft/b757": "File:Delta Boeing 757-200 N699DL BWI MD1.jpg",
-    "aircraft/b767-200": "File:United Boeing 767-200 N74007 MD1.jpg",
-    "aircraft/b767-300": "File:Atlas Air Boeing 767-300ER N662GT BWI MD1.jpg",
-    "aircraft/b777-200": "File:British Airways Boeing 777-200ER G-VIIH IAD VA1.jpg",
-    "aircraft/b777-300": "File:United Boeing 777-300ER N2136U IAD VA2.jpg",
-    "aircraft/b787-8": "File:Qatar Airways Boeing 787-8 Dreamliner A7-BCO MUC 2015 02.jpg",
-    "aircraft/b787-9": "File:N1015X Air Tahiti Nui Boeing 787-9 Dreamliner 46.jpg",
-    "aircraft/caravelle": "File:Thai Airways International Sud Aviation Caravelle (OY-KRE) at Stockholm-Arlanda Airport.jpg",
-    "aircraft/concorde": "File:238cq - British Airways Concorde, G-BOAD@LHR,24.05.2003 - Flickr - Aero Icarus.jpg",
-    "aircraft/crj200": "File:Braunschweig Airport Copenhagen AirTaxi Global Reach Aviation Bombardier CRJ-200LR OY-CRJ (DSC03384).jpg",
-    "aircraft/dc10": "File:N313FE Fedex 1988 McDonnell Douglas DC-10-30(F) CN- 48311-440 \"Bilal\" (13929394625).jpg",
-    "aircraft/dc8-50": "File:F-RAFE Douglas DC-8-53 Armee de l'Air, Le Bourget museee.jpg",
-    "aircraft/dc8-63": "File:McDonnell Douglas DC-8-63, CP Air AN0344516.jpg",
-    "aircraft/dc9": "File:YV2220 Aserca Airlines McDonnell Douglas DC-9-30.jpg",
-    "aircraft/e190": "File:JetBlue Embraer E190 N337JB with paint damage departing Boston March 2025.jpg",
-    "aircraft/f100": "File:QantasLink Fokker 100 VH-NHZ Perth 2024 (03).jpg",
-    "aircraft/f27": "File:Fokker F27 Friendship (6013754795).jpg",
-    "aircraft/l1011": "File:Lockheed L-1011-300 Tristar N172DA Delta ATL GA1.jpg",
-    "aircraft/md11": "File:PH-KCA KLM Royal Dutch Airlines McDonnell Douglas MD-11, landing at Schiphol (AMS - EHAM), Netherlands, pic2.JPG",
-    "aircraft/md82": "File:Hannover Airport European Air Charter McDonnell Douglas MD-82 LZ-LDT (DSC09492).jpg",
-    "aircraft/q400": "File:Bombardier Dash 8 Q400 VH-LQL Domestic Terminal Brisbane Airport P1350067.jpg",
     # cities
     "cities/amsterdam": "File:Water reflection of canal houses at blue hour in Damrak Amsterdam the Netherlands.jpg",
     "cities/athens": "File:Attica 06-13 Athens 50 View from Philopappos - Acropolis Hill.jpg",
@@ -657,7 +560,7 @@ def write_credits(credits: dict[str, dict]) -> None:
     body = json.dumps(dict(sorted(credits.items())), ensure_ascii=False, indent=2)
     CREDITS_TS.write_text(
         "// scripts/fetch-airline-images.py 가 만든 파일입니다. 직접 고치지 마세요.\n"
-        "// 위키미디어 공용(Wikimedia Commons)의 자유 라이선스 사진. 키는 'aircraft/<기종 id>' | 'cities/<도시 id>' | 'airlines/<항공사 id>'\n"
+        "// 위키미디어 공용(Wikimedia Commons)의 자유 라이선스 사진. 키는 'cities/<도시 id>' | 'airlines/<항공사 id>'\n"
         "export interface ImageCredit {\n  file: string;\n  author: string;\n  license: string;\n  licenseUrl: string;\n  source: string;\n}\n\n"
         f"export const IMAGE_CREDITS: Record<string, ImageCredit> = {body};\n",
         encoding="utf-8",
@@ -684,7 +587,7 @@ def save_preview(previews: list[tuple[str, list[dict]]], path: Path) -> None:
 def main() -> None:
     global CACHE
     parser = argparse.ArgumentParser(description="하늘길 항공사 사진 받기")
-    parser.add_argument("--only", help="쉼표로 나눈 '종류' 또는 '종류/id' (예: cities,aircraft/f27)")
+    parser.add_argument("--only", help="쉼표로 나눈 '종류' 또는 '종류/id' (예: cities,airlines/klm)")
     parser.add_argument("--list", action="store_true", help="검색 후보만 보여 주고 받지 않음")
     parser.add_argument("--preview", help="--list 와 함께: 후보 사진을 작게 받아 한 장(PNG)으로 모아 저장")
     parser.add_argument("--search", action="store_true", help="FILES에 고정한 사진을 무시하고 새로 검색")

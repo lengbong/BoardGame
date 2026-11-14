@@ -1,16 +1,16 @@
 import { withJosa } from '../../lib/korean';
 import { useMemo, useState } from 'react';
-import { PlaneArt } from './Art';
 import { gameHub, usableColor } from './brand';
 import { CITY, REGIONS, REGION_INFO } from './cities';
 import { airlinePhoto } from './images';
+import { PlaneImage } from './PlaneImage';
 import { airlinesAt, type RealAirline } from './realAirlines';
 import { hubCandidates } from './rules';
 import type { RegionId, StartEra } from './types';
 import { IataBadge, Photo } from './ui';
 
-/** 한 항공사의 사진 (없으면 그 항공사 색으로 칠한 옆모습 그림) */
-export function AirlinePhoto({ airline, width = 160 }: { airline: RealAirline; width?: number }) {
+/** 한 항공사의 사진 (없으면 그 항공사 색으로 칠한 비행기 그림) */
+export function AirlinePhoto({ airline }: { airline: RealAirline; width?: number }) {
   const main = usableColor(airline.colors[0]) ?? usableColor(airline.colors[1]) ?? '#6b7a8a';
   return (
     <Photo
@@ -19,9 +19,7 @@ export function AirlinePhoto({ airline, width = 160 }: { airline: RealAirline; w
       alt={`${airline.name} 비행기 사진`}
       className="al-airline-photo"
       fallback={
-        <span className="al-airline-art" style={{ background: `linear-gradient(160deg, ${airline.colors[1] ?? '#dfe7ee'}33, #e9f3f9)` }}>
-          <PlaneArt body="narrow" engines={2} color={main} dark={main} shape="circle" width={width * 0.8} title={`${airline.name} 비행기 그림`} />
-        </span>
+        <PlaneImage model="a320" paint={{ main, dark: main }} className="al-airline-photo" alt={`${airline.name} 비행기 그림`} />
       }
     />
   );

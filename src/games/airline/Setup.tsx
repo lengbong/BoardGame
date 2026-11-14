@@ -4,7 +4,8 @@ import { SeatPicker } from '../../components/SeatPicker';
 import { SpeedPicker } from '../../components/SpeedPicker';
 import { SEAT_COLORS, activeSeatCount } from '../common/players';
 import type { GameSettings } from '../common/settings';
-import { HeroArt, LandmarkIcon, PlaneArt } from './Art';
+import { HeroArt, LandmarkIcon } from './Art';
+import { PlaneImage } from './PlaneImage';
 import { CHALLENGES } from './challenges';
 import { CITY, REGIONS, REGION_INFO, SEASON_INFO, airportClass, citySize } from './cities';
 import { fmtMoney } from './format';
@@ -513,10 +514,10 @@ function HowTo() {
         <li>
           <b>지점 → 노선 → 비행기</b>: 지도에서 도시를 눌러 <b>지점</b>을 열고, 지점이 있는 두 도시 사이에 <b>노선</b>을 열어요. 비행기는 <b>리스</b>(바로 받고 분기마다 값의 3.5%를 냄, 보증금은 돌려줄 때 돌려받음)하거나 <b>주문</b>(값을 먼저 내고 1~4분기 뒤에 받음, 막 나온 인기 기종일수록 오래 기다리지만 처음 2년은 15% 싸요)하거나 <b>중고 시장</b>에서 바로 사요. 같은 계열 비행기가 많으면 정비·승무원비가 줄어요.
           <span className="al-howto-planes" aria-hidden="true">
-            <PlaneArt body="prop" engines={2} color="#30a46c" shape="star" width={70} />
-            <PlaneArt body="narrow" engines={2} color="#e5484d" shape="circle" width={70} />
-            <PlaneArt body="jumbo" engines={4} color="#3e63dd" shape="diamond" width={70} />
-            <PlaneArt body="sst" engines={4} color="#f5b400" shape="leaf" width={70} />
+            <PlaneImage model="atr72" paint={{ main: '#30a46c', dark: '#1f7a4d', shape: 'star' }} className="al-plane-chip al-plane-chip-big" />
+            <PlaneImage model="a320" paint={{ main: '#e5484d', dark: '#b4282e', shape: 'circle' }} className="al-plane-chip al-plane-chip-big" />
+            <PlaneImage model="b747-400" paint={{ main: '#3e63dd', dark: '#2a47a8', shape: 'diamond' }} className="al-plane-chip al-plane-chip-big" />
+            <PlaneImage model="concorde" paint={{ main: '#f5b400', dark: '#c28a00', shape: 'leaf' }} className="al-plane-chip al-plane-chip-big" />
           </span>
         </li>
         <li>

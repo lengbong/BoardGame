@@ -2,13 +2,14 @@ import { useMemo } from 'react';
 import { MODEL } from './aircraft';
 import { advise } from './advisor';
 import { LandmarkIcon } from './Art';
-import { AIRPORT_INFO, CITIES, CITY, FEE_INFO, REGION_INFO, SEASON_INFO, airportClass, citySize, dist, pairKey } from './cities';
+import { SEASON_NAMES, WEATHER_INFO, leisureMonthMult, weather } from './calendar';
+import { AIRPORT_INFO, CITIES, CITY, FEE_INFO, REGION_INFO, airportClass, citySize, dist, pairKey } from './cities';
 import { FIXED_EVENTS, FIXED_ICON } from './events';
 import { fmtMoney, fmtPax, km, pct, signedMoney } from './format';
 import { goalProgress } from './goals';
 import { branchBlocker, buildBlocker, closeBranchBlocker, routeOnPair } from './rules';
 import { WEEK_HOURS, branchCost, branchUpkeep, businessCost, legFreq, pairDemand, planeHours, planesOnRoute, routeFreq, slotCapacity, slotsUsed } from './simulate';
-import { QUARTER_NAMES, yearOf } from './time';
+import { monthOf, yearOf } from './time';
 import type { AirlineAction, AirlineState } from './types';
 import { cityPhoto } from './images';
 import { ActButton, CoName, LoadMeter, Meter, Photo, Stars } from './ui';
@@ -24,6 +25,7 @@ interface Common {
   onEditRoute: (routeId: number) => void;
   onSelect: (sel: Selection) => void;
   onOpenChoice: () => void;
+  onAuto?: () => void;
 }
 
 const notMine = '내 차례에만 할 수 있어요';
@@ -67,7 +69,9 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
     .slice(0, 8);
   const hotel = me.businesses.find((b) => b.city === city && b.kind === 'hotel');
   const agency = me.businesses.find((b) => b.city === city && b.kind === 'agency');
-  const season = SEASON_INFO[c.season].mult;
+  const m0 = monthOf(state.t) - 1;
+  const season = Array.from({ length: 12 }, (_, i) => leisureMonthMult(city, i));
+  const wx = weather(city, m0);
 
   return (
     <div className="al-info al-city-info" data-testid="al-city-panel">
@@ -124,11 +128,15 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
             <dd className="al-season">
               <span className="al-season-bars" aria-hidden="true">
                 {season.map((m, i) => (
-                  <span key={i} style={{ height: `${Math.round(m * 12)}px` }} title={`${i + 1}분기 ${QUARTER_NAMES[i]}`} />
+                  <span key={i} className={i === m0 ? 'al-season-now' : ''} style={{ height: `${Math.round(m * 9)}px` }} title={`${i + 1}월 관광 손님 ×${m.toFixed(2)}`} />
                 ))}
               </span>
-              {SEASON_INFO[c.season].name}
+              {SEASON_NAMES[c.season]}
             </dd>
+          </div>
+          <div>
+            <dt>이번 달 날씨</dt>
+            <dd>{wx.cause ? `${WEATHER_INFO[wx.cause].icon} ${WEATHER_INFO[wx.cause].name} 걱정 (지연·결항 ×${wx.factor.toFixed(1)})` : '☀️ 대체로 괜찮아요'}</dd>
           </div>
           <div>
             <dt>공항</dt>
@@ -188,7 +196,7 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
               <ActButton primary blocker={block(branchBlocker(state, viewer, city))} onClick={() => perform({ type: 'openBranch', city })} testId="al-open-branch">
                 🏢 지점 열기 · {fmtMoney(branchCost(city, state.q))}
               </ActButton>
-              <small className="al-muted">유지비 분기마다 {fmtMoney(branchUpkeep(city, state.q))}. 지점이 있어야 노선을 열 수 있어요.</small>
+              <small className="al-muted">유지비 달마다 {fmtMoney(branchUpkeep(city, state.q))}. 지점이 있어야 노선을 열 수 있어요.</small>
             </>
           ) : (
             <>
@@ -221,7 +229,7 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
         </section>
         {xfers.length > 0 && (
           <section>
-            <h4>여기서 갈아타는 손님 <small className="al-muted">지난 분기</small></h4>
+            <h4>여기서 갈아타는 손님 <small className="al-muted">지난달</small></h4>
             <ol className="al-dests">
               {xfers.map((x) => (
                 <li key={`${x.a}-${x.b}`}>
@@ -318,7 +326,7 @@ function RoutePanel({ state, viewer, canAct, onEditRoute, onPlanRoute, onSelect,
               <th>운임</th>
               <th>탑승률</th>
               <th>몫</th>
-              <th>지난 분기 이익</th>
+              <th>지난달 이익</th>
             </tr>
           </thead>
           <tbody>
@@ -377,7 +385,7 @@ function RoutePanel({ state, viewer, canAct, onEditRoute, onPlanRoute, onSelect,
 
 // ------------------------------------------------------------------ 아무것도 고르지 않았을 때
 
-function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice }: Common) {
+function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, onAuto }: Common) {
   const me = state.companies[viewer];
   const tips = useMemo(() => (canAct ? advise(state, viewer) : []), [state, viewer, canAct]);
   const flying = me.planes.filter((p) => p.legs.length > 0);
@@ -387,7 +395,7 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice }
     <div className="al-info al-overview">
       <div className="al-info-main">
         <h3>
-          🧑‍💼 경영 비서 <small>지난 분기 숫자로 고른 할 만한 일</small>
+          🧑‍💼 경영 비서 <small>지난달 숫자로 고른 할 만한 일</small>
         </h3>
         {!canAct ? (
           <p className="al-muted">내 차례가 되면 할 만한 일을 골라 드릴게요. 그동안 지도와 보고서를 둘러보세요.</p>
@@ -408,6 +416,10 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice }
                   {t.key === 'choice' ? (
                     <button type="button" className="btn btn-small btn-primary" onClick={onOpenChoice}>
                       고르기
+                    </button>
+                  ) : t.key === 'auto' && onAuto ? (
+                    <button type="button" className="btn btn-small" onClick={onAuto}>
+                      {t.label}
                     </button>
                   ) : t.apply ? (
                     <button
@@ -439,7 +451,7 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice }
             비행기 <b>{me.planes.length}</b>대 (가동률 {Math.round(use * 100)}%){me.orders.length > 0 && ` · 주문 ${me.orders.length}`}
           </li>
           <li>
-            평판 <b>{Math.round(me.reputation)}</b> · 서비스 {me.service}단계
+            평판 <b>{Math.round(me.reputation)}</b> · 서비스 {me.service}단계 · 정시 운항 <b>{Math.round(me.onTime * 100)}%</b>
             {me.partner !== null && ` · 제휴 ${state.companies[me.partner].name}`}
           </li>
         </ul>

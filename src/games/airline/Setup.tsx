@@ -6,12 +6,13 @@ import { SEAT_COLORS, activeSeatCount } from '../common/players';
 import type { GameSettings } from '../common/settings';
 import { HeroArt, LandmarkIcon, PlaneArt } from './Art';
 import { CHALLENGES } from './challenges';
-import { CITY, REGIONS, REGION_INFO, SEASON_INFO, airportClass, citySize } from './cities';
+import { SEASON_NAMES } from './calendar';
+import { CITY, REGIONS, REGION_INFO, airportClass, citySize } from './cities';
 import { fmtMoney } from './format';
 import { DEFAULT_NAMES, GOAL_VALUES, START_MONEY, companyName, hubCandidates } from './rules';
 import { companyValue } from './simulate';
 import type { SavedAirlineGame } from './storage';
-import { qLabel } from './time';
+import { mLabel } from './time';
 import { AirlinePicker, AirlinePhoto, airlineYears } from './AirlinePicker';
 import { gameHub } from './brand';
 import { CreditsModal } from './CreditsModal';
@@ -228,7 +229,7 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
         <div>
           <h1>하늘길 항공사</h1>
           <p>
-            세계 여러 도시에 지점을 내고, 실제 기종의 비행기를 사거나 빌려 노선을 열어요. 운임과 운항 횟수를 정하고, 라이벌 항공사와 손님을 나눠 가지며 분기마다 회사를 키우는 경영 게임이에요.
+            세계 여러 도시에 지점을 내고, 실제 기종의 비행기를 사거나 빌려 노선을 열어요. 운임과 운항 횟수를 정하고, 라이벌 항공사와 손님을 나눠 가지며 달마다 회사를 키우는 경영 게임이에요.
           </p>
         </div>
       </header>
@@ -239,7 +240,7 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
             <strong>하던 게임이 있어요.</strong>
             <span>
               {' '}
-              {qLabel(saved.state.q)} — {saved.state.companies.map((c, i) => `${c.name} ${fmtMoney(companyValue(saved.state, i))}`).join(' · ')} — {new Date(saved.savedAt).toLocaleString('ko-KR')}
+              {mLabel(saved.state.t)} — {saved.state.companies.map((c, i) => `${c.name} ${fmtMoney(companyValue(saved.state, i))}`).join(' · ')} — {new Date(saved.savedAt).toLocaleString('ko-KR')}
             </span>
           </div>
           <button type="button" className="btn btn-primary" onClick={onResume} data-testid="al-resume">
@@ -488,7 +489,7 @@ function HubChooser({ era, taken, value, onPick }: { era: StartEra; taken: strin
                           {grow > 1.5 ? ' ↗' : ''} · 사업 {Math.round(c.biz * 100)}% · 공항 {airportClass(c, era)}등급
                         </small>
                         <Meter value={size / 10} tone="blue" label={`크기 ${size.toFixed(1)}`} />
-                        <small className="al-muted">{SEASON_INFO[c.season].name}</small>
+                        <small className="al-muted">{SEASON_NAMES[c.season]}</small>
                       </span>
                     </button>
                   </li>
@@ -508,10 +509,10 @@ function HowTo() {
       <summary>놀이 방법</summary>
       <ol>
         <li>
-          <b>한 차례 = 한 분기(3개월)</b>: 회사마다 돌아가며 이번 분기 경영을 하고 <kbd>Enter</kbd>로 마쳐요. 모두 마치면 석 달 동안 비행기가 날고, <b>분기 결산</b>이 나와요.
+          <b>한 차례 = 한 달</b>: 회사마다 돌아가며 이번 달 경영을 하고 <kbd>Enter</kbd>로 마쳐요. 모두 마치면 한 달 동안 비행기가 날고 짧은 <b>달 결산</b>이 떠요. 석 달마다 <b>분기 결산</b>, 12월에는 <b>한 해 결산과 경영 평가</b>가 나와요. 할 일이 없으면 <b>⏩ 분기 끝까지 맡기기</b>나 <b>⏭ 일이 생길 때까지</b>로 달을 넘겨요 (결정할 일·큰 사건·돈 걱정·라이벌 소식이 생기면 멈춰요).
         </li>
         <li>
-          <b>지점 → 노선 → 비행기</b>: 지도에서 도시를 눌러 <b>지점</b>을 열고, 지점이 있는 두 도시 사이에 <b>노선</b>을 열어요. 비행기는 <b>리스</b>(바로 받고 분기마다 값의 3.5%를 냄, 보증금은 돌려줄 때 돌려받음)하거나 <b>주문</b>(값을 먼저 내고 1~4분기 뒤에 받음, 막 나온 인기 기종일수록 오래 기다리지만 처음 2년은 15% 싸요)하거나 <b>중고 시장</b>에서 바로 사요. 같은 계열 비행기가 많으면 정비·승무원비가 줄어요.
+          <b>지점 → 노선 → 비행기</b>: 지도에서 도시를 눌러 <b>지점</b>을 열고, 지점이 있는 두 도시 사이에 <b>노선</b>을 열어요. 비행기는 <b>리스</b>(바로 받고 달마다 값의 1.2% 남짓을 냄, 보증금은 돌려줄 때 돌려받음)하거나 <b>주문</b>(값을 먼저 내고 3~12달 뒤에 받음, 막 나온 인기 기종일수록 오래 기다리지만 처음 2년은 15% 싸요)하거나 <b>중고 시장</b>에서 바로 사요. 같은 계열 비행기가 많으면 정비·승무원비가 줄어요.
           <span className="al-howto-planes" aria-hidden="true">
             <PlaneArt body="prop" engines={2} color="#30a46c" shape="star" width={70} />
             <PlaneArt body="narrow" engines={2} color="#e5484d" shape="circle" width={70} />
@@ -532,13 +533,16 @@ function HowTo() {
           <b>손님 나누기</b>: 두 도시 사이 손님은 도시 크기·사업과 관광·거리·계절·시대에 따라 정해져요. 같은 두 도시를 여러 회사가 날면, <b>운임이 싸고 자주 날고 편한 비행기를 띄우고 평판·광고가 좋은</b> 회사가 손님을 더 가져가요. 좌석보다 많이 태울 수는 없어요.
         </li>
         <li>
-          <b>돈</b>: 운임 수입에서 연료비·승무원과 정비·공항·서비스·판매 수수료·리스료·지점 유지비·광고·이자·세금을 빼면 분기 이익이에요. 돈이 모자라면 은행에서 빌리고, 두 분기 내내 모자라면 <b>운항을 멈추고</b> 게임에서 빠져요.
+          <b>돈</b>: 운임 수입에서 연료비·승무원과 정비·공항·서비스·판매 수수료·리스료·지점 유지비·광고·이자·세금을 빼면 달 이익이에요. 리스료·이자·유지비는 달마다 나가요. 돈이 모자라면 은행에서 빌리고, 넉 달 내내 모자라면 <b>운항을 멈추고</b> 게임에서 빠져요.
         </li>
         <li>
-          <b>결정할 일과 목표</b>: 서너 분기마다 임금 협상·연료 계약·새 기종 제안 같은 <b>결정할 일</b>이 와요. 고르면 생길 일을 미리 보여 줘요. 해마다 작은 <b>올해 목표</b> 셋을 받고, 해가 끝나면 <b>S~D 경영 평가</b>를 받아요.
+          <b>결정할 일과 목표</b>: 아홉 달에서 한 해에 한 번쯤 임금 협상·연료 계약·새 기종 제안 같은 <b>결정할 일</b>이 와요. 고르면 생길 일을 미리 보여 줘요. 해마다 작은 <b>올해 목표</b> 셋을 받고, 해가 끝나면 <b>S~D 경영 평가</b>를 받아요.
         </li>
         <li>
-          <b>경영 비서</b>: 지도 아래 비서가 지난 분기 숫자를 보고 할 만한 일을 골라 주고, ‘적용’ 한 번으로 해 줘요. 첫해에는 리스 보증금이 없어요.
+          <b>경영 비서</b>: 지도 아래 비서가 지난달 숫자를 보고 할 만한 일을 골라 주고, ‘적용’ 한 번으로 해 줘요. 첫해에는 리스 보증금이 없어요.
+        </li>
+        <li>
+          <b>계절과 운항 현장</b>: 손님은 달마다 달라요 — 하와이·방콕은 겨울, 지중해는 여름, 설·추석·여름방학·연말엔 여행이 늘어요 (지도 위 날짜 옆에 이번 달 손님 분위기가 나와요). 날씨(동아시아 태풍 7~9월, 북쪽 폭설 12~2월, 남아시아 몬순 6~9월, 안개)와 낡은 비행기·정비·혼잡 때문에 <b>지연·결항·회항·기체 점검</b>이 생겨요. 재무 화면의 <b>정비 수준</b>·<b>예비 승무원</b>과, 노선에 넣지 않은 <b>예비기</b>로 줄일 수 있어요. 정시 운항률은 평판과 손님에 영향을 줘요. 모두 게임 속 이야기이고 사고는 없어요.
         </li>
         <li>
           <b>실제 항공사와 사진</b>: ‘실제 항공사’로 하면 시작하는 해에 날던 항공사(대한항공·팬암·루프트한자…)를 골라 그 본거지에서 시작해요. 이름·두 글자 부호(IATA)·칠 색만 빌려 쓰고 로고는 쓰지 않으며, 게임 속 경영과 사건은 모두 지어낸 이야기예요. 기종·도시·항공사 사진은 위키미디어 공용의 자유 라이선스 사진이고, 지은이와 라이선스는 ‘📷 사진 출처’에서 볼 수 있어요.
@@ -550,7 +554,7 @@ function HowTo() {
           <b>이기기</b>: 정해진 해까지 회사 가치(현금 + 내 비행기·호텔 가치 + 리스 보증금·주문한 비행기 − 빚) 1등, 또는 여러 지역 취항과 가치 목표를 먼저 이루기, 또는 도전 과제 성공!
         </li>
         <li>
-          조작: 화면 <kbd>1</kbd> 지도 · <kbd>2</kbd> 비행기 · <kbd>3</kbd> 노선 · <kbd>4</kbd> 재무 · <kbd>5</kbd> 보고서 · <kbd>6</kbd> 뉴스, 이번 분기 마치기 <kbd>Enter</kbd>, 닫기 <kbd>Esc</kbd>, 지도 확대 <kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd>. 처음이면 지도 아래 <b>🧑‍💼 경영 비서</b>의 첫 노선 ‘노선 열기’부터 눌러 보세요!
+          조작: 화면 <kbd>1</kbd> 지도 · <kbd>2</kbd> 비행기 · <kbd>3</kbd> 노선 · <kbd>4</kbd> 재무 · <kbd>5</kbd> 보고서 · <kbd>6</kbd> 뉴스, 이번 달 마치기 <kbd>Enter</kbd>, 닫기 <kbd>Esc</kbd>, 지도 확대 <kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd>. 처음이면 지도 아래 <b>🧑‍💼 경영 비서</b>의 첫 노선 ‘노선 열기’부터 눌러 보세요!
         </li>
       </ol>
     </details>

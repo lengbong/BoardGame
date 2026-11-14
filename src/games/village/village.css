@@ -1,0 +1,1015 @@
+/* ================================================================
+   우리 마을 지도 — 모든 클래스는 vl- 로 시작한다 (다른 게임과 겹치지 않게)
+   ================================================================ */
+
+.vl-game {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  height: calc(100vh - 32px);
+  min-height: 600px;
+  /* 지도 탁자 (옛 종이) */
+  --vl-paper: #efe2c2;
+  --vl-paper-2: #e3d1a6;
+  --vl-paper-line: rgba(140, 105, 55, 0.12);
+  --vl-ink: #5b4327;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .vl-game {
+    --vl-paper: #3b3226;
+    --vl-paper-2: #2f281e;
+    --vl-paper-line: rgba(230, 200, 150, 0.07);
+    --vl-ink: #e6d3ad;
+  }
+}
+:root[data-theme='dark'] .vl-game {
+  --vl-paper: #3b3226;
+  --vl-paper-2: #2f281e;
+  --vl-paper-line: rgba(230, 200, 150, 0.07);
+  --vl-ink: #e6d3ad;
+}
+
+.vl-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+}
+.vl-game kbd,
+.vl-setup kbd {
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  opacity: 0.7;
+}
+.vl-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------- 지도 */
+.vl-map {
+  position: relative;
+  flex: 1;
+  min-height: 360px;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 3px solid #b79a66;
+  background:
+    radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(120, 85, 40, 0.22) 100%),
+    repeating-linear-gradient(0deg, var(--vl-paper-line) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(90deg, var(--vl-paper-line) 0 1px, transparent 1px 34px),
+    radial-gradient(circle at 20% 15%, var(--vl-paper), var(--vl-paper-2));
+  box-shadow:
+    inset 0 0 0 4px rgba(255, 250, 235, 0.35),
+    var(--shadow);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.vl-map:active {
+  cursor: grabbing;
+}
+.vl-map-placing,
+.vl-map-flagging {
+  cursor: pointer;
+}
+.vl-map-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .vl-map-svg {
+    filter: brightness(0.9) saturate(0.95);
+  }
+}
+:root[data-theme='dark'] .vl-map-svg {
+  filter: brightness(0.9) saturate(0.95);
+}
+
+.vl-tile-shadow {
+  fill: rgba(90, 60, 25, 0.28);
+}
+.vl-tile {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.vl-drop {
+  animation: vl-drop 0.38s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+@keyframes vl-drop {
+  from {
+    transform: translateY(-26px) scale(1.12);
+    opacity: 0.2;
+  }
+}
+.vl-last {
+  fill: none;
+  stroke-width: 4;
+  stroke-dasharray: 10 7;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* 빈 자리 */
+.vl-slot {
+  fill: rgba(255, 255, 255, 0.12);
+  stroke: rgba(120, 90, 50, 0.22);
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+}
+.vl-slot-ok {
+  fill: rgba(255, 214, 92, 0.35);
+  stroke: #e2a41c;
+  stroke-width: 3;
+  stroke-dasharray: none;
+  animation: vl-spot 1.3s ease-in-out infinite;
+}
+@keyframes vl-spot {
+  50% {
+    fill: rgba(255, 214, 92, 0.12);
+    stroke: rgba(226, 164, 28, 0.55);
+  }
+}
+.vl-slot-pending {
+  animation: none;
+  fill: rgba(255, 214, 92, 0.5);
+  stroke: #c47d0e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .vl-slot {
+    fill: rgba(255, 240, 210, 0.04);
+    stroke: rgba(230, 200, 150, 0.2);
+  }
+  :root:not([data-theme='light']) .vl-slot-ok {
+    fill: rgba(255, 196, 61, 0.3);
+    stroke: #f5b82e;
+  }
+}
+:root[data-theme='dark'] .vl-slot {
+  fill: rgba(255, 240, 210, 0.04);
+  stroke: rgba(230, 200, 150, 0.2);
+}
+:root[data-theme='dark'] .vl-slot-ok {
+  fill: rgba(255, 196, 61, 0.3);
+  stroke: #f5b82e;
+}
+
+/* 미리 보기 조각 */
+.vl-ghost {
+  pointer-events: none;
+}
+.vl-ghost-frame {
+  fill: none;
+  stroke-width: 4;
+}
+.vl-ghost-ok .vl-ghost-frame {
+  stroke: #2f9e5a;
+  animation: vl-ghost 1s ease-in-out infinite;
+}
+.vl-ghost-bad .vl-ghost-frame {
+  stroke: #d1342f;
+  stroke-dasharray: 8 6;
+}
+@keyframes vl-ghost {
+  50% {
+    stroke: #8be0a8;
+  }
+}
+.vl-mismatch circle {
+  fill: #d1342f;
+  stroke: #fff;
+  stroke-width: 2;
+}
+.vl-mismatch path {
+  stroke: #fff;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+}
+
+/* 깃발 */
+.vl-flag {
+  pointer-events: none;
+}
+.vl-cloth {
+  transform-box: fill-box;
+  transform-origin: 0% 50%;
+  animation: vl-flutter 2.4s ease-in-out infinite;
+}
+@keyframes vl-flutter {
+  50% {
+    transform: skewY(-6deg) scaleX(0.9);
+  }
+}
+.vl-flag-new > g {
+  animation: vl-plant 0.5s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+@keyframes vl-plant {
+  from {
+    transform: translateY(-30px) scale(0.6);
+    opacity: 0;
+  }
+}
+.vl-flag-going {
+  pointer-events: none;
+  animation: vl-going 1s ease-in forwards;
+}
+@keyframes vl-going {
+  to {
+    transform: translateY(-40px);
+    opacity: 0;
+  }
+}
+.vl-flag-going > g {
+  animation: none;
+}
+
+/* 깃발 고르기 */
+.vl-pick {
+  opacity: 0.55;
+  cursor: pointer;
+}
+.vl-pick-ring {
+  fill: rgba(255, 255, 255, 0.45);
+  stroke: #fff;
+  stroke-width: 2.5;
+  stroke-dasharray: 5 4;
+  animation: vl-ring 1.1s ease-in-out infinite;
+}
+@keyframes vl-ring {
+  50% {
+    stroke: #ffd23f;
+  }
+}
+.vl-pick-on {
+  opacity: 1;
+}
+.vl-pick-on .vl-pick-ring {
+  fill: rgba(255, 210, 63, 0.5);
+  stroke: #ffb703;
+  stroke-dasharray: none;
+}
+
+/* 지형 반짝임 */
+.vl-glow {
+  pointer-events: none;
+}
+.vl-glow-line {
+  stroke: var(--glow);
+  stroke-width: 24;
+  opacity: 0.7;
+}
+.vl-glow-area {
+  fill: var(--glow);
+  opacity: 0.45;
+}
+.vl-glow-complete,
+.vl-glow-final {
+  animation: vl-flash 0.5s ease-in-out 3;
+}
+.vl-glow-final {
+  filter: saturate(0.6);
+}
+.vl-glow-preview .vl-glow-line {
+  opacity: 0.45;
+  stroke-dasharray: 10 8;
+}
+.vl-glow-preview .vl-glow-area {
+  opacity: 0.3;
+}
+@keyframes vl-flash {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+/* 떠오르는 점수 */
+.vl-float {
+  font-weight: 900;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: #fffaf0;
+  stroke-width: 7px;
+  stroke-linejoin: round;
+  pointer-events: none;
+  animation: vl-float 1.7s ease-out forwards;
+}
+@keyframes vl-float {
+  0% {
+    transform: translateY(14px) scale(0.6);
+    opacity: 0;
+  }
+  15% {
+    transform: translateY(0) scale(1.1);
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-46px);
+    opacity: 0;
+  }
+}
+.vl-float {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes vl-fade {
+  0%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 차례 알림 */
+.vl-banner {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  z-index: 3;
+  padding: 6px 20px;
+  border-radius: 999px;
+  background: var(--seat);
+  color: #fff;
+  font-weight: 800;
+  font-size: 18px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: vl-banner 1.5s ease both;
+}
+@keyframes vl-banner {
+  0% {
+    transform: translate(-50%, -20px);
+    opacity: 0;
+  }
+  15%,
+  80% {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 확대·축소 단추 */
+.vl-zoom {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 4px;
+  z-index: 2;
+}
+.vl-zoom .btn {
+  min-width: 34px;
+  padding: 4px 8px;
+  font-weight: 800;
+  background: rgba(255, 252, 244, 0.92);
+  color: #4a3a25;
+  border-color: #c9b285;
+}
+
+/* ---------------------------------------------------------------- 아래 막대 */
+.vl-dock {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 112px;
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.vl-dock-active {
+  border-color: var(--seat);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--seat) 25%, transparent),
+    var(--shadow);
+}
+.vl-dock-over {
+  justify-content: center;
+}
+.vl-dock-who {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 82px;
+  flex: none;
+}
+.vl-dock-who span {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.vl-dock-who small {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.vl-dock-hand {
+  display: flex;
+  gap: 10px;
+  flex: none;
+}
+.vl-hand-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.vl-hand-name {
+  font-size: 11px;
+  color: var(--text-muted);
+  max-width: 84px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vl-hand-tile {
+  position: relative;
+  display: block;
+  padding: 3px;
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background: var(--surface-2);
+  cursor: pointer;
+  line-height: 0;
+  transition:
+    transform 0.15s,
+    border-color 0.15s;
+}
+.vl-hand-tile:disabled {
+  cursor: default;
+}
+.vl-hand-tile svg {
+  border-radius: 6px;
+  box-shadow: 0 2px 5px rgba(60, 45, 20, 0.25);
+}
+.vl-hand-tile:not(:disabled):hover {
+  transform: translateY(-2px);
+}
+.vl-hand-on {
+  border-color: var(--seat, var(--accent));
+  transform: translateY(-3px);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--seat, var(--accent)) 30%, transparent);
+}
+.vl-hand-on svg {
+  animation: vl-pop 0.25s ease;
+}
+@keyframes vl-pop {
+  from {
+    transform: scale(0.9);
+  }
+}
+.vl-hand-none svg {
+  opacity: 0.55;
+  filter: grayscale(0.6);
+}
+.vl-hand-tile:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.vl-hand-key {
+  position: absolute;
+  left: -6px;
+  top: -6px;
+  background: var(--surface);
+  color: var(--text);
+  line-height: 1.4;
+  opacity: 1 !important;
+}
+.vl-hand-badge {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 1.5;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: rgba(40, 30, 20, 0.75);
+  color: #fff;
+}
+.vl-hand-placed {
+  cursor: default;
+  border-color: var(--seat);
+}
+.vl-discard {
+  margin-top: 2px;
+}
+.vl-dock-actions {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.vl-dock-buttons,
+.vl-flag-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.vl-dock-buttons .btn {
+  padding: 7px 12px;
+}
+.vl-dock-msg {
+  margin: 0;
+  font-weight: 700;
+}
+.vl-dock-flags {
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-left: 6px;
+}
+.vl-dock-sub {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.vl-warn {
+  color: #c0392b;
+}
+.vl-notice {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #b4441b;
+  animation: vl-shake 0.35s ease;
+}
+@keyframes vl-shake {
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
+}
+.vl-thinking::after {
+  content: '';
+  display: inline-block;
+  width: 18px;
+  text-align: left;
+  animation: vl-ellipsis 1.2s steps(4) infinite;
+}
+.vl-flag-btn {
+  padding: 5px 10px;
+  font-weight: 700;
+}
+.vl-flag-btn small {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.vl-flag-btn.btn-selected {
+  border-color: var(--seat);
+  box-shadow: inset 0 0 0 1px var(--seat);
+}
+.vl-kind-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex: none;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+.vl-kind-path {
+  background: #dcbf8e;
+}
+.vl-kind-stream {
+  background: #8ccbe5;
+}
+.vl-kind-paddy {
+  background: #a9d462;
+}
+.vl-dock-stack {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 10px;
+  border-left: 1px dashed var(--border);
+}
+.vl-dock-stack > span:last-child {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.1;
+}
+.vl-dock-stack b {
+  font-size: 22px;
+}
+.vl-dock-stack small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.vl-stack-pile {
+  position: relative;
+  width: 34px;
+  height: 38px;
+}
+.vl-stack-pile i {
+  position: absolute;
+  left: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 5px;
+  background: linear-gradient(135deg, #b98d4f, #8a6233);
+  border: 2px solid #f1e3c2;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.vl-stack-pile i:nth-child(1) {
+  top: 6px;
+}
+.vl-stack-pile i:nth-child(2) {
+  top: 3px;
+}
+.vl-stack-pile i:nth-child(3) {
+  top: 0;
+}
+
+/* ---------------------------------------------------------------- 패널 */
+.vl-panel .turn-card .hint {
+  min-height: 3em;
+  font-size: 15px;
+}
+.vl-summary {
+  margin: 8px 0 0;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.15);
+  font-size: 13px;
+  color: #5a5249;
+}
+.vl-dots,
+.vl-thinking::after {
+  content: '';
+}
+.vl-dots {
+  display: inline-block;
+  width: 22px;
+  height: 8px;
+  background: radial-gradient(circle, #6f675e 2px, transparent 2.5px) 0 0 / 7.3px 8px repeat-x;
+  animation: vl-blink 1s steps(3) infinite;
+}
+@keyframes vl-blink {
+  0% {
+    width: 8px;
+  }
+  100% {
+    width: 26px;
+  }
+}
+@keyframes vl-ellipsis {
+  0% {
+    content: '';
+  }
+  25% {
+    content: '.';
+  }
+  50% {
+    content: '..';
+  }
+  75% {
+    content: '...';
+  }
+}
+.vl-stack-note {
+  float: right;
+  font-weight: 400;
+  font-size: 13px;
+}
+.vl-players li {
+  gap: 7px;
+  padding: 5px 6px;
+}
+.vl-player-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.25;
+}
+.vl-player-text .player-kind {
+  flex: none;
+}
+.vl-player-hand {
+  display: flex;
+  gap: 2px;
+  flex: none;
+}
+.vl-player-hand svg {
+  border-radius: 3px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.vl-score {
+  min-width: 42px;
+  text-align: right;
+  font-size: 22px;
+  font-weight: 900;
+}
+.vl-score small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.vl-flag-row {
+  display: inline-flex;
+  gap: 1px;
+  margin-top: 1px;
+  color: var(--text-muted);
+}
+.vl-flag-used {
+  opacity: 0.35;
+}
+.vl-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.vl-toggle input {
+  accent-color: var(--accent);
+}
+.vl-log {
+  min-height: 90px;
+  overflow: hidden;
+}
+.vl-panel {
+  gap: 10px;
+}
+.vl-panel > section {
+  padding: 10px 14px;
+}
+.vl-panel .players h2,
+.vl-panel .log h2 {
+  margin-bottom: 4px;
+}
+.vl-log li {
+  font-size: 13px;
+}
+
+/* ---------------------------------------------------------------- 결과 */
+.vl-result-overlay {
+  overflow: hidden;
+}
+.vl-result {
+  position: relative;
+  max-width: min(620px, 100%);
+}
+.vl-result-sub {
+  margin: -8px 0 16px;
+  color: var(--text-muted);
+}
+.vl-rank-list {
+  list-style: none;
+  margin: 0 0 22px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.vl-rank-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  text-align: left;
+  animation: vl-slide-in 0.45s ease both;
+}
+@keyframes vl-slide-in {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+}
+.vl-rank-winner {
+  outline: 2px solid #f2b632;
+  background: color-mix(in srgb, #f2b632 14%, var(--surface-2)) !important;
+}
+.vl-rank-name {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
+}
+.vl-rank-name strong {
+  font-size: 17px;
+}
+.vl-rank-name em {
+  font-style: normal;
+  font-size: 13px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+.vl-rank-name small {
+  flex-basis: 100%;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.vl-rank-score {
+  font-size: 26px;
+  font-weight: 900;
+}
+.vl-rank-score small {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* ---------------------------------------------------------------- 설정 화면 */
+.vl-hero {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 18px 26px;
+  border-radius: 20px;
+  border: 3px solid #b79a66;
+  background:
+    repeating-linear-gradient(0deg, rgba(140, 105, 55, 0.1) 0 1px, transparent 1px 30px),
+    repeating-linear-gradient(90deg, rgba(140, 105, 55, 0.1) 0 1px, transparent 1px 30px),
+    radial-gradient(circle at 20% 20%, #f4e8cb, #e2cd9c);
+  color: #3f2f1c;
+  box-shadow: var(--shadow);
+}
+.vl-hero h1 {
+  font-size: 38px;
+  color: #5b3d1c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .vl-hero {
+    border-color: #6e5a3a;
+    background:
+      repeating-linear-gradient(0deg, rgba(230, 200, 150, 0.06) 0 1px, transparent 1px 30px),
+      repeating-linear-gradient(90deg, rgba(230, 200, 150, 0.06) 0 1px, transparent 1px 30px),
+      radial-gradient(circle at 20% 20%, #4a3d2b, #30281d);
+    color: #eadcc0;
+  }
+  :root:not([data-theme='light']) .vl-hero h1 {
+    color: #f3d9a4;
+  }
+}
+:root[data-theme='dark'] .vl-hero {
+  border-color: #6e5a3a;
+  background:
+    repeating-linear-gradient(0deg, rgba(230, 200, 150, 0.06) 0 1px, transparent 1px 30px),
+    repeating-linear-gradient(90deg, rgba(230, 200, 150, 0.06) 0 1px, transparent 1px 30px),
+    radial-gradient(circle at 20% 20%, #4a3d2b, #30281d);
+  color: #eadcc0;
+}
+:root[data-theme='dark'] .vl-hero h1 {
+  color: #f3d9a4;
+}
+.vl-hero p {
+  margin: 6px 0 0;
+}
+.vl-hero-art {
+  flex: none;
+  filter: drop-shadow(0 6px 10px rgba(80, 55, 20, 0.3));
+  animation: vl-hero 0.7s cubic-bezier(0.3, 1.3, 0.5, 1) both;
+}
+@keyframes vl-hero {
+  from {
+    transform: translateY(20px) rotate(-3deg);
+    opacity: 0;
+  }
+}
+.vl-mini {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.vl-pickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 40px;
+  margin-bottom: 16px;
+}
+.vl-note {
+  margin: 12px 0 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.vl-steps {
+  list-style: none;
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.vl-step {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.vl-step-pic {
+  flex: none;
+  width: 190px;
+  display: flex;
+  justify-content: center;
+}
+.vl-step-text {
+  flex: 1;
+  font-size: 15px;
+}
+.vl-step-plain {
+  padding-left: 16px;
+}
+
+/* ---------------------------------------------------------------- 좁은 화면 */
+@media (max-height: 760px) and (min-width: 1001px) {
+  .vl-dock {
+    min-height: 100px;
+    padding: 6px 12px;
+  }
+  .vl-hand-tile svg {
+    width: 60px;
+    height: 60px;
+  }
+}
+
+@media (max-width: 1000px) {
+  .vl-game {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+  .vl-map {
+    flex: none;
+    height: 62vh;
+    min-height: 420px;
+  }
+}
+
+@media (max-width: 720px) {
+  .vl-dock {
+    flex-wrap: wrap;
+  }
+  .vl-dock-actions {
+    flex-basis: 100%;
+  }
+  .vl-hero {
+    flex-direction: column;
+    text-align: center;
+  }
+  .vl-step {
+    flex-direction: column;
+  }
+  .vl-step-pic {
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vl-drop,
+  .vl-cloth,
+  .vl-slot-ok,
+  .vl-ghost-ok .vl-ghost-frame,
+  .vl-pick-ring,
+  .vl-flag-new > g,
+  .vl-hero-art,
+  .vl-glow-complete,
+  .vl-glow-final {
+    animation: none;
+  }
+  .vl-banner {
+    animation-name: vl-fade;
+  }
+  .vl-float {
+    animation-name: vl-fade;
+  }
+}

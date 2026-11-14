@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from 'react';
 import { createElement } from 'react';
+import { AirlineApp } from './airline/AirlineApp';
 import { BaseballApp } from './baseball/BaseballApp';
 import { BoxesApp } from './boxes/BoxesApp';
 import { CheatApp } from './cheat/CheatApp';
@@ -114,6 +115,16 @@ export const GAMES: GameEntry[] = [
     category: 'strategy',
     icon: '🏝️',
     component: IslandApp,
+  },
+  {
+    id: 'airline',
+    title: '하늘길 항공사',
+    description: '세계 여러 도시에 지점을 내고 실제 기종의 비행기를 사서 노선을 열어요. 운임과 편수를 정하고 라이벌 항공사와 겨루며 회사를 키우는 항공사 경영 게임!',
+    players: '1~4명 (컴퓨터 항공사와 경쟁)',
+    playTime: '1~3시간 (저장하고 이어 하기)',
+    category: 'strategy',
+    icon: '✈️',
+    component: AirlineApp,
   },
   {
     id: 'lastcard',

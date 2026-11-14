@@ -26,16 +26,19 @@ import { alSound } from './sounds';
 import { AIRLINE_DELAYS, clearSavedAirlineGame, saveAirlineGame } from './storage';
 import { mLabel, monthOf, qLabel } from './time';
 import { MonthToast } from './MonthToast';
+import { StaffView } from './StaffView';
+import { staffCap, staffNeed } from './staff';
 import type { AirlineAction, AirlineSetup, AirlineState, QuarterReport as Report } from './types';
 import { IataBadge, Kbd } from './ui';
 
-type Tab = 'map' | 'fleet' | 'routes' | 'finance' | 'report' | 'news';
+type Tab = 'map' | 'fleet' | 'routes' | 'finance' | 'staff' | 'report' | 'news';
 
 const TABS: { id: Tab; icon: string; label: string }[] = [
   { id: 'map', icon: '🗺️', label: '지도' },
   { id: 'fleet', icon: '🛩️', label: '비행기' },
   { id: 'routes', icon: '🧭', label: '노선' },
   { id: 'finance', icon: '💰', label: '재무' },
+  { id: 'staff', icon: '👥', label: '인사' },
   { id: 'report', icon: '📈', label: '보고서' },
   { id: 'news', icon: '📰', label: '뉴스' },
 ];
@@ -347,7 +350,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
       if (typing) return;
       // 탭 단추에 초점이 있을 때는 Enter로 분기를 마쳐도 된다 (이미 고른 탭을 또 누를 일은 없으니까)
       const onButton = (t?.tagName === 'BUTTON' && t.getAttribute('role') !== 'tab') || t?.getAttribute('role') === 'button';
-      const idx = ['1', '2', '3', '4', '5', '6'].indexOf(e.key);
+      const idx = ['1', '2', '3', '4', '5', '6', '7'].indexOf(e.key);
       if (idx >= 0) {
         setTab(TABS[idx].id);
         return;
@@ -369,6 +372,8 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   // ------------------------------------------------------------ 안내
   let hint: ReactNode;
   const idle = idlePlanes(me).length;
+  const myCap = me.out ? 1 : staffCap(staffNeed(game, me), me);
+  const staffWarn = !me.out && (myCap < 1 || me.morale < 30);
   const empty = me.routes.filter((r) => routeFreq(me, r.id) === 0).length;
   if (game.phase === 'gameover') hint = game.result?.reason ?? '게임이 끝났어요.';
   else if (flying) hint = `✈️ ${mLabel(game.report?.t ?? game.t)} 한 달 동안 비행기들이 날고 있어요…`;
@@ -392,6 +397,17 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
         지도 아래 <b>🧑‍💼 경영 비서</b>가 권하는 첫 노선을 ‘노선 열기’로 열거나, 지도에서 도시를 눌러 직접 시작해 보세요.
       </>
     );
+  else if (myCap < 1)
+    hint = (
+      <>
+        👥 일손이 모자라 이번 달 운항의 {Math.round(myCap * 100)}%만 떠요.{' '}
+        <button type="button" className="al-link" onClick={() => setTab('staff')}>
+          인사 화면(5)
+        </button>
+        에서 사람을 뽑아요.
+      </>
+    );
+  else if (me.morale < 30) hint = `🪧 조직 만족도가 ${Math.round(me.morale)}이에요. 파업이 날 수 있어요 — 인사 화면(5)에서 임금을 살펴봐요.`;
   else if (idle > 0) hint = `쉬는 비행기 ${idle}대가 있어요. 노선 화면(3)에서 넣어 주세요.`;
   else if (empty > 0) hint = `비행기 없는 노선이 ${empty}개 있어요. 노선 화면에서 비행기를 넣어요.`;
   else
@@ -450,6 +466,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
       />
     );
   else if (tab === 'finance') content = <FinanceView state={game} viewer={viewer} canAct={canAct} perform={perform} />;
+  else if (tab === 'staff') content = <StaffView state={game} viewer={viewer} canAct={canAct} perform={perform} />;
   else if (tab === 'report') content = <ReportView state={game} viewer={viewer} />;
   else content = <NewsView state={game} onCity={showCity} viewer={viewer} />;
 
@@ -498,6 +515,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
                 <span aria-hidden="true">{t.icon}</span>
                 <span className="al-tab-label">{t.label}</span>
                 {t.id === 'fleet' && idle > 0 && <span className="al-tab-badge">{idle}</span>}
+                {t.id === 'staff' && staffWarn && <span className="al-tab-badge" title="일손이 모자라거나 조직 만족도가 아주 낮아요">!</span>}
                 <kbd className="al-tab-kbd">{i + 1}</kbd>
               </button>
             ))}

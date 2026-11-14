@@ -17,6 +17,12 @@ function niceStep(range: number, count: number): number {
   return 10 * p;
 }
 
+/** 눈금 간격에 맞는 소수 자리로 (0.05 간격이면 소수 둘째 자리) */
+export function stepFixed(v: number, step: number): string {
+  const d = Math.max(0, Math.min(4, -Math.floor(Math.log10(step) + 1e-9)));
+  return v.toFixed(d);
+}
+
 /** 범례: 모양 + 이름 (색만으로 구별하지 않게) */
 export function Legend({ series }: { series: Pick<Series, 'name' | 'color' | 'shape'>[] }) {
   return (
@@ -40,15 +46,20 @@ interface LineChartProps {
   /** x 눈금을 찍을 자리 */
   tickAt: (i: number) => string | null;
   format: (v: number) => string;
-  axisFormat: (v: number) => string;
+  /** 눈금 글 (step: 눈금 간격, 소수 자리를 정할 때) */
+  axisFormat: (v: number, step: number) => string;
   height?: number;
   ariaLabel: string;
   /** false면 세로축을 0에서 시작하지 않고 값 범위에 맞춘다 (비율·지수) */
   zero?: boolean;
+  /** 세로축 위 끝 (예: 백분율은 100) */
+  maxY?: number;
+  /** 값이 거의 같아도 세로축이 이만큼은 벌어지게 (눈금이 겹치지 않게) */
+  minSpan?: number;
 }
 
 /** 여러 회사의 값이 시간에 따라 어떻게 변했는지: 2px 선, 끝에 모양 표시와 이름, 마우스를 올리면 그 시점 값 */
-export function LineChart({ series, labels, tickAt, format, axisFormat, height = 220, ariaLabel, zero = true }: LineChartProps) {
+export function LineChart({ series, labels, tickAt, format, axisFormat, height = 220, ariaLabel, zero = true, maxY, minSpan = 0 }: LineChartProps) {
   const ref = useRef<HTMLDivElement>(null);
   const width = Math.max(300, useElementWidth(ref) || 600);
   const [hover, setHover] = useState<number | null>(null);
@@ -59,15 +70,16 @@ export function LineChart({ series, labels, tickAt, format, axisFormat, height =
   const all = series.flatMap((s) => s.values.filter((v): v is number => v !== null));
   const dataLo = all.length ? Math.min(...all) : 0;
   const dataHi = all.length ? Math.max(...all) : 1;
-  const lo = zero ? Math.min(0, dataLo) : dataLo - (dataHi - dataLo || 1) * 0.1;
-  const hiRaw = zero ? Math.max(1, dataHi) : dataHi + (dataHi - dataLo || 1) * 0.1;
+  const span = Math.max(dataHi - dataLo, minSpan, 1e-9);
+  const lo = zero ? Math.min(0, dataLo) : dataLo - span * 0.15;
+  const hiRaw = zero ? Math.max(1, dataHi) : dataHi + span * 0.15;
   const step = niceStep(hiRaw - lo, 4);
   const yMin = Math.floor(lo / step) * step;
-  const yMax = Math.ceil(hiRaw / step) * step;
+  const yMax = Math.min(maxY ?? Infinity, Math.ceil(hiRaw / step) * step);
   const x = (i: number) => m.l + (n <= 1 ? w / 2 : (i / (n - 1)) * w);
   const y = (v: number) => m.t + h - ((v - yMin) / (yMax - yMin || 1)) * h;
   const ticks: number[] = [];
-  for (let v = yMin; v <= yMax + step / 2; v += step) ticks.push(v);
+  for (let v = yMin; v <= yMax + step / 2; v += step) ticks.push(Math.round(v / step) * step);
 
   // 끝 이름표가 겹치지 않게 아래위로 민다
   const ends = (() => {
@@ -109,7 +121,7 @@ export function LineChart({ series, labels, tickAt, format, axisFormat, height =
           <g key={t}>
             <line x1={m.l} x2={m.l + w} y1={y(t)} y2={y(t)} className={t === 0 ? 'al-axis' : 'al-grid'} />
             <text x={m.l - 6} y={y(t) + 4} textAnchor="end" className="al-tick">
-              {axisFormat(t)}
+              {axisFormat(t, step)}
             </text>
           </g>
         ))}

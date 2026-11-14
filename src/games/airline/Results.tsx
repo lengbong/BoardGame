@@ -34,7 +34,7 @@ export function QuarterReport({ state, report, viewer, onClose, onDetail }: { st
   const worst = mine.length > 1 ? mine[mine.length - 1] : null;
   const news = state.news.filter((n) => report.news.includes(n.id));
   const lf = r.seats > 0 ? r.pax / r.seats : 0;
-  const costs = r.fuel + r.crew + r.airport + r.service + r.sales + r.lease + r.fleet + r.branch + r.ads + r.interest + r.disrupt + r.tax;
+  const costs = r.fuel + r.crew + r.airport + r.service + r.sales + r.lease + r.fleet + r.branch + r.ads + r.interest + r.disrupt + r.staff + r.tax;
   const btn = useRef<HTMLButtonElement>(null);
   useEffect(() => btn.current?.focus(), []);
   const review = r.review;

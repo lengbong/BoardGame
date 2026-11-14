@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { coColors, realOf } from './brand';
 import { SEAT_SHAPES } from './Art';
 import { WEATHER_INFO, weather } from './calendar';
-import { LineChart, Legend, MonthBars, ProfitBars, ShareBars, SparkBars, Sparkline, type Series, type ShareRow } from './Charts';
+import { LineChart, Legend, MonthBars, ProfitBars, ShareBars, SparkBars, Sparkline, stepFixed, type Series, type ShareRow } from './Charts';
 import { CITY, REGIONS, REGION_INFO } from './cities';
 import { FIXED_ICON } from './events';
 import { axisMoney, fmtMoney, fmtPax, pct, signedMoney } from './format';
 import { GRADE_INFO } from './goals';
 import { rankings } from './rules';
 import { companyValue, pairDemand, regionsServed } from './simulate';
+import { staffTotal } from './staff';
 import { mLabel, mOf, mShort, monthOf, qLabel, qShort, quarterOf, yearOf, yearOfM } from './time';
 import type { AirlineState, CompanyReport, MonthPoint } from './types';
 import { AirlinePhoto } from './AirlinePicker';
@@ -42,7 +43,7 @@ export function ReportView({ state, viewer }: { state: AirlineState; viewer: num
   );
 }
 
-const costOf = (r: CompanyReport) => r.fuel + r.crew + r.airport + r.service + r.sales + r.lease + r.fleet + r.branch + r.ads + r.interest + r.disrupt + r.tax;
+const costOf = (r: CompanyReport) => r.fuel + r.crew + r.airport + r.service + r.sales + r.lease + r.fleet + r.branch + r.ads + r.interest + r.disrupt + r.staff + r.tax;
 
 /** 달 기록에서 회사마다 선 (운항을 멈춘 회사는 멈춘 뒤로 비운다) */
 function monthSeries(state: AirlineState, pick: (p: MonthPoint, i: number) => number): Series[] {
@@ -75,6 +76,7 @@ function MonthView({ state, viewer }: { state: AirlineState; viewer: number }) {
   const onTimeSeries = monthSeries(state, (p, i) => Math.round(p.onTime[i] * 1000) / 10);
   const legend = valueSeries.map((s) => ({ name: s.name, color: s.color, shape: s.shape }));
   const oil: Series[] = [{ name: '유가 지수', color: 'var(--al-gain)', shape: 'circle', values: state.months.map((p) => p.oil) }];
+  const staffSeries = monthSeries(state, (p, i) => p.staff?.[i] ?? 0);
   const routes = [...me.routes].sort((a, b) => (b.stats?.profit ?? -1e9) - (a.stats?.profit ?? -1e9));
   const [pick, setPick] = useState<number | null>(routes[0]?.id ?? null);
   const route = me.routes.find((r) => r.id === pick) ?? routes[0];
@@ -154,7 +156,7 @@ function MonthView({ state, viewer }: { state: AirlineState; viewer: number }) {
             <h4>정시 운항률 (%)</h4>
             {legend.length > 1 && <Legend series={legend} />}
           </div>
-          {state.months.length < 2 ? <p className="al-muted">첫 달이 끝나면 그려져요.</p> : <LineChart series={onTimeSeries} labels={labels} tickAt={tickAt} format={(v) => `${v.toFixed(1)}%`} axisFormat={(v) => `${Math.round(v)}`} height={200} zero={false} ariaLabel="회사마다 정시 운항률이 달마다 어떻게 변했는지" />}
+          {state.months.length < 2 ? <p className="al-muted">첫 달이 끝나면 그려져요.</p> : <LineChart series={onTimeSeries} labels={labels} tickAt={tickAt} format={(v) => `${v.toFixed(1)}%`} axisFormat={stepFixed} height={200} zero={false} maxY={100} minSpan={4} ariaLabel="회사마다 정시 운항률이 달마다 어떻게 변했는지" />}
         </section>
       </div>
 
@@ -163,7 +165,7 @@ function MonthView({ state, viewer }: { state: AirlineState; viewer: number }) {
           <h4>
             유가 지수 <small>1이 보통 · 지금 {state.oil.toFixed(2)}</small>
           </h4>
-          {state.months.length < 2 ? <p className="al-muted">첫 달이 끝나면 그려져요.</p> : <LineChart series={oil} labels={labels} tickAt={tickAt} format={(v) => v.toFixed(2)} axisFormat={(v) => v.toFixed(2)} height={170} zero={false} ariaLabel="유가 지수가 달마다 어떻게 변했는지" />}
+          {state.months.length < 2 ? <p className="al-muted">첫 달이 끝나면 그려져요.</p> : <LineChart series={oil} labels={labels} tickAt={tickAt} format={(v) => v.toFixed(2)} axisFormat={stepFixed} height={170} zero={false} minSpan={0.2} ariaLabel="유가 지수가 달마다 어떻게 변했는지" />}
         </section>
         <section className="al-card al-chart-card">
           <div className="al-card-head">
@@ -187,6 +189,16 @@ function MonthView({ state, viewer }: { state: AirlineState; viewer: number }) {
           )}
         </section>
       </div>
+
+      <section className="al-card al-chart-card">
+        <div className="al-card-head">
+          <h4>
+            직원 수 (달마다) <small>조종사·객실 승무원·정비사·지상직 합 · 우리 {staffTotal(me).toLocaleString('ko-KR')}명</small>
+          </h4>
+          {legend.length > 1 && <Legend series={legend} />}
+        </div>
+        {state.months.length < 2 ? <p className="al-muted">첫 달이 끝나면 그려져요.</p> : <LineChart series={staffSeries} labels={labels} tickAt={tickAt} format={(v) => `${Math.round(v).toLocaleString('ko-KR')}명`} axisFormat={(v) => Math.round(v).toLocaleString('ko-KR')} height={170} ariaLabel="회사마다 직원 수가 달마다 어떻게 변했는지" />}
+      </section>
 
       <section className="al-card">
         <h4>
@@ -345,6 +357,7 @@ const CAUSE: Record<string, { icon: string; name: string }> = {
   crew: { icon: '🧑‍✈️', name: '승무원 일정' },
   congestion: { icon: '🛬', name: '공항 혼잡' },
   staff: { icon: '👥', name: '일손 부족' },
+  strike: { icon: '🪧', name: '파업' },
 };
 
 export function causeInfo(cause: string): { icon: string; name: string } {
@@ -397,6 +410,18 @@ function OpsView({ state, viewer }: { state: AirlineState; viewer: number }) {
               <span>보상·추가 비용</span>
               <b>{fmtMoney(r.disrupt)}</b>
             </div>
+            {r.staffCancelled > 0 && (
+              <div>
+                <span>👥 일손 부족 결항</span>
+                <b className="al-neg">{r.staffCancelled}편</b>
+              </div>
+            )}
+            {r.strike && (
+              <div>
+                <span>🪧 파업</span>
+                <b className="al-neg">일주일쯤</b>
+              </div>
+            )}
           </div>
         ) : (
           <p className="al-muted">이번 달 결산이 나오면 노선마다 지연·결항을 보여 줘요.</p>

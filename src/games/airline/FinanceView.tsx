@@ -38,7 +38,8 @@ const INCOME: { key: keyof CompanyReport; name: string }[] = [
 ];
 const COSTS: { key: keyof CompanyReport; name: string }[] = [
   { key: 'fuel', name: '연료비' },
-  { key: 'crew', name: '승무원·정비비' },
+  { key: 'staff', name: '직원 임금·초과 근무' },
+  { key: 'crew', name: '운항 수당·정비 부품' },
   { key: 'airport', name: '공항 이용료·지상 조업' },
   { key: 'service', name: '기내 서비스' },
   { key: 'sales', name: '표 판매 수수료' },

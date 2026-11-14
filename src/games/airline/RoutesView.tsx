@@ -32,6 +32,8 @@ import { yearOf } from './time';
 import type { AirlineAction, AirlineState, ModelDef, RegionId } from './types';
 import { SparkBars, Sparkline } from './Charts';
 import { causeInfo } from './ReportView';
+import { DaySchedule } from './DaySchedule';
+import { TimetableCard } from './TimetableCard';
 import { ActButton, CoName, LoadMeter, Stepper } from './ui';
 
 export interface Planner {
@@ -339,6 +341,7 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
             </div>
             <p className="al-muted al-tip">싸면 손님이 늘고(특히 관광객), 비싸면 한 명에게 더 받아요. 좌석이 꽉 차면 올려 보고, 많이 비면 내려 보세요.</p>
           </section>
+          <TimetableCard state={state} viewer={viewer} canAct={canAct} perform={perform} route={r} />
         </div>
         <div className="al-editor-right">
           <EstimateCard est={est} lastProfit={r.stats?.profit ?? null} lastLf={r.stats?.lf ?? null} />
@@ -377,6 +380,14 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
               );
             })()}
           </section>
+          {planes.length > 0 && (
+            <section className="al-card">
+              <h4>
+                하루 운항표 <small>이 노선을 나는 비행기 {planes.length}대 · 진한 막대가 이 노선</small>
+              </h4>
+              <DaySchedule state={state} ci={viewer} planes={planes} highlight={r.id} limit={6} />
+            </section>
+          )}
           {rivals.length > 0 && (
             <section className="al-card">
               <h4>라이벌</h4>

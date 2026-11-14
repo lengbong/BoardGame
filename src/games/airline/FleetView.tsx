@@ -19,6 +19,7 @@ import {
 import { mLabel, yearOf } from './time';
 import type { AirlineAction, AirlineState, ModelDef } from './types';
 import { aircraftPhoto } from './images';
+import { DaySchedule } from './DaySchedule';
 import { ActButton, Meter, Photo, Stars } from './ui';
 
 interface FleetViewProps {
@@ -36,7 +37,7 @@ const notMine = '내 차례에만 할 수 있어요';
 const fuelPerSeat = (m: ModelDef) => (m.burn / m.seats) * 10000;
 const BEST_FUEL = Math.min(...MODELS.map(fuelPerSeat));
 
-type Tab = 'hangar' | 'shop' | 'used';
+type Tab = 'hangar' | 'shop' | 'used' | 'day';
 
 export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRoutes }: FleetViewProps) {
   const me = state.companies[viewer];
@@ -66,10 +67,23 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
         <button type="button" role="tab" aria-selected={tab === 'used'} className={`al-subtab${tab === 'used' ? ' al-on' : ''}`} onClick={() => setTab('used')} data-testid="al-used-tab">
           🏷️ 중고 시장 {state.market.length}
         </button>
+        <button type="button" role="tab" aria-selected={tab === 'day'} className={`al-subtab${tab === 'day' ? ' al-on' : ''}`} onClick={() => setTab('day')} data-testid="al-day-tab">
+          🕑 하루 운항표
+        </button>
         <span className="al-subtab-note">
           이번 달에 바로 받은 비행기 (리스·중고) {delivered}/{MAX_DELIVERIES}대
         </span>
       </div>
+
+      {tab === 'day' && (
+        <section className="al-card al-day-card">
+          <h4>
+            🕑 하루 운항표 <small>노선을 나는 비행기 {flying.length}대</small>
+          </h4>
+          <DaySchedule state={state} ci={viewer} planes={[...flying].sort((a, b) => planeHours(me, b) - planeHours(me, a))} limit={40} />
+          <p className="al-muted al-tip">노선마다 시간대(아침·낮·저녁·밤) 나누기는 ‘노선’ 화면의 운항 시간표에서 바꿔요.</p>
+        </section>
+      )}
 
       {tab === 'hangar' && (
         <div className="al-hangar">

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { fmtMoney, fmtPax, pct, signedMoney } from './format';
 import { causeInfo } from './ReportView';
 import { CITY } from './cities';
@@ -10,10 +10,15 @@ import type { AirlineState, QuarterReport } from './types';
  * 몇 초 뒤 저절로 사라지고, 다음 달 결산이 오면 바뀐다.
  */
 export function MonthToast({ state, report, viewer, onClose, onDetail }: { state: AirlineState; report: QuarterReport; viewer: number; onClose: () => void; onDetail: () => void }) {
+  // 부모가 다시 그려져도 시계가 처음부터 다시 돌지 않게 (닫기 함수는 ref로)
+  const close = useRef(onClose);
   useEffect(() => {
-    const t = window.setTimeout(onClose, 9000);
+    close.current = onClose;
+  });
+  useEffect(() => {
+    const t = window.setTimeout(() => close.current(), 9000);
     return () => window.clearTimeout(t);
-  }, [onClose]);
+  }, []);
   const r = report.companies[viewer];
   if (!r) return null;
   const lf = r.seats > 0 ? r.pax / r.seats : 0;
@@ -52,8 +57,9 @@ export function MonthToast({ state, report, viewer, onClose, onDetail }: { state
           <dd>{r.flights > 0 ? pct(r.onTime) : '—'}</dd>
         </div>
       </dl>
-      {(worst || news.length > 0) && (
+      {(worst || news.length > 0 || r.staffCancelled > 0) && (
         <ul className="al-mt-news">
+          {r.staffCancelled > 0 && <li>👥 일손이 모자라 {r.staffCancelled}편을 못 띄웠어요</li>}
           {worst && (
             <li>
               {causeInfo(worst.cause).icon} {CITY[worst.a].name}–{CITY[worst.b].name}: 결항 {worst.cancelled}편{worst.grounded ? ` · 점검 ${worst.grounded}대` : ''}

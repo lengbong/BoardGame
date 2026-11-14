@@ -2987,7 +2987,7 @@
 }
 .al-ops-kpi {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -3016,11 +3016,6 @@
 }
 .al-outlook .tag {
   margin-right: 4px;
-}
-@media (max-width: 1000px) {
-  .al-ops-kpi {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
 }
 .al-auto-row {
   display: flex;
@@ -3097,4 +3092,230 @@
 }
 .al-auto-row .btn {
   color: var(--text);
+}
+
+/* 👥 인사 */
+.al-staff {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-content: start;
+}
+.al-staff-sum,
+.al-staff-groups {
+  grid-column: 1 / -1;
+}
+.al-staff-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.al-staff-kpi {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+.al-staff-parts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.al-staff-group .al-meter {
+  width: 100%;
+}
+.al-staff-state {
+  margin: 4px 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.al-staff-pipe {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+  font-size: 13px;
+}
+.al-staff-hire,
+.al-staff-fire {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.al-staff-speed {
+  display: inline-flex;
+  gap: 4px;
+}
+.al-staff-pay {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+  font-size: 13.5px;
+}
+.al-staff-pay input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+@media (max-width: 1000px) {
+  .al-staff-groups {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 하루 운항표 */
+.al-day {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.al-day-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.al-day-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.al-day-track {
+  position: relative;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.al-day-track-axis {
+  height: 18px;
+  background: none;
+  overflow: visible;
+}
+.al-day-band-label {
+  position: absolute;
+  top: 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  padding-left: 3px;
+  border-left: 1px solid var(--border);
+}
+.al-day-band-label small {
+  opacity: 0.75;
+}
+.al-day-bg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--border);
+}
+.al-day-bg-0,
+.al-day-bg-2 {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.al-day-bg-3 {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+.al-day-leg {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 16px;
+  padding: 0 3px;
+  overflow: hidden;
+  white-space: nowrap;
+  box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.35);
+}
+.al-day-leg.al-dim {
+  opacity: 0.35;
+}
+.al-day-spill {
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+/* 운항 시간표 */
+.al-tt-bands {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.al-tt-band {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.al-tt-band.al-on {
+  border-color: var(--accent);
+}
+.al-tt-band.al-closed {
+  opacity: 0.7;
+}
+.al-tt-name {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.al-tt-name small {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.al-tt-room {
+  font-size: 11.5px;
+}
+.al-tt-fit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 4px;
+  font-size: 13px;
+}
+.al-staff-sum .al-meter {
+  width: 100%;
+  margin-top: 4px;
+}
+.al-tt-presets .al-chip {
+  white-space: nowrap;
+}
+.al-tt-best {
+  margin-top: 8px;
+}
+.al-tt-best .btn {
+  white-space: normal;
+  text-align: left;
+}
+
+/* 탭이 일곱 개라도 윗줄은 한 줄로: 날짜·돈은 줄바꿈하지 않고, 회사 이름이 먼저 줄어든다 */
+.al-date b,
+.al-date small,
+.al-me-cash b,
+.al-me-cash small {
+  white-space: nowrap;
+}
+.al-date {
+  flex: none;
+}
+.al-me-cash {
+  flex: none;
+}
+@media (max-width: 1400px) and (min-width: 1001px) {
+  .al-tabs {
+    gap: 0;
+  }
+  .al-tab {
+    padding: 6px 6px;
+    gap: 3px;
+  }
 }

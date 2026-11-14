@@ -71,6 +71,15 @@ const LABEL_POS: Record<string, 'l' | 't' | 'b'> = {
   manila: 'b',
 };
 
+/** 한 번만 도는 SVG 움직임은 문서 시계가 아니라 지금부터 시작해야 해서 붙자마자 시작한다 */
+function startMotion(el: SVGAnimationElement | null) {
+  try {
+    el?.beginElement();
+  } catch {
+    // 움직임을 못 쓰는 브라우저면 그냥 둔다
+  }
+}
+
 function clampView(v: View): View {
   const w = Math.max(MIN_W, Math.min(MAP_W, v.w));
   const h = (w * MAP_H) / MAP_W;
@@ -221,6 +230,18 @@ export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx,
 
   const selRoute = selected?.kind === 'route' ? routes.find((r) => r.company === selected.company && r.route === selected.route) : null;
 
+  // 새 노선 취항: 노선이 그려지고, 첫 비행기가 날아가고, 닿은 도시가 반짝인다
+  const openings = animate
+    ? pulses.flatMap((p) => {
+        if (p.kind !== 'route') return [];
+        const r = [...routes].reverse().find((x) => x.company === p.company && x.pair === p.key);
+        if (!r) return [];
+        const route = state.companies[p.company]?.routes.find((x) => x.id === r.route);
+        return route ? [{ id: p.id, r, a: route.a, b: route.b }] : [];
+      })
+    : [];
+  const newRoute = new Set(openings.map((o) => o.r.key));
+
   return (
     <div className="al-map-wrap" ref={wrapRef}>
       <svg
@@ -270,7 +291,7 @@ export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx,
             return (
               <g
                 key={r.key + (pulse ?? '')}
-                className={`al-route${mine ? ' al-route-mine' : ''}${sel ? ' al-route-sel' : ''}${pulse ? ' al-pulse-route' : ''}${r.flying ? '' : ' al-route-idle'}`}
+                className={`al-route${mine ? ' al-route-mine' : ''}${sel ? ' al-route-sel' : ''}${pulse ? ' al-pulse-route' : ''}${newRoute.has(r.key) ? ' al-route-new' : ''}${r.flying ? '' : ' al-route-idle'}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (!wasDrag()) onSelect({ kind: 'route', company: r.company, route: r.route });
@@ -299,6 +320,40 @@ export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx,
             ));
           })}
         </g>
+
+        {/* 새 노선 취항 연출 */}
+        {openings.length > 0 && (
+          <g className="al-openings" aria-hidden="true">
+            {openings.map((o) => {
+              const color = coColors(state.companies[o.r.company]).main;
+              const pa = project(CITY[o.a].lon, CITY[o.a].lat);
+              const pb = project(CITY[o.b].lon, CITY[o.b].lat);
+              return (
+                <g key={`open-${o.id}`} className="al-open">
+                  {o.r.copies.map((path, j) => (
+                    <g key={j}>
+                      <path d={path} pathLength={1} className="al-open-glow" stroke={color} strokeWidth={9 * k} />
+                      <path d={path} pathLength={1} className="al-open-draw" stroke={color} strokeWidth={3.2 * k} />
+                      <path d={MAP_PLANE_D} fill={color} stroke="#fff" strokeWidth={0.5} className="al-open-plane" transform={`scale(${1.8 * k})`}>
+                        <animateMotion ref={startMotion} dur="1.5s" begin="indefinite" fill="freeze" rotate="auto" path={path} calcMode="spline" keyPoints="0;1" keyTimes="0;1" keySplines="0.45 0 0.3 1" />
+                      </path>
+                    </g>
+                  ))}
+                  <circle cx={pa.x} cy={pa.y} r={7 * k} className="al-open-ring" stroke={color} style={{ animationDelay: '0s' }} />
+                  {[1.35, 1.6, 1.85].map((delay) => (
+                    <circle key={delay} cx={pb.x} cy={pb.y} r={7 * k} className="al-open-ring" stroke={color} strokeWidth={2 * k} style={{ animationDelay: `${delay}s` }} />
+                  ))}
+                  <g transform={`translate(${o.r.mid.x} ${o.r.mid.y - 9 * k}) scale(${k})`} className="al-open-tag">
+                    <rect x={-34} y={-11} width={68} height={18} rx={9} fill={color} />
+                    <text x={0} y={2.5} textAnchor="middle" className="al-open-tag-text">
+                      ✈ 신규 취항
+                    </text>
+                  </g>
+                </g>
+              );
+            })}
+          </g>
+        )}
 
         {/* 도시 */}
         <g className="al-cities">

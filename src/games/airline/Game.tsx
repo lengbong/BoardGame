@@ -18,6 +18,7 @@ import { MapView, type Pulse, type Selection } from './MapView';
 import { Panel } from './Panel';
 import { NewsView, ReportView } from './ReportView';
 import { GameOver, QuarterReport } from './Results';
+import { RouteOpeningCard, type Opening } from './RouteOpening';
 import { RoutesView, type Planner } from './RoutesView';
 import { actor, applyAction, idlePlanes, rankings } from './rules';
 import { companyValue, routeFreq } from './simulate';
@@ -84,6 +85,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   const [report, setReport] = useState<Report | null>(null);
   const [flying, setFlying] = useState(false);
   const [pulses, setPulses] = useState<Pulse[]>([]);
+  const [opening, setOpening] = useState<Opening | null>(null);
   const [banner, setBanner] = useState<{ id: number; text: string; color: string | null } | null>(null);
   const [notice, setNotice] = useState<{ id: number; text: string } | null>(null);
   const [zoomCmd, setZoomCmd] = useState<{ n: number; kind: 'in' | 'out' | 'reset' } | undefined>(undefined);
@@ -130,9 +132,14 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   }, [notice]);
   useEffect(() => {
     if (pulses.length === 0) return;
-    const t = window.setTimeout(() => setPulses([]), 2600);
+    const t = window.setTimeout(() => setPulses([]), 3000);
     return () => window.clearTimeout(t);
   }, [pulses]);
+  useEffect(() => {
+    if (!opening) return;
+    const t = window.setTimeout(() => setOpening(null), 3800);
+    return () => window.clearTimeout(t);
+  }, [opening]);
 
   /** 상태가 바뀔 때마다: 저장, 지도 반짝임, 소리, 분기 결산 */
   useLayoutEffect(() => {
@@ -142,7 +149,14 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
     prevGame.current = game;
     if (!prev || prev === game) return;
     const { pulses: p, summary } = diffPulses(prev, game);
-    if (p.length > 0 && delays.fx) setPulses(p);
+    if (p.length > 0 && delays.fx) {
+      setPulses(p);
+      // 사람 회사가 새 노선을 열면 축하 카드
+      const mine = p.filter((x) => x.kind === 'route' && game.companies[x.company]?.kind === 'human');
+      const last = mine.at(-1);
+      const route = last ? game.companies[last.company].routes.find((r) => pairKey(r.a, r.b) === last.key) : undefined;
+      if (last && route) setOpening({ id: last.id, company: last.company, a: route.a, b: route.b, more: mine.length - 1 });
+    }
     const prevActor = actor(prev);
     const quarterEnd = game.events.some((e) => e.type === 'quarter');
     // 컴퓨터가 한 일 요약
@@ -449,6 +463,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
               ✈️ {qLabel(game.report?.q ?? game.q)} 운항 중… <span className="al-sim-bar" />
             </div>
           )}
+          {opening && <RouteOpeningCard key={opening.id} state={game} opening={opening} onClose={() => setOpening(null)} />}
           {banner && (
             <div className="al-banner" key={banner.id} style={{ '--al-pc': banner.color ?? 'var(--accent)' } as CSSProperties} role="status">
               {banner.text}

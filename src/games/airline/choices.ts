@@ -34,7 +34,6 @@ interface Scenario {
 }
 
 const round = (v: number) => Math.max(5, Math.round(v / 5) * 5);
-const pct = (m: number) => `${m > 1 ? '+' : '−'}${Math.round(Math.abs(m - 1) * 100)}%`;
 const years = (months: number) => (months % 12 === 0 ? `${months / 12}년` : `${months}달`);
 
 /** 회사 크기에 맞춘 결정 사건 돈 단위 */
@@ -56,11 +55,11 @@ const SCENARIOS: Scenario[] = [
       scenario: 'wage',
       icon: '🧑‍✈️',
       title: '조종사·승무원 임금 협상',
-      text: '조종사와 승무원 모임이 임금을 올려 달라고 해요. 어떻게 할까요?',
+      text: `조종사와 승무원 모임이 임금을 올려 달라고 해요. 지금 조직 만족도는 ${Math.round(x.c.morale)}이에요. 어떻게 할까요?`,
       options: [
-        { label: '넉넉히 올려 주기', desc: `승무원·정비비 ${pct(1.06)} (${years(36)}) · 평판 +5`, cost: 0, ai: 0.8, effects: [{ kind: 'mod', mod: { kind: 'crew', value: 1.06, until: x.t + 36, label: '임금 인상' } }, { kind: 'rep', amount: 5 }] },
-        { label: '조금만 올리기', desc: `승무원·정비비 ${pct(1.03)} (${years(36)})`, cost: 0, ai: 1, effects: [{ kind: 'mod', mod: { kind: 'crew', value: 1.03, until: x.t + 36, label: '임금 조금 인상' } }] },
-        { label: '거절하기', desc: '평판 −8 · 일하는 분위기가 나빠져 여섯 달 동안 손님 −8%', cost: 0, ai: 0.3, effects: [{ kind: 'rep', amount: -8 }, { kind: 'mod', mod: { kind: 'demand', value: 0.92, until: x.t + 6, label: '협상 결렬' } }] },
+        { label: '넉넉히 올려 주기', desc: '조종사·승무원 임금 수준 +6% · 조직 만족도 +15 · 평판 +3', cost: 0, ai: x.c.morale < 50 ? 1.2 : 0.8, effects: [{ kind: 'pay', amount: 0.06 }, { kind: 'morale', amount: 15 }, { kind: 'rep', amount: 3 }] },
+        { label: '조금만 올리기', desc: '조종사·승무원 임금 수준 +3% · 조직 만족도 +6', cost: 0, ai: 1, effects: [{ kind: 'pay', amount: 0.03 }, { kind: 'morale', amount: 6 }] },
+        { label: '거절하기', desc: `조직 만족도 −15 · 평판 −5${x.c.morale < 40 ? ' · 파업이 날 수 있어요' : ''}`, cost: 0, ai: 0.3, effects: [{ kind: 'morale', amount: -15 }, { kind: 'rep', amount: -5 }] },
       ],
     }),
   },
@@ -212,14 +211,14 @@ const SCENARIOS: Scenario[] = [
   },
   {
     id: 'academy',
-    when: (x) => x.c.planes.length >= 4,
+    when: (x) => x.c.planes.length >= 4 && !x.c.academy,
     build: (x) => ({
       scenario: 'academy',
       icon: '🎓',
-      title: '조종사 학교 세우기',
-      text: '우리 회사만의 조종사·정비사 학교를 세우면 오랫동안 사람 구하는 돈이 줄어요.',
+      title: '우리 훈련원 세우기',
+      text: '우리 회사만의 조종사·승무원·정비사 훈련원을 세우자는 의견이 나왔어요. 사람을 더 빨리, 더 싸게 키울 수 있어요.',
       options: [
-        { label: '세우기', desc: `${round(x.s * 1)}억 · 승무원·정비비 −4% (${years(48)})`, cost: round(x.s * 1), ai: 0.9, effects: [{ kind: 'mod', mod: { kind: 'crew', value: 0.96, until: x.t + 48, label: '조종사 학교' } }] },
+        { label: '세우기', desc: `${round(x.s * 0.8)}억 · 조종사 뽑는 데 3달(보통 5달)·뽑는 돈 −40% · 조직 만족도 +4 · 달 유지비 2.5억`, cost: round(x.s * 0.8), ai: x.c.planes.length >= 12 ? 1.1 : 0.6, effects: [{ kind: 'academy' }] },
         decline('안 해요'),
       ],
     }),
@@ -377,6 +376,9 @@ export function makeChoice(state: AirlineState, ci: number, rng: Rng): Draft | n
   const c = state.companies[ci];
   const ctx: Ctx = { state, ci, c, year: yearOf(state.q), q: state.q, t: state.t, s: choiceScale(state, ci), rng };
   const pool = SCENARIOS.filter((sc) => sc.when(ctx));
+  // 조직 만족도가 낮으면 임금 협상이 먼저 온다
+  const wage = pool.find((sc) => sc.id === 'wage');
+  if (wage && c.morale < 45 && rng() < 0.75) return wage.build(ctx);
   // 섞어서 처음으로 만들어지는 것
   for (let tries = 0; tries < 6 && pool.length; tries++) {
     const k = Math.floor(rng() * pool.length);

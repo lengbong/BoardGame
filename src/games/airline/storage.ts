@@ -5,6 +5,8 @@ import { MODEL } from './aircraft';
 import { CHALLENGE } from './challenges';
 import { CITY, REGIONS } from './cities';
 import { REAL_AIRLINE } from './realAirlines';
+import { STAFF_GROUPS, emptyStaff, staffNeed } from './staff';
+import { defaultTimes } from './timetable';
 import { DEFAULT_OPTIONS, GOAL_VALUES } from './rules';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { AirlineOptions, AirlineSetup, AirlineState, Choice, Company, GoalKind, ModKind, YearAcc } from './types';
@@ -93,6 +95,7 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
   const routeIds = new Set<number>();
   for (const r of k.routes) {
     if (!isObj(r) || !isInt(r.id) || r.id >= nextId || !isCity(r.a) || !isCity(r.b) || r.a === r.b || !isInt(r.fare) || r.fare < -30 || r.fare > 30 || !isInt(r.since)) return false;
+    if (!Array.isArray(r.times) || r.times.length !== 4 || !r.times.every((x) => isNum(x) && x >= 0)) return false;
     if (r.stats !== null && !(isObj(r.stats) && isNum(r.stats.lf) && isNum(r.stats.profit) && isInt(r.stats.lossStreak) && isNum(r.stats.onTime) && isNum(r.stats.cancel) && Array.isArray(r.stats.hist))) return false;
     routeIds.add(r.id);
   }
@@ -107,6 +110,8 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
   if (k.choice !== null && !isValidChoice(k.choice)) return false;
   if (!isInt(k.nextChoiceT) || !isInt(k.lastProposal) || !isInt(k.taken)) return false;
   if (!isInt(k.maint) || k.maint < 1 || k.maint > 5 || !isInt(k.crewReserve) || k.crewReserve < 0 || k.crewReserve > 2 || !isNum(k.onTime)) return false;
+  if (!isObj(k.staff) || !STAFF_GROUPS.every((g) => isObj(k.staff[g]) && isInt(k.staff[g].have) && k.staff[g].have >= 0 && isNum(k.staff[g].pay) && Array.isArray(k.staff[g].pipe) && k.staff[g].pipe.every((p) => isObj(p) && isInt(p.n) && isInt(p.ready)))) return false;
+  if (!isNum(k.morale) || typeof k.academy !== 'boolean' || !isNum(k.shock)) return false;
   if (k.partner !== null && !isInt(k.partner)) return false;
   if (!Array.isArray(k.goals) || !k.goals.every((g) => isObj(g) && GOAL_KINDS.includes(g.kind) && isNum(g.target) && typeof g.text === 'string' && isObj(g.reward) && isNum(g.reward.cash) && isNum(g.reward.rep) && (g.done === null || typeof g.done === 'boolean'))) return false;
   if (!isObj(k.acc) || !ACC_KEYS.every((key) => isNum((k.acc as unknown as Record<string, unknown>)[key]))) return false;
@@ -206,10 +211,36 @@ export function migrateV2(v: unknown): unknown {
   return s;
 }
 
+/** 3판 저장에 나중에 생긴 값(직원·시간표)이 없으면 채운다 */
+export function fillMissing(v: unknown): unknown {
+  if (!isObj(v) || v.version !== 3 || !Array.isArray(v.companies)) return v;
+  const s = JSON.parse(JSON.stringify(v)) as Record<string, any>;
+  const year = isInt(s.t) ? Math.floor(s.t / 12) : 2000;
+  for (const c of s.companies) {
+    if (!isObj(c)) continue;
+    for (const r of Array.isArray(c.routes) ? c.routes : []) if (isObj(r) && !Array.isArray(r.times) && isCity(r.a) && isCity(r.b)) r.times = defaultTimes(r.a as string, r.b as string, year);
+    if (!isObj(c.staff)) {
+      const staff = emptyStaff();
+      c.staff = staff;
+      try {
+        const need = staffNeed(s as unknown as AirlineState, c as unknown as Company);
+        for (const g of STAFF_GROUPS) staff[g].have = Math.max(staff[g].have, Math.ceil(need[g] * 1.05));
+      } catch {
+        /* 모자란 값이 있으면 기본값으로 둔다 */
+      }
+    }
+    if (!isNum(c.morale)) c.morale = 65;
+    if (typeof c.academy !== 'boolean') c.academy = false;
+    if (!isNum(c.shock)) c.shock = 0;
+  }
+  for (const m of Array.isArray(s.months) ? s.months : []) if (isObj(m) && !Array.isArray(m.staff)) m.staff = (m.value as unknown[]).map(() => 0);
+  return s;
+}
+
 export function parseSaved(v: unknown): SavedAirlineGame | null {
   if (!isObj(v)) return null;
   const saved = { ...(v as unknown as SavedAirlineGame) };
-  saved.state = migrateV2(saved.state) as AirlineState;
+  saved.state = fillMissing(migrateV2(saved.state)) as AirlineState;
   if (!isValidSetup(saved.setup) || !isValidState(saved.state)) return null;
   const options = parseOptions(saved.state.options);
   // 항공사 자료가 바뀌어 없어진 항공사는 가상 항공사로 (이름·색은 그대로)

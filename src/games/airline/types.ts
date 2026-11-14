@@ -216,7 +216,11 @@ export type ChoiceEffect =
   | { kind: 'mod'; mod: Omit<Mod, 'id'> }
   | { kind: 'awareness'; region: RegionId; amount: number }
   | { kind: 'alliance'; with: number }
-  | { kind: 'order'; model: string; discount: number };
+  | { kind: 'order'; model: string; discount: number }
+  /** 운항 인력(조종사·객실 승무원) 임금 수준 더하기 */
+  | { kind: 'pay'; amount: number }
+  | { kind: 'morale'; amount: number }
+  | { kind: 'academy' };
 
 export interface ChoiceOption {
   label: string;
@@ -316,6 +320,8 @@ export interface Route {
   /** 연 달 */
   since: number;
   stats: RouteStats | null;
+  /** 주간 운항을 나누는 시간대 비율 [아침, 낮, 저녁, 밤] (합이 0보다 큰 정수) */
+  times: [number, number, number, number];
 }
 
 export type BusinessKind = 'hotel' | 'agency';
@@ -392,11 +398,34 @@ export interface Company {
   crewReserve: number;
   /** 최근 석 달 정시 운항률 (평판·손님에 영향) */
   onTime: number;
+  /** 직원 (그룹마다) */
+  staff: Record<StaffGroup, StaffState>;
+  /** 조직 만족도 0~100 */
+  morale: number;
+  /** 우리 훈련원 (조종사·승무원·정비사 학교) */
+  academy: boolean;
+  /** 내보내기·파업으로 생긴 서운함 (만족도를 깎고 달마다 줄어든다) */
+  shock: number;
   /** 실제 항공사 id (realAirlines.ts). 가상 항공사면 null */
   airline: string | null;
   /** 회사 색 (실제 항공사의 칠 색에서 고른 것). null이면 자리 색 */
   color: string | null;
 }
+
+/** 직원 그룹: 조종사·객실 승무원·정비사·지상직 */
+export type StaffGroup = 'pilot' | 'cabin' | 'tech' | 'ground';
+
+export interface StaffState {
+  /** 지금 일하는 사람 */
+  have: number;
+  /** 임금 수준 (시장 = 1, 0.8~1.3) */
+  pay: number;
+  /** 뽑는 중 (ready 달부터 일한다) */
+  pipe: { n: number; ready: number }[];
+}
+
+/** 운항 시간대: 아침(06–10)·낮(10–16)·저녁(16–21)·밤(21–02) */
+export type Band = 0 | 1 | 2 | 3;
 
 /** 컴퓨터 성향: 느긋 / 보통 / 치열 */
 export type AiStyle = 'relaxed' | 'normal' | 'fierce';
@@ -512,6 +541,12 @@ export interface CompanyReport {
   diverted: number;
   /** 지연·결항 보상과 돌아간 비행 비용 */
   disrupt: number;
+  /** 직원 임금·뽑는 중 사람·초과 근무·훈련원 */
+  staff: number;
+  /** 일손이 모자라 결항한 편 */
+  staffCancelled: number;
+  /** 이번 달 파업이 있었는지 */
+  strike: boolean;
   /** 정시 운항률 (결항은 빼고 뜬 편 가운데 제때 뜬 비율) */
   onTime: number;
   /** 경영 평가 (4분기 결산에만) */
@@ -592,6 +627,8 @@ export interface MonthPoint {
   lf: number[];
   /** 정시 운항률 */
   onTime: number[];
+  /** 직원 수 */
+  staff: number[];
 }
 
 /** 한 해 결산 (회사마다 열두 달 합) */
@@ -655,6 +692,15 @@ export type AirlineAction =
   | { type: 'setMaint'; level: number }
   /** 예비 승무원 0~2 */
   | { type: 'setCrewReserve'; level: number }
+  /** 직원 뽑기 (fast: 서둘러 — 비싸지만 한 달 빨리) */
+  | { type: 'hire'; group: StaffGroup; n: number; fast: boolean }
+  /** 직원 내보내기 (석 달 치 임금, 만족도가 떨어진다) */
+  | { type: 'fire'; group: StaffGroup; n: number }
+  /** 임금 수준 0.8~1.3 */
+  | { type: 'setPay'; group: StaffGroup; level: number }
+  | { type: 'buildAcademy' }
+  /** 노선 시간대 나누기 [아침, 낮, 저녁, 밤] */
+  | { type: 'setTimes'; route: number; times: [number, number, number, number] }
   | { type: 'borrow'; amount: number }
   | { type: 'repay'; amount: number }
   | { type: 'build'; city: string; kind: BusinessKind }

@@ -9,6 +9,8 @@ import { FIXED_EVENTS, FIXED_ICON, fixedEventsAt, rollRandomEvent } from './even
 import { addMonth, closeQuarter, freshAcc, goalMet, gradeYear, newGoals } from './goals';
 import { MAX_PLANES, MAX_ROUTES } from './limits';
 import { REAL_AIRLINE, airlinesAt } from './realAirlines';
+import { ACADEMY_COST, PAY_MAX, PAY_MIN, STAFF_GROUPS, STAFF_INFO, emptyStaff, fireCost, hireCost, hireTime, moraleTarget, staffCap, staffNeed, staffPipe, staffTotal } from './staff';
+import { bandCaps, bandCounts, bandUsed, defaultTimes, routeCurfew } from './timetable';
 import {
   LEASE_RATE,
   MAX_DELIVERIES,
@@ -56,6 +58,7 @@ import type {
   Route,
   RouteReport,
   SeatIndex,
+  StaffGroup,
 } from './types';
 
 export { MAX_PLANES, MAX_ROUTES };
@@ -163,6 +166,10 @@ function newCompany(seat: SeatIndex, kind: Company['kind'], name: string, hub: s
     maint: 3,
     crewReserve: 1,
     onTime: 0.85,
+    staff: emptyStaff(),
+    morale: 65,
+    academy: false,
+    shock: 0,
   };
 }
 
@@ -314,7 +321,7 @@ function createChallenge(setup: AirlineSetup, opts: AirlineOptions, rng: Rng): A
         const [a, b] = f.route;
         let r = c.routes.find((x) => pairKey(x.a, x.b) === pairKey(a, b));
         if (!r) {
-          r = { id: state.nextId++, a, b, fare: f.fare ?? 0, since: state.t, stats: null };
+          r = { id: state.nextId++, a, b, fare: f.fare ?? 0, since: state.t, stats: null, times: defaultTimes(a, b, def.year) };
           c.routes.push(r);
         }
         routeId = r.id;
@@ -347,12 +354,19 @@ function finishStart(state: AirlineState, rng: Rng): AirlineState {
   const year = yearOf(s.q);
   s = {
     ...s,
-    companies: s.companies.map((c, ci) => ({
-      ...c,
-      acc: freshAcc(s, ci, year, 0),
-      goals: newGoals(s, ci, rng),
-      nextChoiceT: s.t + 5 + (ci % 3) * 2,
-    })),
+    companies: s.companies.map((c, ci) => {
+      // 비행기를 가지고 시작하는 회사(도전 과제)는 일손도 갖춰 둔다
+      const need = staffNeed(s, c);
+      const staff = { ...c.staff };
+      for (const g of STAFF_GROUPS) staff[g] = { ...staff[g], have: Math.max(staff[g].have, Math.ceil(need[g] * 1.08)) };
+      return {
+        ...c,
+        staff,
+        acc: freshAcc(s, ci, year, 0),
+        goals: newGoals(s, ci, rng),
+        nextChoiceT: s.t + 5 + (ci % 3) * 2,
+      };
+    }),
   };
   s = refreshMarket(s, rng, true);
   s = { ...s, history: [historyPoint(s, s.q - 1)], months: [monthPoint(s, s.t - 1, null)] };
@@ -449,6 +463,14 @@ export const fmtMoney = (v: number): string => {
   if (Math.abs(r) >= 10000) return `${(r / 10000).toFixed(Math.abs(r) >= 100000 ? 0 : 1).replace(/\.0$/, '')}조`;
   return `${r.toLocaleString('ko-KR')}억`;
 };
+
+/** 작은 돈까지 읽기 좋게: '1,040만 원', '2.4억', '120억' */
+export function fmtFine(v: number): string {
+  const a = Math.abs(v);
+  if (a < 1) return `${Math.round(v * 10000).toLocaleString('ko-KR')}만 원`;
+  if (a < 10) return `${(Math.round(v * 10) / 10).toLocaleString('ko-KR')}억`;
+  return fmtMoney(v);
+}
 
 export function branchBlocker(state: AirlineState, ci: number, city: string): string | null {
   const c = state.companies[ci];
@@ -605,6 +627,55 @@ export function buildBlocker(state: AirlineState, ci: number, city: string, kind
   return null;
 }
 
+export function hireBlocker(state: AirlineState, ci: number, group: StaffGroup, n: number, fast: boolean): string | null {
+  const c = state.companies[ci];
+  if (!STAFF_GROUPS.includes(group)) return '없는 직원 그룹이에요';
+  if (!Number.isInteger(n) || n < 1 || n > 400) return '1~400명까지 뽑을 수 있어요';
+  const cost = hireCost(state, c, group, n, fast);
+  if (c.cash < cost) return `돈이 모자라요 (${fmtFine(cost)} 필요)`;
+  return null;
+}
+
+export function fireBlocker(state: AirlineState, ci: number, group: StaffGroup, n: number): string | null {
+  const c = state.companies[ci];
+  if (!STAFF_GROUPS.includes(group)) return '없는 직원 그룹이에요';
+  if (!Number.isInteger(n) || n < 1) return '1명 넘게 골라요';
+  if (n > c.staff[group].have) return '그만큼 일하는 사람이 없어요';
+  const cost = fireCost(state, c, group, n);
+  if (c.cash < cost) return `돈이 모자라요 (${fmtFine(cost)} 필요)`;
+  return null;
+}
+
+export function academyBlocker(state: AirlineState, ci: number): string | null {
+  const c = state.companies[ci];
+  if (c.academy) return '이미 훈련원이 있어요';
+  if (c.cash < ACADEMY_COST) return `돈이 모자라요 (${fmtMoney(ACADEMY_COST)} 필요)`;
+  return null;
+}
+
+/**
+ * 노선 시간대를 바꿀 수 있는지: 밤 운항 금지 공항이면 밤은 0, 시간대마다 두 공항 슬롯 안에서.
+ */
+export function timesBlocker(state: AirlineState, ci: number, routeId: number, times: readonly number[]): string | null {
+  const c = state.companies[ci];
+  const r = routeById(c, routeId);
+  if (!r) return '없는 노선이에요';
+  if (times.length !== 4 || times.some((x) => !Number.isFinite(x) || x < 0) || times.every((x) => x <= 0)) return '시간대를 하나 넘게 골라요';
+  const year = yearNow(state);
+  if (times[3] > 0 && routeCurfew(r.a, r.b, year)) return '밤 운항을 막는 공항이에요';
+  const total = routeFreq(c, r.id);
+  const counts = bandCounts(times, total);
+  const freqOf = (id: number) => routeFreq(c, id);
+  for (const city of [r.a, r.b]) {
+    const cap = bandCaps(state, ci, city, slotCapacity(state, ci, city));
+    const used = bandUsed(c, city, freqOf, r.id);
+    for (let i = 0; i < 4; i++) {
+      if (counts[i] > 0 && used[i] + counts[i] > cap[i]) return `${CITY[city].name} ${['아침', '낮', '저녁', '밤'][i]} 슬롯이 모자라요 (남은 ${Math.max(0, cap[i] - used[i])}회)`;
+    }
+  }
+  return null;
+}
+
 export function proposeBlocker(state: AirlineState, ci: number, to: number): string | null {
   const c = state.companies[ci];
   const t = state.companies[to];
@@ -629,7 +700,7 @@ function cloneCompany(c: Company): Company {
   return {
     ...c,
     branches: [...c.branches],
-    routes: c.routes.map((r) => ({ ...r })),
+    routes: c.routes.map((r) => ({ ...r, times: [...r.times] as [number, number, number, number] })),
     planes: c.planes.map((p) => ({ ...p, legs: p.legs.map((l) => ({ ...l })) })),
     ads: { ...c.ads },
     awareness: { ...c.awareness },
@@ -640,6 +711,7 @@ function cloneCompany(c: Company): Company {
     goals: c.goals.map((g) => ({ ...g })),
     acc: { ...c.acc },
     reviews: [...c.reviews],
+    staff: { pilot: { ...c.staff.pilot, pipe: [...c.staff.pilot.pipe] }, cabin: { ...c.staff.cabin, pipe: [...c.staff.cabin.pipe] }, tech: { ...c.staff.tech, pipe: [...c.staff.tech.pipe] }, ground: { ...c.staff.ground, pipe: [...c.staff.ground.pipe] } },
   };
 }
 
@@ -720,7 +792,7 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
     case 'openRoute': {
       if (routeBlocker(state, ci, action.a, action.b)) return state;
       let s = edit(state, ci, (c, s) => {
-        c.routes.push({ id: s.nextId, a: action.a, b: action.b, fare: 0, since: s.t, stats: null });
+        c.routes.push({ id: s.nextId, a: action.a, b: action.b, fare: 0, since: s.t, stats: null, times: defaultTimes(action.a, action.b, yearOf(s.q)) });
         s.nextId += 1;
         c.stats.opened += 1;
         pushEvent(s, { type: 'route', company: ci, a: action.a, b: action.b });
@@ -874,6 +946,52 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
         c.crewReserve = level;
       });
     }
+    case 'hire': {
+      if (hireBlocker(state, ci, action.group, action.n, action.fast)) return state;
+      const n = Math.round(action.n);
+      const cost = hireCost(state, c0, action.group, n, action.fast);
+      const ready = state.t + hireTime(c0, action.group, action.fast);
+      const s = edit(state, ci, (c) => {
+        c.cash -= cost;
+        c.staff = { ...c.staff, [action.group]: { ...c.staff[action.group], pipe: [...c.staff[action.group].pipe, { n, ready }] } };
+      });
+      return addLog(s, seat, `${c0.name}: ${STAFF_INFO[action.group].name} ${n}명 뽑기 (${mLabel(ready)}부터, −${fmtFine(cost)})`);
+    }
+    case 'fire': {
+      if (fireBlocker(state, ci, action.group, action.n)) return state;
+      const n = Math.round(action.n);
+      const cost = fireCost(state, c0, action.group, n);
+      const total = Math.max(1, staffTotal(c0));
+      const s = edit(state, ci, (c) => {
+        c.cash -= cost;
+        c.staff = { ...c.staff, [action.group]: { ...c.staff[action.group], have: c.staff[action.group].have - n } };
+        // 사람을 내보내면 남은 사람들도 서운해한다
+        c.shock = Math.min(40, c.shock + 4 + (n / total) * 120);
+      });
+      return addLog(s, seat, `${c0.name}: ${STAFF_INFO[action.group].name} ${n}명 내보내기 (−${fmtFine(cost)})`);
+    }
+    case 'setPay': {
+      const level = Math.round(action.level * 100) / 100;
+      if (!STAFF_GROUPS.includes(action.group) || level < PAY_MIN - 1e-9 || level > PAY_MAX + 1e-9 || level === c0.staff[action.group].pay) return state;
+      return edit(state, ci, (c) => {
+        c.staff = { ...c.staff, [action.group]: { ...c.staff[action.group], pay: level } };
+      });
+    }
+    case 'buildAcademy': {
+      if (academyBlocker(state, ci)) return state;
+      const s = edit(state, ci, (c) => {
+        c.cash -= ACADEMY_COST;
+        c.academy = true;
+      });
+      return addLog(s, seat, `${c0.name}: 훈련원 세우기 (−${fmtMoney(ACADEMY_COST)})`);
+    }
+    case 'setTimes': {
+      if (timesBlocker(state, ci, action.route, action.times)) return state;
+      return edit(state, ci, (c) => {
+        const r = c.routes.find((x) => x.id === action.route)!;
+        r.times = action.times.map((x) => Math.max(0, Math.round(x))) as [number, number, number, number];
+      });
+    }
     case 'setService': {
       const level = Math.round(action.level);
       if (level < 1 || level > 5 || level === c0.service) return state;
@@ -982,6 +1100,13 @@ function applyChoice(state: AirlineState, ci: number, option: number): AirlineSt
       else if (e.kind === 'alliance' && other) {
         c.partner = e.with;
         other.partner = ci;
+      } else if (e.kind === 'pay') {
+        for (const g of ['pilot', 'cabin'] as const) c.staff = { ...c.staff, [g]: { ...c.staff[g], pay: Math.min(PAY_MAX, Math.round((c.staff[g].pay + e.amount) * 100) / 100) } };
+      } else if (e.kind === 'morale') {
+        c.morale = Math.max(0, Math.min(100, c.morale + e.amount));
+        if (e.amount < 0) c.shock = Math.min(40, c.shock - e.amount * 0.5);
+      } else if (e.kind === 'academy') {
+        c.academy = true;
       } else if (e.kind === 'order') {
         const m = MODEL[e.model];
         c.orders.push({ id: s.nextId, model: m.id, due: s.t + leadTime(m, yearOf(s.q)), price: o.cost });
@@ -1093,6 +1218,7 @@ function monthPoint(state: AirlineState, t: number, report: QuarterReport | null
       return x && x.seats > 0 ? Math.round((x.pax / x.seats) * 1000) / 1000 : 0;
     }),
     onTime: state.companies.map((c, i) => Math.round(((r(i)?.flights ?? 0) > 0 ? r(i)!.onTime : c.onTime) * 1000) / 1000),
+    staff: state.companies.map((c) => (c.out ? 0 : staffTotal(c))),
   };
 }
 
@@ -1189,6 +1315,24 @@ export function runMonth(state: AirlineState, rng: Rng = Math.random): AirlineSt
     }
     c.stats.pax += Math.round(rep.pax);
     c.acc = addMonth(c.acc, rep);
+    // 조직 만족도: 임금·초과 근무·성장·훈련원 쪽으로 천천히. 파업이 끝나면 조금 풀린다
+    if (rep.strike) c.shock = Math.max(0, c.shock - 6);
+    c.shock = Math.round(c.shock * 0.85 * 10) / 10;
+    const mt = moraleTarget(s, c).value;
+    c.morale = Math.round(Math.max(0, Math.min(100, c.morale + (mt - c.morale) * 0.2 + (rep.strike ? 8 : 0))) * 10) / 10;
+  });
+  // 파업 소식 (사람 회사) — 파업 뒤에는 임금 협상이 따라온다
+  companies.forEach((c, ci) => {
+    if (!out.reports[ci].strike || c.out) return;
+    s = addNews(s, {
+      icon: '🪧',
+      title: `${c.name}: 직원들이 일주일쯤 일을 멈췄어요`,
+      text: `조직 만족도가 낮아 조종사·승무원들이 파업했어요. 이번 달 운항이 크게 줄었어요. 임금 수준과 초과 근무를 살펴보세요.${c.airline ? ' (게임 속 이야기)' : ''}`,
+      tone: 'bad',
+      for: c.kind === 'human' ? [ci] : undefined,
+      company: ci,
+    });
+    if (!c.choice) c.nextChoiceT = Math.min(c.nextChoiceT, t + 1);
   });
 
   for (const ci of bankrupts) s = shutDown(s, ci, t);
@@ -1484,6 +1628,12 @@ function startMonth(state: AirlineState, t: number, rng: Rng): AirlineState {
     if (c.out) return;
     c.taken = 0;
     c.mods = c.mods.filter((m) => m.until > t);
+    // 뽑은 사람들이 일을 시작한다
+    for (const g of STAFF_GROUPS) {
+      const st = c.staff[g];
+      const ready = st.pipe.filter((p) => p.ready <= t).reduce((sum, p) => sum + p.n, 0);
+      if (ready > 0 || st.pipe.length) c.staff = { ...c.staff, [g]: { ...st, have: st.have + ready, pipe: st.pipe.filter((p) => p.ready > t) } };
+    }
     const due = c.orders.filter((o) => o.due <= t);
     for (const o of due) {
       c.planes.push({ id: s.nextId, model: o.model, leased: false, rent: 0, deposit: 0, since: t, legs: [] });
@@ -1608,8 +1758,11 @@ export function autoStopReason(state: AirlineState, ci: number, sinceNews: numbe
   if (c.out) return '회사가 운항을 멈췄어요';
   if (c.choice) return `결정할 일: ${c.choice.title}`;
   const rep = state.report?.companies[ci];
-  const costs = rep ? rep.fuel + rep.crew + rep.airport + rep.service + rep.sales + rep.lease + rep.fleet + rep.branch + rep.ads + rep.interest + rep.disrupt : 0;
+  const costs = rep ? rep.fuel + rep.crew + rep.airport + rep.service + rep.sales + rep.lease + rep.fleet + rep.branch + rep.ads + rep.interest + rep.disrupt + rep.staff : 0;
   if (c.crisis > 0 || c.cash < Math.max(20, costs * 0.5)) return '현금이 모자라요';
+  const need = staffNeed(state, c);
+  if (staffCap(need, c) < 1) return '일손이 모자라 결항이 나요';
+  for (const g of ['pilot', 'cabin'] as const) if (need[g] > 0 && c.staff[g].have + staffPipe(c, g) < need[g] * 0.95) return `${STAFF_INFO[g].name}이 곧 모자라요`;
   if (idlePlanes(c).length > 0 && c.planes.length > 0 && idlePlanes(c).length > Math.floor(c.planes.filter((p) => p.legs.length > 0).length * 0.05)) return '쉬는 비행기가 있어요';
   const fresh = state.news.filter((n) => n.id >= sinceNews);
   const big = fresh.find((n) => n.tone === 'big');

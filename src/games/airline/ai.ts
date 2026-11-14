@@ -1,5 +1,6 @@
 import { MODEL, availableModels, leadTime } from './aircraft';
 import { MAX_ROUTES } from './limits';
+import { ACADEMY_COST, STAFF_GROUPS, hireCost, hireTime, staffNeed, staffPipe } from './staff';
 import { aiChoose, allianceScore } from './choices';
 import { CITIES, CITY, REGIONS, airportClass, citySize, dist, pairKey } from './cities';
 import {
@@ -8,13 +9,16 @@ import {
   branchBlocker,
   buyBlocker,
   depositFor,
+  fireBlocker,
   fleetCount,
+  hireBlocker,
   idlePlanes,
   planeById,
   proposeBlocker,
   routeBlocker,
   routeById,
   routeOnPair,
+  timesBlocker,
   usedBlocker,
 } from './rules';
 import {
@@ -123,7 +127,7 @@ export class Planner {
   private lastCosts(): number {
     const r = this.s.report?.companies[this.ci];
     if (!r) return 0;
-    return r.fuel + r.crew + r.airport + r.service + r.sales + r.lease + r.fleet + r.branch + r.ads + r.interest + r.disrupt;
+    return r.fuel + r.crew + r.airport + r.service + r.sales + r.lease + r.fleet + r.branch + r.ads + r.interest + r.disrupt + r.staff;
   }
 
   /** 남겨 둘 현금 (석 달 치 비용의 일부) */
@@ -160,6 +164,7 @@ export class Planner {
     if (this.c.out) return;
     this.decide();
     this.emergency();
+    this.manageStaff();
     if (!this.planning) {
       // 계획 달이 아니면 가볍게: 쉬는 비행기, 아주 차거나 빈 노선의 운임, 광고
       this.quickFares();
@@ -180,12 +185,59 @@ export class Planner {
       this.setAds();
       this.setService();
       this.setOps();
+      this.tuneTimes();
       this.maybePropose();
       this.manageLoans(false);
     } else {
       this.easyExpand();
       this.easyAds();
       if (this.c.cash > 1500 && this.c.debt > 0) this.act({ type: 'repay', amount: Math.min(this.c.debt, this.c.cash - 1000) });
+    }
+  }
+
+  /**
+   * 직원: 필요한 사람에 앞으로 늘 비행기 몫을 더해 미리 뽑는다 (조종사는 다섯 달 걸린다).
+   * 보통 컴퓨터는 만족도가 낮으면 임금을 올리고, 비행기가 많으면 훈련원을 세운다.
+   */
+  private manageStaff(): void {
+    const c = this.c;
+    const need = staffNeed(this.s, c);
+    const flying = Math.max(1, c.planes.filter((p) => p.legs.length > 0).length);
+    const growth = this.normal ? Math.max(1, this.maxNewRoutes()) : 0.5;
+    for (const g of STAFF_GROUPS) {
+      const st = c.staff[g];
+      const supply = st.have + staffPipe(c, g);
+      const perPlane = c.planes.length > 0 ? need[g] / flying : { pilot: 11, cabin: 20, tech: 6, ground: 4 }[g];
+      const lead = hireTime(c, g, false);
+      const dueSoon = c.orders.filter((o) => o.due <= this.s.t + lead).length;
+      const buffer = { pilot: 0.15, cabin: 0.1, tech: 0.08, ground: 0.05 }[g];
+      const target = Math.ceil(need[g] * (1 + buffer) + perPlane * (growth * (lead / 3) + dueSoon) + (g === 'pilot' ? 4 : 0));
+      if (supply < target) {
+        const n = Math.min(400, target - supply);
+        const fast = st.have < need[g];
+        if (n >= 1 && !hireBlocker(this.s, this.ci, g, n, fast) && c.cash - hireCost(this.s, c, g, n, fast) > 20) this.act({ type: 'hire', group: g, n, fast });
+      } else if (this.normal && this.planning && c.planes.length >= 3 && this.s.t - this.s.startT >= 12 && st.have > target * 1.4 + 12 && st.pipe.length === 0) {
+        // 사람이 아주 많이 남을 때만 (시작한 첫해·비행기가 거의 없을 때는 내보내지 않는다)
+        const n = Math.floor(st.have - target * 1.15);
+        if (n >= 5 && !fireBlocker(this.s, this.ci, g, n)) this.act({ type: 'fire', group: g, n });
+      }
+    }
+    if (!this.normal) return;
+    // 임금: 만족도가 낮으면 운항 인력부터 올리고, 아주 높으면 천천히 내린다
+    for (const g of ['pilot', 'cabin'] as const) {
+      const pay = c.staff[g].pay;
+      if (c.morale < 50 && pay < 1.15) this.act({ type: 'setPay', group: g, level: Math.round((pay + 0.05) * 100) / 100 });
+      else if (c.morale > 78 && pay > 1) this.act({ type: 'setPay', group: g, level: Math.round((pay - 0.05) * 100) / 100 });
+    }
+    if (this.planning && !c.academy && c.planes.length >= 18 && c.cash > this.reserve() * 3 + ACADEMY_COST) this.act({ type: 'buildAcademy' });
+  }
+
+  /** 시간대: 계획하는 달마다 노선 두세 개씩 더 나은 시간대로 */
+  private tuneTimes(): void {
+    const routes = this.c.routes.filter((r) => (r.id + this.s.q) % 4 === 0).slice(0, 3);
+    for (const r of routes) {
+      const b = bestTimes(this.s, this.ci, r.id);
+      if (b && b.gain > 0.5) this.act({ type: 'setTimes', route: r.id, times: b.times });
     }
   }
 
@@ -761,6 +813,30 @@ export class Planner {
     const spare = c.cash - this.reserve() * 4 - 200;
     if (c.debt > 0 && spare > 20) this.act({ type: 'repay', amount: Math.floor(Math.min(c.debt, spare)) });
   }
+}
+
+const TIME_OPTIONS: [number, number, number, number][] = [
+  [4, 1, 4, 0],
+  [3, 2, 4, 0],
+  [3, 3, 3, 0],
+  [2, 4, 3, 0],
+  [2, 2, 3, 2],
+  [1, 2, 3, 3],
+];
+
+/** 이 노선에 가장 좋은 시간대 나누기 (밤 운항 금지·시간대 슬롯 안에서). 지금보다 나은 것이 없으면 null */
+export function bestTimes(state: AirlineState, ci: number, routeId: number): { times: [number, number, number, number]; gain: number } | null {
+  const c = state.companies[ci];
+  const r = routeById(c, routeId);
+  if (!r || c.planes.every((p) => legFreq(p, r.id) === 0)) return null;
+  const now = estimateExisting(state, ci, r).profit;
+  let best: { times: [number, number, number, number]; gain: number } | null = null;
+  for (const t of TIME_OPTIONS) {
+    if (t.every((x, i) => x === r.times[i]) || timesBlocker(state, ci, r.id, t)) continue;
+    const gain = estimateExisting(state, ci, r, { times: t }).profit - now;
+    if (!best || gain > best.gain) best = { times: t, gain };
+  }
+  return best && best.gain > 0.05 ? best : null;
 }
 
 /** 사람에게 보여 줄 추천 노선 (보통 컴퓨터처럼 어림한 것, 이익 순) */

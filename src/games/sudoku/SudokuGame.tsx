@@ -15,6 +15,7 @@ import { SUDOKU_SONG } from './song';
 import { sdSfx } from './sounds';
 import { clearSavedGame, saveGame } from './storage';
 import type { Difficulty, MistakeMode, SudokuAction, SudokuState } from './types';
+import { useRecordOutcome } from '../../lib/stats';
 
 interface SudokuGameProps {
   initialState: SudokuState;
@@ -66,6 +67,7 @@ export function SudokuGame({ initialState, settings, onSettings, onSolved, onNex
   printJobRef.current = printJob;
 
   useMusic(SUDOKU_SONG, settings.music);
+  useRecordOutcome('sudoku', game.status === 'solved', () => 'win');
 
   const act = useCallback((action: SudokuAction) => setGame((g) => applyAction(g, action)), []);
 

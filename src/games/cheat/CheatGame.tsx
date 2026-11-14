@@ -18,6 +18,7 @@ import { chSound } from './sounds';
 import { CHEAT_DELAYS, clearSavedCheatGame, saveCheatGame } from './storage';
 import { Table, type CenterFx, type RevealFx, type SeatFx } from './Table';
 import type { CheatAction, CheatSetup, CheatState, Verdict } from './types';
+import { soloOutcome, useRecordOutcome } from '../../lib/stats';
 
 interface CheatGameProps {
   setup: CheatSetup;
@@ -103,6 +104,7 @@ export function CheatGame({ setup, initialState, settings, onSettings, onRestart
   const later = useTimers();
   const delays = CHEAT_DELAYS[settings.speed];
   useMusic(CHEAT_SONG, settings.music);
+  useRecordOutcome('cheat', game.phase === 'gameover', () => soloOutcome(game.players.map((p) => p.kind), [game.winner]));
 
   const locked = anim !== null;
   const dealing = anim?.dealing ?? false;

@@ -19,6 +19,7 @@ import { SEVENS_SONG } from './song';
 import { svSound } from './sounds';
 import { SEVENS_DELAYS, clearSavedSevensGame, saveSevensGame } from './storage';
 import type { SevensAction, SevensSetup, SevensState } from './types';
+import { soloOutcome, useRecordOutcome } from '../../lib/stats';
 
 interface SevensGameProps {
   setup: SevensSetup;
@@ -85,6 +86,7 @@ export function SevensGame({ setup, initialState, settings, onSettings, onRestar
   const delays = SEVENS_DELAYS[settings.speed];
   const fx = delays.fx;
   useMusic(SEVENS_SONG, settings.music);
+  useRecordOutcome('sevens', game.phase === 'gameover', () => soloOutcome(game.players.map((p) => p.kind), [game.rankings[0]]));
 
   const locked = anim !== null;
   const dealing = anim?.dealing ?? false;

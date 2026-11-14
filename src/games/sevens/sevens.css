@@ -821,3 +821,10 @@ button.sv-hand-card:not(:disabled) {
     animation: none;
   }
 }
+
+/* 좁은 화면: 자리 칸 밖으로 카드 부채가 삐져나오지 않게 */
+@media (max-width: 760px) {
+  .sv-seat {
+    overflow: hidden;
+  }
+}

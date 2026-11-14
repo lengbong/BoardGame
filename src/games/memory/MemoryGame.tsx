@@ -11,12 +11,13 @@ import { Board, type Toast } from './Board';
 import { CardFace } from './CardArt';
 import { Panel, SEAT_SHAPES } from './Panel';
 import { GameOver } from './Results';
-import { applyAction, canFlip, playerName } from './rules';
+import { applyAction, canFlip, playerName, winners } from './rules';
 import { MEMORY_SONG } from './song';
 import { memorySfx } from './sounds';
 import { MEMORY_DELAYS, PEEK_MS, clearSavedMemoryGame, saveMemoryGame } from './storage';
 import { pictureName } from './themes';
 import type { MemoryAction, MemorySetup, MemoryState } from './types';
+import { soloOutcome, useRecordOutcome } from '../../lib/stats';
 
 interface MemoryGameProps {
   setup: MemorySetup;
@@ -82,6 +83,7 @@ export function MemoryGame({ setup, initialState, settings, onSettings, onRestar
   const dealMs = 380 + initialState.cards.length * 16;
 
   useMusic(MEMORY_SONG, settings.music);
+  useRecordOutcome('memory', game.phase === 'gameover', () => soloOutcome(game.players.map((p) => p.kind), winners(game)));
 
   const locked = anim !== null;
   const over = game.phase === 'gameover';

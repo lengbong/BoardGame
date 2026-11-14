@@ -25,6 +25,7 @@ import { BASEBALL_SONG } from './song';
 import { bbSound } from './sounds';
 import { BASEBALL_DELAYS, clearSavedBaseballGame, loadRecords, recordKey, saveBaseballGame, saveRecord } from './storage';
 import type { BaseballSetup, BaseballState, DuelAiLevel, NoteMark, Side } from './types';
+import { soloOutcome, useRecordOutcome } from '../../lib/stats';
 
 interface BaseballGameProps {
   setup: BaseballSetup;
@@ -65,6 +66,7 @@ export function BaseballGame({ setup, initialState, settings, onSettings, onRest
   const later = useTimers();
   const delays = BASEBALL_DELAYS[settings.speed];
   useMusic(BASEBALL_SONG, settings.music);
+  useRecordOutcome('baseball', game.phase === 'gameover', () => game.options.mode === 'solo' ? (game.gaveUp ? 'loss' : 'win') : soloOutcome(game.players.map((p) => p.kind), [game.winner]));
 
   const opts = game.options;
   const len = opts.length;

@@ -17,6 +17,7 @@ import { boxesSong } from './song';
 import { boxesSfx } from './sounds';
 import { BOXES_DELAYS, clearSavedBoxesGame, saveBoxesGame } from './storage';
 import type { BoxesSetup, BoxesState } from './types';
+import { soloOutcome, useRecordOutcome } from '../../lib/stats';
 
 interface BoxesGameProps {
   setup: BoxesSetup;
@@ -50,6 +51,7 @@ export function BoxesGame({ setup, initialState, settings, onSettings, onRestart
   const later = useTimers();
   const delays = BOXES_DELAYS[settings.speed];
   useMusic(boxesSong, settings.music);
+  useRecordOutcome('boxes', game.phase === 'gameover', () => soloOutcome(game.players.map((p) => p.kind), winners(game)));
 
   const active = game.phase === 'play';
   const current = game.players[game.current];

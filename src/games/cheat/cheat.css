@@ -1139,3 +1139,31 @@
     animation: none;
   }
 }
+
+/* 낮은 화면(노트북 720p): 세로 스크롤 없이 한 화면에 (손패 칸을 조금 낮춰 탁자 높이는 그대로) */
+@media (max-height: 760px) and (min-width: 1001px) {
+  .ch-game {
+    min-height: 660px;
+  }
+  .ch-table {
+    min-height: 430px;
+  }
+  .ch-hand {
+    height: 118px;
+  }
+  .ch-center {
+    gap: 4px;
+    top: calc(50% + 6px);
+  }
+  .ch-pos-2 {
+    top: 4px;
+  }
+  .ch-pos-0 {
+    bottom: 4px;
+  }
+  .ch-pile-stack {
+    height: 62px;
+    width: 44px;
+    --pc-w: 44px;
+  }
+}

@@ -838,10 +838,33 @@
   }
   /* 대결: 두 판이 화면 너비 안에 들어가게 (판 너비 = 높이 × 0.47) */
   .mp-mode-versus .mp-board svg {
-    height: min(56vh, calc((100vw - 160px) * 1.06));
+    height: min(60vh, calc((100vw - 112px) * 1.06));
   }
   .mp-mode-versus .mp-col {
-    max-width: calc((100vw - 160px) / 2 + 4px);
+    max-width: calc((100vw - 112px) / 2 + 2px);
+  }
+  .mp-mode-versus .mp-middle {
+    width: 50px;
+    gap: 6px;
+  }
+  .mp-mode-versus .mp-next {
+    padding: 4px;
+    border-width: 2px;
+    font-size: 11px;
+  }
+  .mp-mode-versus .mp-pair {
+    width: 24px;
+    height: 48px;
+  }
+  .mp-mode-versus .mp-pair-small {
+    width: 18px;
+    height: 36px;
+  }
+  .mp-mode-versus .mp-clock {
+    padding: 4px 2px;
+  }
+  .mp-mode-versus .mp-clock b {
+    font-size: 15px;
   }
   .mp-score {
     font-size: 12px;

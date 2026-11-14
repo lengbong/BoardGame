@@ -14,6 +14,7 @@ import { WORLD_DELAYS, clearSavedWorldGame, saveWorldGame, type WorldSettings } 
 import type { WorldAction, WorldSetup, WorldState } from './types';
 import { WorldBoard } from './WorldBoard';
 import { CityAtlas, CityDetail, SidePanel } from './WorldPanels';
+import { soloOutcome, useRecordOutcome } from '../../lib/stats';
 
 interface WorldGameProps {
   setup: WorldSetup;
@@ -57,6 +58,7 @@ let floaterSeq = 1;
 
 export function WorldGame({ setup, initialState, settings, onSettings, onRestart, onChangeSetup, onExit }: WorldGameProps) {
   const [game, setGame] = useState<WorldState>(initialState);
+  useRecordOutcome('world', game.phase === 'gameover', () => soloOutcome(game.players.map((p) => p.kind), [game.rankings[0]]));
   const [anim, setAnim] = useState<Animation | null>(null);
   const [rolling, setRolling] = useState<[number, number] | null>(null);
   const [rollId, setRollId] = useState(0);

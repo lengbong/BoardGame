@@ -15,6 +15,7 @@ import { TILES_DELAYS, clearSavedTilesGame, saveTilesGame, type TilesSettings } 
 import { MELD_POINTS } from './tiles';
 import type { TilesAction, TilesSetup, TilesState } from './types';
 import { isTableTile, moveTiles, playedCount, startWork, type Target, type Work } from './work';
+import { soloOutcome, useRecordOutcome } from '../../lib/stats';
 
 interface TilesGameProps {
   setup: TilesSetup;
@@ -55,6 +56,7 @@ function formatTime(ms: number): string {
 
 export function TilesGame({ setup, initialState, settings, onSettings, onRestart, onChangeSetup, onExit }: TilesGameProps) {
   const [game, setGame] = useState<TilesState>(initialState);
+  useRecordOutcome('tiles', game.phase === 'gameover', () => soloOutcome(game.players.map((p) => p.kind), [game.rankings[0]]));
   /** 이번 차례에 고치고 있는 판 (turn이 바뀌면 버린다) */
   const [edit, setEdit] = useState<{ turn: number; work: Work } | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<number>>(EMPTY);

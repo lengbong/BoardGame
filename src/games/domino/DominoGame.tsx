@@ -19,6 +19,7 @@ import { DOMINO_SONG } from './song';
 import { dominoSfx } from './sounds';
 import { DOMINO_DELAYS, clearSavedDominoGame, saveDominoGame } from './storage';
 import type { DominoAction, DominoSetup, DominoState, Side } from './types';
+import { soloOutcome, useRecordOutcome } from '../../lib/stats';
 
 interface DominoGameProps {
   setup: DominoSetup;
@@ -100,6 +101,7 @@ export function DominoGame({ setup, initialState, settings, onSettings, onRestar
   const delays = DOMINO_DELAYS[settings.speed];
 
   useMusic(DOMINO_SONG, settings.music);
+  useRecordOutcome('domino', game.phase === 'gameover', () => soloOutcome(game.players.map((p) => p.kind), [game.rankings[0]]));
 
   const locked = anim !== null;
   const dealing = anim?.dealing ?? false;

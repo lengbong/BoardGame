@@ -1,3 +1,4 @@
+import { KindPicker } from './KindPicker';
 import { DUEL_KIND_OPTIONS, type DuelKind, type DuelSeats, type DuelSide } from '../games/common/duel';
 
 interface DuelPickerProps {
@@ -32,16 +33,7 @@ export function DuelPicker({ seats, sides, onChange, kinds, firstNote = '먼저'
               <strong>{side.label}</strong>
               {i === 0 && firstNote && <span className="duel-first">{firstNote}</span>}
             </div>
-            <label>
-              <span>참가</span>
-              <select value={seat.kind} onChange={(e) => update(i, { kind: e.target.value as DuelKind })} data-testid={`duel-kind-${i}`}>
-                {options.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <KindPicker caption="참가" value={seat.kind} options={options} onChange={(kind: DuelKind) => update(i, { kind })} testId={`duel-kind-${i}`} />
             <label>
               <span>이름</span>
               <input type="text" value={seat.name} maxLength={8} placeholder={side.label} onChange={(e) => update(i, { name: e.target.value })} />

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { SeatPicker } from '../../components/SeatPicker';
+import { SpeedPicker } from '../../components/SpeedPicker';
 import { activeSeatCount, type Seats } from '../common/players';
 import type { GameSettings } from '../common/settings';
-import { SPEEDS, SPEED_LABELS, type Speed } from '../common/speed';
 import { Board } from './Board';
 import { BOARD_SIZES, applyAction, createGame, playerName, recommendedSize } from './rules';
 import type { SavedBoxesGame } from './storage';
@@ -143,16 +143,7 @@ export function BoxesSetup({ initialSetup, saved, settings, onSettings, onStart,
       </section>
 
       <section className="setup-section setup-footer">
-        <label className="speed-select">
-          컴퓨터·애니메이션 속도
-          <select value={settings.speed} onChange={(e) => onSettings({ ...settings, speed: e.target.value as Speed })}>
-            {SPEEDS.map((s) => (
-              <option key={s} value={s}>
-                {SPEED_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SpeedPicker caption="컴퓨터·애니메이션 속도" value={settings.speed} onChange={(speed) => onSettings({ ...settings, speed })} inline />
         <button type="button" className="btn btn-primary btn-large" disabled={count < 2} onClick={() => onStart(setup)} data-testid="bx-start">
           게임 시작
         </button>

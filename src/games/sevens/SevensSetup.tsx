@@ -1,11 +1,12 @@
 import type { CSSProperties } from 'react';
 import { useState } from 'react';
+import { IconPicker } from '../../components/IconPicker';
 import { PlayingCardBack, PlayingCardFace } from '../../components/PlayingCard';
 import { SeatPicker } from '../../components/SeatPicker';
+import { SpeedPicker } from '../../components/SpeedPicker';
 import { activeSeatCount } from '../common/players';
 import { makeCard } from '../common/playingCards';
 import type { GameSettings } from '../common/settings';
-import { SPEEDS, SPEED_LABELS, type Speed } from '../common/speed';
 import { MAX_PASSES, TARGET_SCORES } from './rules';
 import type { SavedSevensGame } from './storage';
 import type { EndMode, HandView, SevensOptions, SevensSetup } from './types';
@@ -132,45 +133,34 @@ export function SevensSetupScreen({ initialSetup, saved, settings, onSettings, o
         <h3 className="sub-title">언제 끝낼까요?</h3>
         <div className="rule-grid">
           {END_MODES.map((m) => (
-            <label key={m.value} className="rule-item">
-              <input type="radio" name="sv-end-mode" checked={opt.endMode === m.value} onChange={() => setOpt({ endMode: m.value })} data-testid={`sv-end-${m.value}`} />
-              <span>
-                <strong>
-                  {m.title}
-                  {m.value === 'points' && (
-                    <select
-                      className="inline-select"
-                      value={opt.targetScore}
-                      onChange={(e) => setOpt({ endMode: 'points', targetScore: Number(e.target.value) })}
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label="목표 점수"
-                    >
-                      {TARGET_SCORES.map((v) => (
-                        <option key={v} value={v}>
-                          {v}점
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </strong>
-                <small>{m.desc}</small>
-              </span>
-            </label>
+            <div key={m.value}>
+              <label className="rule-item">
+                <input type="radio" name="sv-end-mode" checked={opt.endMode === m.value} onChange={() => setOpt({ endMode: m.value })} data-testid={`sv-end-${m.value}`} />
+                <span>
+                  <strong>{m.title}</strong>
+                  <small>{m.desc}</small>
+                </span>
+              </label>
+              {m.value === 'points' && (
+                <div className="rule-extra">
+                  <IconPicker
+                    caption="목표 점수"
+                    inline
+                    small
+                    dimmed={opt.endMode !== 'points'}
+                    value={opt.targetScore}
+                    options={TARGET_SCORES.map((v) => ({ value: v, short: `${v}점` }))}
+                    onChange={(v) => setOpt({ endMode: 'points', targetScore: v })}
+                  />
+                </div>
+              )}
+            </div>
           ))}
         </div>
       </section>
 
       <section className="setup-section setup-footer">
-        <label className="speed-select">
-          컴퓨터·애니메이션 속도
-          <select value={settings.speed} onChange={(e) => onSettings({ ...settings, speed: e.target.value as Speed })}>
-            {SPEEDS.map((s) => (
-              <option key={s} value={s}>
-                {SPEED_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SpeedPicker caption="컴퓨터·애니메이션 속도" value={settings.speed} onChange={(speed) => onSettings({ ...settings, speed })} inline />
         <button type="button" className="btn btn-primary btn-large" disabled={count < 2} onClick={() => onStart(setup)} data-testid="sv-start">
           게임 시작
         </button>

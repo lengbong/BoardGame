@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { IconPicker } from '../../components/IconPicker';
 import { SeatPicker } from '../../components/SeatPicker';
+import { SpeedPicker } from '../../components/SpeedPicker';
 import { activeSeatCount } from '../common/players';
-import { SPEEDS, SPEED_LABELS, type Speed } from '../common/speed';
 import { CityArt } from './art/cities';
 import { GlobeLogo } from './art/tiles';
 import type { SavedWorldGame, WorldSettings } from './storage';
@@ -75,70 +76,53 @@ export function WorldSetup({ initialSetup, saved, settings, onSettings, onStart,
       <section className="setup-section">
         <h2>게임 설정</h2>
         <div className="world-options">
-          <label>
-            시작할 때 돈
-            <select value={opt.startCash} onChange={(e) => setOpt({ startCash: Number(e.target.value) })}>
-              {[1000, 1500, 2000].map((v) => (
-                <option key={v} value={v}>
-                  {v.toLocaleString('ko-KR')}코인
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            출발 칸 월급
-            <select value={opt.salary} onChange={(e) => setOpt({ salary: Number(e.target.value) })}>
-              {[100, 150, 200, 300].map((v) => (
-                <option key={v} value={v}>
-                  {v}코인
-                </option>
-              ))}
-            </select>
-          </label>
+          <IconPicker
+            caption="시작할 때 돈"
+            small
+            value={opt.startCash}
+            options={[1000, 1500, 2000].map((v) => ({ value: v, short: `${v.toLocaleString('ko-KR')}코인` }))}
+            onChange={(v) => setOpt({ startCash: v })}
+          />
+          <IconPicker
+            caption="출발 칸 월급"
+            small
+            value={opt.salary}
+            options={[100, 150, 200, 300].map((v) => ({ value: v, short: `${v}코인` }))}
+            onChange={(v) => setOpt({ salary: v })}
+          />
         </div>
 
         <h3 className="sub-title">언제 끝낼까요?</h3>
         <div className="rule-grid end-modes">
           {END_MODES.map((m) => (
-            <label key={m.value} className="rule-item">
-              <input type="radio" name="end-mode" checked={opt.endMode === m.value} onChange={() => setOpt({ endMode: m.value })} />
-              <span>
-                <strong>
-                  {m.title}
-                  {m.value === 'rounds' && (
-                    <select
-                      className="inline-select"
-                      value={opt.maxRounds}
-                      onChange={(e) => setOpt({ endMode: 'rounds', maxRounds: Number(e.target.value) })}
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label="라운드 수"
-                    >
-                      {[10, 15, 20, 30].map((r) => (
-                        <option key={r} value={r}>
-                          {r}라운드
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </strong>
-                <small>{m.desc}</small>
-              </span>
-            </label>
+            <div key={m.value}>
+              <label className="rule-item">
+                <input type="radio" name="end-mode" checked={opt.endMode === m.value} onChange={() => setOpt({ endMode: m.value })} />
+                <span>
+                  <strong>{m.title}</strong>
+                  <small>{m.desc}</small>
+                </span>
+              </label>
+              {m.value === 'rounds' && (
+                <div className="rule-extra">
+                  <IconPicker
+                    caption="라운드 수"
+                    inline
+                    small
+                    dimmed={opt.endMode !== 'rounds'}
+                    value={opt.maxRounds}
+                    options={[10, 15, 20, 30].map((r) => ({ value: r, short: `${r}라운드` }))}
+                    onChange={(r) => setOpt({ endMode: 'rounds', maxRounds: r })}
+                  />
+                </div>
+              )}
+            </div>
           ))}
         </div>
       </section>
 
       <section className="setup-section setup-footer">
-        <label className="speed-select">
-          컴퓨터·애니메이션 속도
-          <select value={settings.speed} onChange={(e) => onSettings({ ...settings, speed: e.target.value as Speed })}>
-            {SPEEDS.map((s) => (
-              <option key={s} value={s}>
-                {SPEED_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SpeedPicker caption="컴퓨터·애니메이션 속도" value={settings.speed} onChange={(speed) => onSettings({ ...settings, speed })} inline />
         <button type="button" className="btn btn-primary btn-large" disabled={count < 2} onClick={() => onStart(setup)} data-testid="world-start">
           게임 시작
         </button>

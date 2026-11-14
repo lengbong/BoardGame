@@ -1,5 +1,6 @@
+import { SpeedPicker } from '../../components/SpeedPicker';
 import { KIND_LABEL, SEAT_COLORS } from '../common/players';
-import { SPEEDS, SPEED_LABELS, type Speed } from '../common/speed';
+import type { Speed } from '../common/speed';
 import { TileFace } from './TileArt';
 import { playerName } from './rules';
 import { sortByColor } from './tiles';
@@ -95,16 +96,7 @@ export function Panel(props: PanelProps) {
       </section>
 
       <section className="controls game-controls">
-        <label>
-          속도
-          <select value={props.speed} onChange={(e) => props.onSpeed(e.target.value as Speed)}>
-            {SPEEDS.map((s) => (
-              <option key={s} value={s}>
-                {SPEED_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SpeedPicker value={props.speed} onChange={props.onSpeed} />
         <button type="button" className="btn" onClick={props.onToggleMusic}>
           {props.music ? '🎵 음악 켜짐' : '🎵 음악 꺼짐'}
         </button>

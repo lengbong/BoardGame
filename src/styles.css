@@ -298,7 +298,12 @@ button.game-card:hover {
   padding-bottom: 12px;
   background: var(--surface);
 }
+/* 비운 자리: 참가 아이콘은 또렷하게 두어 다시 고르기 쉽게, 나머지만 흐리게 */
 .seat-empty {
+  border-style: dashed;
+}
+.seat-empty .seat-head,
+.seat-empty .seat-name {
   opacity: 0.55;
 }
 .seat-head {
@@ -307,7 +312,7 @@ button.game-card:hover {
   padding: 6px 12px;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
 }
-.seat-card label {
+.seat-card > label {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -315,10 +320,7 @@ button.game-card:hover {
   font-size: 14px;
   color: var(--text-muted);
 }
-.seat-card select,
-.seat-card input,
-.speed-select select,
-.controls select {
+.seat-card input {
   padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -373,26 +375,12 @@ button.game-card:hover {
   justify-content: space-between;
   gap: 16px;
 }
-.speed-select {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 .setup-back {
   align-self: flex-start;
 }
 .sub-title {
   margin: 20px 0 10px;
   font-size: 16px;
-}
-.inline-select {
-  margin-left: 8px;
-  padding: 2px 6px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-2);
-  color: var(--text);
-  font-size: 14px;
 }
 .how-to summary {
   cursor: pointer;
@@ -450,7 +438,7 @@ button.game-card:hover {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.28);
 }
-.duel-card label {
+.duel-card > label {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -458,7 +446,6 @@ button.game-card:hover {
   font-size: 14px;
   color: var(--text-muted);
 }
-.duel-card select,
 .duel-card input {
   padding: 6px 8px;
   border: 1px solid var(--border);
@@ -473,6 +460,137 @@ button.game-card:hover {
   padding: 0;
   border-radius: 50%;
   font-size: 20px;
+}
+
+/* ---------- 아이콘 버튼으로 고르기: 참가 종류, 속도 (components/IconPicker.tsx) ---------- */
+.choice-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.seat-card > .choice-field,
+.duel-card > .choice-field {
+  padding: 0 12px;
+}
+/* 이름표를 왼쪽에 두는 모양 (설정 화면 아래 속도, 게임 화면 패널) */
+.choice-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+}
+.choice-inline > span {
+  flex: none;
+}
+.choice-inline > .choice-group {
+  flex: 1;
+}
+.choice-group {
+  --pick: var(--accent);
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+/* `.controls label` 같은 일반 label 규칙에 덮이지 않게 한 단계 더 구체적으로 */
+.choice-group > .choice-option {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px 4px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color 0.12s,
+    border-color 0.12s,
+    color 0.12s,
+    transform 0.12s;
+}
+.choice-option:hover {
+  border-color: var(--pick);
+  color: var(--text);
+}
+.choice-option:active {
+  transform: scale(0.95);
+}
+/* 진짜 라디오 버튼은 숨기되 키보드(Tab, 방향키)로는 그대로 고를 수 있게 둔다 */
+.choice-option input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.choice-option:has(input:focus-visible) {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.choice-option.choice-on {
+  background: var(--pick);
+  border-color: var(--pick);
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
+}
+.choice-icon {
+  display: block;
+  flex: none;
+}
+.choice-option.choice-on .choice-icon {
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+}
+.choice-option span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 작은 알약 모양: 숫자처럼 글자만 있는 선택 (목표 점수, 판 수 …) */
+.choice-small {
+  font-size: 13px;
+}
+.choice-small > .choice-group {
+  display: flex;
+  flex-wrap: wrap;
+}
+.choice-small > .choice-group > .choice-option {
+  min-width: 56px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+.choice-dimmed > .choice-group {
+  opacity: 0.6;
+}
+.choice-disabled > .choice-group {
+  opacity: 0.45;
+}
+.choice-disabled > .choice-group > .choice-option {
+  cursor: not-allowed;
+  transform: none;
+}
+.choice-disabled .choice-option:hover {
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+.choice-disabled .choice-option.choice-on:hover {
+  border-color: var(--pick);
+  color: #fff;
+}
+/* 규칙 고르기 칸 밑에 붙는 세부 선택 (동그라미·네모 칸 너비만큼 들여 쓴다) */
+.rule-extra {
+  margin: 6px 0 0 28px;
 }
 
 /* ---------- 차례 넘김 화면 (components/PassScreen.tsx) ---------- */
@@ -787,11 +905,9 @@ button.game-card:hover {
   display: grid;
   grid-template-columns: 1fr 1fr;
 }
-.game-controls > label {
+.game-controls > label,
+.game-controls > .choice-field {
   grid-column: 1 / -1;
-}
-.game-controls > label select {
-  flex: 1;
 }
 .game-controls > .btn {
   padding: 7px 8px;

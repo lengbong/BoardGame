@@ -1,3 +1,4 @@
+import { KindPicker } from './KindPicker';
 import { SEAT_COLORS, SEAT_INDICES, SEAT_KIND_OPTIONS, activeSeatCount, type SeatIndex, type SeatKind, type Seats } from '../games/common/players';
 
 interface SeatPickerProps {
@@ -21,17 +22,15 @@ export function SeatPicker({ seats, onChange }: SeatPickerProps) {
               <div className="seat-head" style={{ background: c.main }}>
                 {c.name}
               </div>
-              <label>
-                <span>참가</span>
-                <select value={seat.kind} onChange={(e) => update(i, { kind: e.target.value as SeatKind })} data-testid={`seat-kind-${i}`}>
-                  {SEAT_KIND_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
+              <KindPicker
+                caption="참가"
+                value={seat.kind}
+                options={SEAT_KIND_OPTIONS}
+                onChange={(kind: SeatKind) => update(i, { kind })}
+                color={c.main}
+                testId={`seat-kind-${i}`}
+              />
+              <label className="seat-name">
                 <span>이름</span>
                 <input
                   type="text"

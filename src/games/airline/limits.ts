@@ -1,3 +1,6 @@
-/** 노선·비행기 수 한도 (화면과 계산이 너무 무거워지지 않게) */
-export const MAX_ROUTES = 32;
-export const MAX_PLANES = 60;
+/**
+ * 노선·비행기 수에는 정해진 한도가 없다: 공항 슬롯·지점·돈·비행기로만 막힌다.
+ * 아래 값은 계산이 멈추지 않게 둔 아주 큰 안전 한도일 뿐이에요 (실제 큰 항공사보다도 넉넉하게).
+ */
+export const MAX_ROUTES = 400;
+export const MAX_PLANES = 800;

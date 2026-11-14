@@ -4,7 +4,7 @@ import { MODEL } from './aircraft';
 import { aiManage, aiTurn, planTurn } from './ai';
 import { CHALLENGES } from './challenges';
 import { AIRPORT_INFO, CITY, airportClass, dist } from './cities';
-import { actor, applyAction, createGame } from './rules';
+import { MAX_ROUTES, actor, applyAction, createGame } from './rules';
 import { WEEK_HOURS, companyValue, estimateExisting, maxFreq, planeHours, slotCapacity, slotsUsed } from './simulate';
 import { yearOf } from './time';
 import type { AirlineOptions, AirlineSetup, AirlineState, SeatKind } from './types';
@@ -142,8 +142,10 @@ describe('컴퓨터끼리 끝까지', () => {
       expect(s.phase).toBe('gameover');
       const v = companyValue(s, 0);
       expect(v).toBeGreaterThan(20000);
-      expect(v).toBeLessThan(400000);
+      // 노선 수 한도가 없어 예전(노선 32개)보다 크게 자라지만, 끝없이 커지지는 않는다
+      expect(v).toBeLessThan(800000);
       expect(s.companies[0].routes.length).toBeGreaterThan(5);
+      expect(s.companies[0].routes.length).toBeLessThan(MAX_ROUTES);
       expect(worst).toBeLessThan(300);
       for (const h of s.history) for (const x of h.value) expect(Number.isFinite(x)).toBe(true);
     }

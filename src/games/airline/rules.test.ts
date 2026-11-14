@@ -18,6 +18,7 @@ import {
   depositFor,
   endQ,
   rankings,
+  maxRangeNow,
   routeBlocker,
   runQuarter,
 } from './rules';
@@ -141,7 +142,7 @@ describe('지점과 노선', () => {
     expect(s.companies[0].branches).toEqual(['seoul']);
   });
 
-  it(`노선은 ${MAX_ROUTES}개까지`, () => {
+  it('노선 수에는 정해진 한도가 없다 (아주 큰 안전 한도만 있다)', () => {
     let s = twoHumans({ money: 'rich' });
     s.companies[0].cash = 1e7;
     const others = Object.keys(CITY).filter((id) => id !== 'seoul');
@@ -152,8 +153,13 @@ describe('지점과 노선', () => {
       if (next !== s) opened++;
       s = next;
     }
-    expect(s.companies[0].routes.length).toBe(MAX_ROUTES);
-    expect(opened).toBe(MAX_ROUTES);
+    // 예전 한도(32개)보다 훨씬 많이 열 수 있다: 비행기가 닿는 모든 도시
+    const reachable = others.filter((city) => dist('seoul', city) >= 150 && dist('seoul', city) <= maxRangeNow(s, 0));
+    expect(opened).toBe(reachable.length);
+    expect(opened).toBeGreaterThan(32);
+    // 안전 한도에 닿으면 막는다
+    const full = { ...s, companies: s.companies.map((c, i) => (i === 0 ? { ...c, routes: Array.from({ length: MAX_ROUTES }, (_, k) => ({ ...c.routes[0], id: 10000 + k })) } : c)) };
+    expect(routeBlocker(full, 0, 'tokyo', 'osaka')).toContain(`${MAX_ROUTES}개`);
   });
 });
 

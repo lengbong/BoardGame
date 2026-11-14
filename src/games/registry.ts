@@ -108,9 +108,9 @@ export const GAMES: GameEntry[] = [
   {
     id: 'island',
     title: '섬마을 개척',
-    description: '주사위 두 개로 섬의 숲·돌산·밭·어장에서 자원을 얻어 길과 집, 마을회관, 등대를 지어요. 먼저 10점을 모으면 승리!',
+    description: '주사위 두 개 중 쓸 눈을 골라 섬의 숲·돌산·밭·어장에서 자원을 얻고, 길과 집, 마을회관, 등대를 지어요. 먼저 10점을 모으면 승리!',
     players: '2~4명 (컴퓨터 참가 가능)',
-    playTime: '30~60분',
+    playTime: '30~50분',
     category: 'strategy',
     icon: '🏝️',
     component: IslandApp,

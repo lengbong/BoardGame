@@ -6,6 +6,8 @@ import { CheatApp } from './cheat/CheatApp';
 import { DominoApp } from './domino/DominoApp';
 import { DominoIcon } from './domino/DominoIcon';
 import { FourLineApp } from './fourline/FourLineApp';
+import { GardenApp } from './garden/GardenApp';
+import { IslandApp } from './island/IslandApp';
 import { LastCardApp } from './lastcard/LastCardApp';
 import { MalangIcon } from './malang/JellyArt';
 import { MalangApp } from './malang/MalangApp';
@@ -15,6 +17,7 @@ import { MemoryApp } from './memory/MemoryApp';
 import { OldMaidApp } from './oldmaid/OldMaidApp';
 import { OmokApp } from './omok/OmokApp';
 import { OmokIcon } from './omok/StoneArt';
+import { RailsApp } from './rails/RailsApp';
 import { RaceApp } from './race/RaceApp';
 import { ReversiApp } from './reversi/ReversiApp';
 import { ReversiIcon } from './reversi/ReversiIcon';
@@ -22,13 +25,15 @@ import { SevensApp } from './sevens/SevensApp';
 import { ShipsApp } from './ships/ShipsApp';
 import { SudokuApp } from './sudoku/SudokuApp';
 import { TilesApp } from './tiles/TilesApp';
+import { VillageApp } from './village/VillageApp';
 import { WorldApp } from './world/WorldApp';
 
-export type GameCategory = 'board' | 'cards' | 'duel' | 'action' | 'paper' | 'puzzle';
+export type GameCategory = 'board' | 'strategy' | 'cards' | 'duel' | 'action' | 'paper' | 'puzzle';
 
 /** 처음 화면에서 게임을 묶어 보여 주는 순서와 제목 */
 export const CATEGORIES: { id: GameCategory; title: string }[] = [
   { id: 'board', title: '🎲 말판·주사위' },
+  { id: 'strategy', title: '🏆 전략 보드게임' },
   { id: 'cards', title: '🃏 카드·타일' },
   { id: 'duel', title: '♟️ 둘이서 수 싸움' },
   { id: 'action', title: '🕹️ 실시간 퍼즐' },
@@ -69,6 +74,46 @@ export const GAMES: GameEntry[] = [
     category: 'board',
     icon: '🌏',
     component: WorldApp,
+  },
+  {
+    id: 'garden',
+    title: '꽃밭 가꾸기',
+    description: '텃밭에서 물·햇빛·씨앗·거름을 거두어 꽃시장에서 식물을 사 심어요. 심은 식물이 다음 식물을 싸게 해 주는 정원 키우기 게임!',
+    players: '2~4명 (컴퓨터 참가 가능)',
+    playTime: '20~40분',
+    category: 'strategy',
+    icon: '🌷',
+    component: GardenApp,
+  },
+  {
+    id: 'rails',
+    title: '기차로 전국 일주',
+    description: '기차표를 모아 우리나라 도시 사이에 기찻길을 깔아요. 비밀 여행 계획을 이루고 관광 도장을 모으면 점수!',
+    players: '2~4명 (컴퓨터 참가 가능)',
+    playTime: '30~50분',
+    category: 'strategy',
+    icon: '🚂',
+    component: RailsApp,
+  },
+  {
+    id: 'village',
+    title: '우리 마을 지도',
+    description: '길·냇물·논이 그려진 땅 조각을 이어 붙여 마을 지도를 만들어요. 깃발을 꽂은 길과 논이 완성되면 점수!',
+    players: '2~4명 (컴퓨터 참가 가능)',
+    playTime: '20~40분',
+    category: 'strategy',
+    icon: '🗺️',
+    component: VillageApp,
+  },
+  {
+    id: 'island',
+    title: '섬마을 개척',
+    description: '주사위 두 개로 섬의 숲·돌산·밭·어장에서 자원을 얻어 길과 집, 마을회관, 등대를 지어요. 먼저 10점을 모으면 승리!',
+    players: '2~4명 (컴퓨터 참가 가능)',
+    playTime: '30~60분',
+    category: 'strategy',
+    icon: '🏝️',
+    component: IslandApp,
   },
   {
     id: 'lastcard',

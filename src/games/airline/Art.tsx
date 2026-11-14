@@ -351,6 +351,12 @@ const LANDMARKS: Record<Landmark, ReactElement> = {
       <path d="M6 21h12" {...L} />
     </>
   ),
+  onion: (
+    <>
+      <path d="M12 6c3 2.5 4.5 4.5 4.5 6.5a4.5 4.5 0 0 1-9 0c0-2 1.5-4 4.5-6.5z" {...F} />
+      <path d="M12 2v4M10.5 3.5h3M8 15.5v5.5h8v-5.5M5 21h14" {...L} />
+    </>
+  ),
 };
 
 export function LandmarkIcon({ kind, size = 24, className }: { kind: Landmark; size?: number; className?: string }) {

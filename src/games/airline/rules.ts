@@ -1,11 +1,12 @@
 import { withJosa } from '../../lib/korean';
 import { MODEL, MODELS, isAvailable, leadTime } from './aircraft';
 import { cabinBlocker, defaultCabin, sameCabin } from './cabin';
+import { blockText, branchPolitics, makerPolitics, politicalNews, polity, routePolitics } from './politics';
 import { CHALLENGE, challengeDeadline, checkChallenge } from './challenges';
 import { allianceChoice, allianceScore, makeChoice, nextChoiceGap } from './choices';
 import { autoAirline, gameHub, pickColors } from './brand';
 import { AIRPORT_INFO, CITIES, CITY, REGIONS, REGION_INFO, airportClass, citySize, dist, pairKey } from './cities';
-import { FIXED_EVENTS, FIXED_ICON, rollRandomEvent } from './events';
+import { FIXED_EVENTS, FIXED_ICON, historicOil, historyAt, rollRandomEvent } from './events';
 import { addQuarter, freshAcc, goalMet, gradeYear, newGoals } from './goals';
 import { MAX_PLANES, MAX_ROUTES } from './limits';
 import { REAL_AIRLINE, airlinesAt } from './realAirlines';
@@ -30,6 +31,7 @@ import {
   reputationTarget,
   routeFreq,
   routeIndex,
+  routeOf,
   sellPrice,
   slotCapacity,
   slotsUsed,
@@ -45,6 +47,7 @@ import type {
   Choice,
   Company,
   DistOmit,
+  Effect,
   GameEvent,
   GameResult,
   NewsItem,
@@ -68,7 +71,11 @@ export const DEFAULT_OPTIONS: AirlineOptions = {
   challenge: null,
   aiStyle: 'normal',
   names: 'real',
+  history: true,
 };
+
+/** 실제 역사(냉전·국교·큰 사건)를 따르는지 */
+export const historyOn = (state: Pick<AirlineState, 'options'>) => state.options.history !== false;
 
 export const START_MONEY: Record<AirlineOptions['money'], { cash: number; name: string }> = {
   rich: { cash: 4000, name: '넉넉하게' },
@@ -110,10 +117,12 @@ export function hubCandidates(year: number): string[] {
 export function autoHub(year: number, taken: readonly string[], rng: Rng): string {
   const cands = hubCandidates(year).filter((id) => !taken.includes(id));
   const takenRegions = taken.map((id) => CITY[id].region);
+  // 냉전 동안 하늘길이 거의 막힌 곳은 덜 고른다
+  const closed = (id: string) => year < 1990 && ['중국', '소련', '베트남'].includes(polity(id, year));
   const weights = cands.map((id) => {
     const c = CITY[id];
     const s = citySize(c, year);
-    return s * s * (takenRegions.includes(c.region) ? 0.35 : 1) * (s >= 5 ? 1 : 0.3);
+    return s * s * (takenRegions.includes(c.region) ? 0.35 : 1) * (s >= 5 ? 1 : 0.3) * (closed(id) ? 0.1 : 1);
   });
   const total = weights.reduce((a, b) => a + b, 0);
   let r = rng() * total;
@@ -173,7 +182,7 @@ function baseState(options: AirlineOptions, year: number, companies: Company[]):
     companies,
     order: companies.map((_, i) => i),
     turnPos: 0,
-    oil: 1,
+    oil: options.history !== false ? historicOil(year) : 1,
     rate: 6,
     effects: [],
     slotBoost: {},
@@ -388,7 +397,7 @@ export function planeById(c: Company, id: number): Plane | undefined {
 }
 
 export function routeById(c: Company, id: number): Route | undefined {
-  return c.routes.find((r) => r.id === id);
+  return routeOf(c, id);
 }
 
 export function hasBranch(c: Company, city: string): boolean {
@@ -439,6 +448,8 @@ export function branchBlocker(state: AirlineState, ci: number, city: string): st
   const c = state.companies[ci];
   if (!CITY[city]) return '없는 도시예요';
   if (hasBranch(c, city)) return '이미 지점이 있어요';
+  const pol = historyOn(state) ? branchPolitics(c.hub, city, yearNow(state)) : null;
+  if (pol) return blockText(pol);
   const cost = branchCost(city, state.q);
   if (c.cash < cost) return `돈이 모자라요 (${fmtMoney(cost)} 필요)`;
   return null;
@@ -470,6 +481,8 @@ export function routeBlocker(state: AirlineState, ci: number, a: string, b: stri
   if (!hasBranch(c, b)) return `${CITY[b].name}에 지점이 없어요`;
   if (routeOnPair(c, a, b)) return '이미 있는 노선이에요';
   if (c.routes.length >= MAX_ROUTES) return `노선은 ${MAX_ROUTES}개까지예요`;
+  const pol = historyOn(state) ? routePolitics(c.hub, a, b, yearNow(state)) : null;
+  if (pol) return blockText(pol);
   const d = dist(a, b);
   if (d < 150) return '너무 가까워요';
   if (d > maxRangeNow(state, ci)) return `${d.toLocaleString()}km를 한 번에 날 수 있는 비행기가 없어요`;
@@ -518,6 +531,8 @@ export function buyBlocker(state: AirlineState, ci: number, modelId: string, lea
   if (!m) return '없는 기종이에요';
   if (!isAvailable(m, yearNow(state))) return yearNow(state) < m.intro ? `${m.intro}년에 나와요` : '생산이 끝난 기종이에요';
   if (fleetCount(c) >= MAX_PLANES) return `비행기는 주문까지 ${MAX_PLANES}대까지예요`;
+  const pol = historyOn(state) ? makerPolitics(c.hub, m, yearNow(state)) : null;
+  if (pol) return pol;
   if (lease && c.taken >= MAX_DELIVERIES) return `리스·중고는 한 분기에 ${MAX_DELIVERIES}대까지예요`;
   const cost = lease ? depositFor(state, ci, modelId) : orderPrice(state, m, c);
   if (c.cash < cost) return `돈이 모자라요 (${fmtMoney(cost)} 필요)`;
@@ -529,6 +544,8 @@ export function usedBlocker(state: AirlineState, ci: number, listing: number): s
   const u = state.market.find((x) => x.id === listing);
   if (!u) return '이미 팔린 비행기예요';
   if (fleetCount(c) >= MAX_PLANES) return `비행기는 주문까지 ${MAX_PLANES}대까지예요`;
+  const pol = historyOn(state) ? makerPolitics(c.hub, MODEL[u.model], yearNow(state)) : null;
+  if (pol) return pol;
   if (c.taken >= MAX_DELIVERIES) return `리스·중고는 한 분기에 ${MAX_DELIVERIES}대까지예요`;
   if (c.cash < u.price) return `돈이 모자라요 (${fmtMoney(u.price)} 필요)`;
   return null;
@@ -1327,6 +1344,32 @@ function startQuarter(state: AirlineState, q: number, rng: Rng): AirlineState {
       });
     }
   }
+  // 실제 역사 사건
+  if (historyOn(s)) {
+    for (const h of historyAt(q)) {
+      if (h.oil) s = { ...s, oil: Math.round(Math.max(0.5, Math.min(3, s.oil * h.oil)) * 100) / 100 };
+      for (const dm of h.demand ?? []) {
+        const until = q + dm.quarters;
+        const add: DistOmit<Effect, 'id'>[] = dm.regions
+          ? dm.regions.map((region) => ({ kind: dm.mult >= 1 ? 'boom' : 'slump', region, mult: dm.mult, until }) as DistOmit<Effect, 'id'>)
+          : [{ kind: 'world', mult: dm.mult, until }];
+        for (const e of add) s = { ...s, effects: [...s.effects, { ...e, id: s.nextId } as Effect], nextId: s.nextId + 1 };
+      }
+      if (h.aid && s.report) {
+        const rep = s.report;
+        s = {
+          ...s,
+          companies: s.companies.map((c, ci) => {
+            const r = rep.companies[ci];
+            if (c.out || !r) return c;
+            const costs = r.fuel + r.crew + r.airport + r.service + r.sales + r.lease + r.fleet + r.branch + r.ads + r.interest;
+            return { ...c, cash: c.cash + Math.round(costs * h.aid!) };
+          }),
+        };
+      }
+      s = addNews(s, { icon: h.icon, title: h.title, text: h.text, tone: h.tone });
+    }
+  }
   // 무작위 사건
   const activeCities = [...new Set(s.companies.flatMap((c) => c.routes.flatMap((r) => [r.a, r.b])))];
   const rolls = rng() < 0.45 ? (rng() < 0.2 ? 2 : 1) : 0;
@@ -1349,6 +1392,23 @@ function startQuarter(state: AirlineState, q: number, rng: Rng): AirlineState {
     if (c.out) return;
     c.taken = 0;
     c.mods = c.mods.filter((m) => m.until > q);
+    // 나라 관계가 막힌 노선은 운항을 멈춘다
+    if (historyOn(s)) {
+      const blocked = c.routes.map((r) => ({ r, why: routePolitics(c.hub, r.a, r.b, year) })).filter((x) => x.why);
+      if (blocked.length > 0) {
+        const ids = new Set(blocked.map((x) => x.r.id));
+        c.routes = c.routes.filter((r) => !ids.has(r.id));
+        for (const p of c.planes) p.legs = p.legs.filter((l) => !ids.has(l.route));
+        s = addNews(s, {
+          icon: '🚫',
+          title: `${c.name}: ${blocked.map((x) => `${CITY[x.r.a].name}–${CITY[x.r.b].name}`).join(', ')} 운항 중단`,
+          text: `${blocked[0].why!.why}. 비행기는 쉬는 상태가 됐어요.`,
+          tone: 'bad',
+          for: [ci],
+          company: ci,
+        });
+      }
+    }
     const due = c.orders.filter((o) => o.due <= q);
     for (const o of due) {
       c.planes.push({ id: s.nextId, model: o.model, leased: false, rent: 0, deposit: 0, since: q, legs: [], cabin: defaultCabin(MODEL[o.model]), meal: c.service, got: q });
@@ -1407,7 +1467,7 @@ function startQuarter(state: AirlineState, q: number, rng: Rng): AirlineState {
 
 export function oilTarget(state: AirlineState): number {
   if (state.challenge?.id === 'oilstorm' && state.q >= qOf(1973, 4)) return 1.9;
-  return 1;
+  return historyOn(state) ? historicOil(yearOf(state.q)) : 1;
 }
 
 /** 해가 바뀔 때 뉴스: 새 기종, 생산 끝, 공항이 커짐, 올해 행사 */
@@ -1415,6 +1475,7 @@ function announceYear(state: AirlineState): AirlineState {
   let s = state;
   const year = yearOf(s.q);
   const first = s.q === s.startQ;
+  if (historyOn(s)) for (const n of politicalNews(year, s.startYear)) s = addNews(s, n);
   const fresh = MODELS.filter((m) => m.intro === year);
   if (fresh.length > 0) {
     s = addNews(s, {

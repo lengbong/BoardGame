@@ -151,6 +151,11 @@ function NameIcon({ real }: { real: boolean }) {
   );
 }
 
+const HISTORY_CHOICES: IconChoice<'on' | 'off'>[] = [
+  { value: 'on', short: '🌍 켜기', label: '냉전·국교와 석유 파동·9·11·코로나 같은 실제 사건을 따라요' },
+  { value: 'off', short: '끄기', label: '실제 역사 없이 자유롭게' },
+];
+
 const NAME_CHOICES: IconChoice<NameMode>[] = [
   { value: 'real', short: '실제 항공사', label: '그 해에 날던 실제 항공사 이름으로 (로고는 쓰지 않아요)', icon: <NameIcon real /> },
   { value: 'fictional', short: '가상 항공사', label: '노을항공·바람길항공 같은 지어낸 이름으로', icon: <NameIcon real={false} /> },
@@ -282,6 +287,12 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
             </div>
             <IconPicker caption="시작 자금" value={opt.money} options={MONEY_CHOICES} onChange={(money) => setOpt({ money })} testId="al-money" />
             <IconPicker caption="컴퓨터 성향" value={opt.aiStyle} options={STYLE_CHOICES} onChange={(aiStyle) => setOpt({ aiStyle })} testId="al-aistyle" />
+            <IconPicker caption="실제 역사" value={opt.history === false ? 'off' : 'on'} options={HISTORY_CHOICES} onChange={(v) => setOpt({ history: v === 'on' })} testId="al-history" />
+            <p className="al-note">
+              {opt.history === false
+                ? '역사 사건 없이 무작위 사건만 일어나고, 어느 나라든 오갈 수 있어요.'
+                : '냉전과 국교(막힌 하늘길, 소련 비행기)를 따르고, 석유 파동·걸프 전쟁·9·11·사스·금융 위기·코로나19 같은 실제 사건이 그 해에 일어나요.'}
+            </p>
           </section>
 
           <section className="setup-section">

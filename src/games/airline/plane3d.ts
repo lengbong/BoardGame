@@ -871,9 +871,10 @@ function engines(B: Builder, s: PlaneShape, sec: (u: number) => Section, g: Wing
       const uF = L - lt * 1.18;
       const uM = uF + e.l * 0.5;
       const c = sec(uM);
-      const y = c.a + r * 1.15;
-      const zs = e.rear === 2 ? [c.zc + c.b * 0.35 + r * 1.05, c.zc + c.b * 0.35 - r * 1.05] : [c.zc + c.b * 0.38];
-      zs.forEach((z, k) => {
+      // 엔진 둘이면 옆으로 나란히 (Il-62)
+      const ys = e.rear === 2 ? [c.a + r * 1.15, c.a + r * 3.3] : [c.a + r * 1.15];
+      const z = c.zc + c.b * 0.38;
+      ys.forEach((y, k) => {
         const front: Vec = [-uF, side * y, z];
         nacelle(B, front, e.l, r, liv, near ? 30 : 0, near ? 20 + k : -20 - k, { slim: true });
         box(B, [-uF - e.l * 0.3, side * c.a * 0.7, z - r * 0.18], [-uF - e.l * 0.75, side * (y - r * 0.8), z + r * 0.18], pylon, near ? 30 : 0, near ? 19 : -19);

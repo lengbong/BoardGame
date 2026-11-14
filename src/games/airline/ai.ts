@@ -1,6 +1,7 @@
 import { MODEL, availableModels, leadTime } from './aircraft';
 import { MAX_ROUTES } from './limits';
 import { cabinPresets, sameCabin } from './cabin';
+import { makerPolitics, routePolitics } from './politics';
 import { aiChoose, allianceScore } from './choices';
 import { CITIES, CITY, REGIONS, airportClass, citySize, dist, pairKey } from './cities';
 import {
@@ -10,6 +11,7 @@ import {
   buyBlocker,
   depositFor,
   fleetCount,
+  historyOn,
   idlePlanes,
   planeById,
   proposeBlocker,
@@ -393,8 +395,15 @@ export class Planner {
 
   // ---------------------------------------------------------------- 넓히기
 
+  private modelMemo: ModelDef[] | null = null;
+
+  /** 살 수 있는 기종 (냉전 중 막힌 제작국 기종은 뺀다) */
   private models(): ModelDef[] {
-    return availableModels(this.year);
+    if (!this.modelMemo) {
+      const history = historyOn(this.s);
+      this.modelMemo = availableModels(this.year).filter((m) => !history || !makerPolitics(this.c.hub, m, this.year));
+    }
+    return this.modelMemo;
   }
 
   private fits(m: ModelDef, a: string, b: string): boolean {
@@ -429,6 +438,7 @@ export class Planner {
     const quick: { a: string; b: string; v: number; d: number }[] = [];
     const seen = new Set<string>();
     const hubRoutes = c.routes.filter((r) => r.a === c.hub || r.b === c.hub).length;
+    const history = historyOn(this.s);
     for (const a of origins) {
       if (this.slotsLeft(a) < 2) continue;
       for (const city of CITIES) {
@@ -439,6 +449,7 @@ export class Planner {
         seen.add(key);
         const d = dist(a, b);
         if (d < 300 || d > maxRange) continue;
+        if (history && routePolitics(c.hub, a, b, year)) continue;
         if (!this.normal && d > 6500) continue;
         if (this.slotsLeft(b) < 2) continue;
         const dem = pairDemand(this.s, a, b);

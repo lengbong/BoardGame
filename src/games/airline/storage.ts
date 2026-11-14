@@ -50,6 +50,7 @@ export function parseOptions(v: unknown): AirlineOptions {
     challenge: typeof o.challenge === 'string' && CHALLENGE[o.challenge] ? o.challenge : null,
     aiStyle: o.aiStyle === 'relaxed' || o.aiStyle === 'fierce' || o.aiStyle === 'normal' ? o.aiStyle : DEFAULT_OPTIONS.aiStyle,
     names: o.names === 'fictional' || o.names === 'real' ? o.names : DEFAULT_OPTIONS.names,
+    history: o.history !== false,
   };
 }
 

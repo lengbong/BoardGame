@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MODELS, availableModels } from './aircraft';
+import { MODELS, availableModels, isFictional } from './aircraft';
 import { CHALLENGES } from './challenges';
 import { CITIES, CITY, REGIONS, airportClass } from './cities';
 import { FIXED_EVENTS } from './events';
@@ -61,7 +61,8 @@ describe('기종', () => {
     for (const m of MODELS) {
       expect(m.intro).toBeLessThanOrEqual(m.end);
       expect(m.seats).toBeGreaterThanOrEqual(40);
-      expect(m.seats).toBeLessThanOrEqual(600);
+      // 상상 속 미래 초대형기(HC-800)만 600석을 넘는다
+      expect(m.seats).toBeLessThanOrEqual(isFictional(m) ? 900 : 600);
       expect(m.range).toBeGreaterThanOrEqual(1400);
       expect(m.range).toBeLessThanOrEqual(17000);
       expect(m.speed).toBeGreaterThan(400);

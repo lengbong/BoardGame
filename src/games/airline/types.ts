@@ -73,7 +73,8 @@ export type Landmark =
   | 'steppyramid'
   | 'coffee'
   | 'sugarloaf'
-  | 'obelisk';
+  | 'obelisk'
+  | 'onion';
 
 /** 도시 하나. 크기·공항은 1960·1970…2030년의 값이고 그 사이 해는 이어서 셈한다 */
 export interface CityDef {
@@ -428,6 +429,8 @@ export interface AirlineOptions {
   aiStyle: AiStyle;
   /** 항공사 이름 */
   names: NameMode;
+  /** 실제 역사 (냉전·국교·석유 파동·9·11·코로나…). 없으면 켜짐 */
+  history?: boolean;
 }
 
 export interface AirlineSetup {
@@ -444,7 +447,9 @@ export type Effect =
   | { id: number; kind: 'boom' | 'slump'; region: RegionId; mult: number; until: number }
   | { id: number; kind: 'tourism'; city: string; mult: number; until: number }
   | { id: number; kind: 'fair'; city: string; mult: number; until: number }
-  | { id: number; kind: 'sale'; mult: number; until: number };
+  | { id: number; kind: 'sale'; mult: number; until: number }
+  /** 온 세계 손님 배수 (9·11·코로나 같은 큰 사건) */
+  | { id: number; kind: 'world'; mult: number; until: number };
 
 export type NewsTone = 'good' | 'bad' | 'info' | 'big';
 

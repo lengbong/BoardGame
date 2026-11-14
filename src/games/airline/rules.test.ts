@@ -4,6 +4,7 @@ import { seededRandom } from '../../lib/random';
 import { MODEL, availableModels, commonalityMult, launchDiscount, leadTime } from './aircraft';
 import { CHALLENGE } from './challenges';
 import { CITY, citySize, dist } from './cities';
+import { routePolitics } from './politics';
 import {
   MAX_ROUTES,
   START_MONEY,
@@ -155,7 +156,8 @@ describe('지점과 노선', () => {
       s = next;
     }
     // 예전 한도(32개)보다 훨씬 많이 열 수 있다: 비행기가 닿는 모든 도시
-    const reachable = others.filter((city) => dist('seoul', city) >= 150 && dist('seoul', city) <= maxRangeNow(s, 0));
+    // (국교가 없어 막힌 도시는 뺀다)
+    const reachable = others.filter((city) => dist('seoul', city) >= 150 && dist('seoul', city) <= maxRangeNow(s, 0) && !routePolitics('seoul', 'seoul', city, yearOf(s.q)));
     expect(opened).toBe(reachable.length);
     expect(opened).toBeGreaterThan(32);
     // 안전 한도에 닿으면 막는다

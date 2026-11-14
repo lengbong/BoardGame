@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { coColors } from './brand';
-import { BODY_INFO, MODEL, MODELS, availableModels, commonalityMult, launchDiscount, leadTime, sizeClass, type SizeClass } from './aircraft';
+import { BODY_INFO, MODEL, MODELS, availableModels, commonalityMult, isFictional, launchDiscount, leadTime, sizeClass, type SizeClass } from './aircraft';
+import { EAST_MAKERS } from './politics';
 import { SEAT_SHAPES } from './Art';
 import { AIRPORT_INFO, CITY } from './cities';
 import { fmtMoney, km } from './format';
@@ -250,6 +251,12 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                     {BODY_INFO[m.body].name} · {m.note}
                   </p>
                   <div className="al-mc-tags">
+                    {isFictional(m) && (
+                      <span className="al-flag al-flag-blue" title="실제로 만들어지지 않은 게임 속 미래 기종이에요">
+                        ✨ 상상 속 기종
+                      </span>
+                    )}
+                    {EAST_MAKERS.includes(m.maker) && <span className="al-flag">☭ 소련·러시아제</span>}
                     {launch > 0 && <span className="al-flag al-flag-good">첫 손님 할인 −{Math.round(launch * 100)}%</span>}
                     {famNow > 0 && (
                       <span className="al-flag al-flag-blue" title="같은 계열 비행기가 많을수록 정비·승무원비가 줄어요">

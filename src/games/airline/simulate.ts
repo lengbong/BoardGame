@@ -12,7 +12,7 @@ import {
   type CabinStats,
 } from './cabin';
 import { AIRPORT_INFO, CITY, FEE_INFO, REGIONS, SEASON_INFO, airportClass, citySize, dist, pairIndex, pairKey } from './cities';
-import { effectMults, fixedEventMult, priceMult } from './events';
+import { effectMults, fixedEventMult, priceMult, worldMult } from './events';
 import { quarterOf, yearOf } from './time';
 import type {
   AirlineState,
@@ -255,8 +255,16 @@ export function businessCost(city: string, kind: Business['kind'], q: number): n
 
 // ------------------------------------------------------------------ 비행기 시간과 슬롯
 
+/** 노선 목록 → id로 찾기 (목록이 바뀌면 다시 만든다: 같은 배열에 push하면 길이로 알아챈다) */
+const routeById = new WeakMap<readonly Route[], { len: number; map: Map<number, Route> }>();
+
 export function routeOf(c: Company, routeId: number): Route | undefined {
-  return c.routes.find((r) => r.id === routeId);
+  let hit = routeById.get(c.routes);
+  if (!hit || hit.len !== c.routes.length) {
+    hit = { len: c.routes.length, map: new Map(c.routes.map((r) => [r.id, r])) };
+    routeById.set(c.routes, hit);
+  }
+  return hit.map.get(routeId);
 }
 
 /** 이 비행기가 이 노선을 한 주에 몇 번 왕복하는지 */
@@ -405,7 +413,8 @@ function computeDemand(state: Pick<AirlineState, 'q' | 'effects'>, a: string, b:
   const sB = citySize(B, year);
   const eA = effectMults(state.effects, a);
   const eB = effectMults(state.effects, b);
-  const base = DEMAND_K * travelFactor(q) * distanceFactor(dist(a, b)) * (A.region === B.region ? 1.35 : 1) * fixedEventMult(a, q) * fixedEventMult(b, q);
+  const base =
+    DEMAND_K * travelFactor(q) * distanceFactor(dist(a, b)) * (A.region === B.region ? 1.35 : 1) * fixedEventMult(a, q) * fixedEventMult(b, q) * worldMult(state.effects);
   const biz = BIZ_K * (sA * sB) ** 0.95 * Math.sqrt(A.biz * B.biz) * eA.biz * eB.biz;
   const leisure =
     LEISURE_K *

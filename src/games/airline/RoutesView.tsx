@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { SEAT_COLORS } from '../common/players';
+import { coColors } from './brand';
 import { MODEL, availableModels } from './aircraft';
 import { openSuggestion, type Candidate } from './ai';
 import { PlaneArt, SEAT_SHAPES } from './Art';
@@ -141,7 +141,7 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
   const planes = planesOnRoute(me, r.id);
   const est = estimateExisting(state, viewer, r);
   const dem = pairDemand(state, r.a, r.b);
-  const color = SEAT_COLORS[me.seat];
+  const color = coColors(me);
   // 이 노선에 더 넣을 수 있는 비행기: 쉬는 비행기 + 다른 노선을 날고도 시간이 남는 비행기
   const others = me.planes
     .filter((p) => legFreq(p, r.id) === 0)
@@ -444,7 +444,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
   const [onlyBranch, setOnlyBranch] = useState(false);
   const from = me.branches.includes(planner.from) ? planner.from : me.hub;
   const maxRange = maxRangeNow(state, viewer);
-  const color = SEAT_COLORS[me.seat];
+  const color = coColors(me);
 
   const list = useMemo(() => {
     return CITIES.filter((c) => c.id !== from)

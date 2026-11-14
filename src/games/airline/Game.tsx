@@ -4,8 +4,8 @@ import { sfx } from '../../lib/sound';
 import { soloOutcome, useRecordOutcome } from '../../lib/stats';
 import { useMusic } from '../../lib/useMusic';
 import { useTimers } from '../../lib/useTimers';
-import { SEAT_COLORS } from '../common/players';
 import type { GameSettings } from '../common/settings';
+import { coColors, realOf } from './brand';
 import { aiManage, type AiLevel } from './ai';
 import { CompanyBadge, SEAT_SHAPES } from './Art';
 import { ChoiceModal } from './ChoiceModal';
@@ -26,7 +26,7 @@ import { alSound } from './sounds';
 import { AIRLINE_DELAYS, clearSavedAirlineGame, saveAirlineGame } from './storage';
 import { QUARTER_NAMES, qLabel, quarterOf } from './time';
 import type { AirlineAction, AirlineSetup, AirlineState, QuarterReport as Report } from './types';
-import { Kbd } from './ui';
+import { IataBadge, Kbd } from './ui';
 
 type Tab = 'map' | 'fleet' | 'routes' | 'finance' | 'report' | 'news';
 
@@ -148,7 +148,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
     // 컴퓨터가 한 일 요약
     if (prevActor >= 0 && prev.companies[prevActor].kind !== 'human' && summary.has(prevActor) && !quarterEnd) {
       const c = game.companies[prevActor];
-      setBanner({ id: fxSeq++, text: `${c.name}: ${summary.get(prevActor)!.join(' · ')}`, color: SEAT_COLORS[c.seat].main });
+      setBanner({ id: fxSeq++, text: `${c.name}: ${summary.get(prevActor)!.join(' · ')}`, color: coColors(c).main });
       if (summary.get(prevActor)!.some((s) => s.startsWith('새 노선'))) alSound.chime();
     }
     // 사람이 한 행동 소리
@@ -168,7 +168,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
     for (const e of game.events) {
       if (e.type === 'bankrupt') {
         alSound.bankrupt();
-        setBanner({ id: fxSeq++, text: `💥 ${game.companies[e.company].name} 파산!`, color: '#a52a2f' });
+        setBanner({ id: fxSeq++, text: `🛑 ${game.companies[e.company].name} 운항 중단`, color: '#a52a2f' });
       }
     }
     if (quarterEnd) {
@@ -196,7 +196,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
       const c = game.companies[turn.company];
       if (c.kind === 'human') {
         sfx.turn();
-        setBanner({ id: fxSeq++, text: `${c.name} 차례예요! ✈️`, color: SEAT_COLORS[c.seat].main });
+        setBanner({ id: fxSeq++, text: `${c.name} 차례예요! ✈️`, color: coColors(c).main });
       }
     }
   }, [game, setup, delays, later, viewer]);
@@ -323,7 +323,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   else if (report) hint = '분기 결산을 보고 있어요. Enter로 넘겨요.';
   else if (!actorCo || actorCo.kind !== 'human') hint = `${withJosa(actorCo?.name ?? '', '이/가')} 경영하고 있어요…`;
   else if (notice) hint = <span className="al-notice">{notice.text}</span>;
-  else if (me.crisis > 0) hint = '⚠ 돈이 모자라요! 손해 보는 노선을 닫고 쉬는 비행기를 팔거나 대출을 받아요. 이번에도 모자라면 파산해요.';
+  else if (me.crisis > 0) hint = '⚠ 돈이 모자라요! 손해 보는 노선을 닫고 쉬는 비행기를 팔거나 대출을 받아요. 이번에도 모자라면 운항을 멈춰야 해요.';
   else if (me.choice)
     hint = (
       <>
@@ -348,7 +348,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
       </>
     );
 
-  const myColor = SEAT_COLORS[me.seat];
+  const myColor = coColors(me);
   const value = companyValue(game, viewer);
   const rank = rankings(game).indexOf(viewer) + 1;
   const lastProfit = game.report?.companies[viewer]?.profit;
@@ -402,6 +402,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
           </div>
           <div className="al-me" style={{ '--al-co': myColor.main } as CSSProperties}>
             <CompanyBadge color={myColor.main} shape={SEAT_SHAPES[me.seat]} size={22} />
+            {realOf(me) && <IataBadge airline={realOf(me)!} small />}
             <span className="al-me-name">
               <b>{me.name}</b>
               <small>
@@ -421,11 +422,6 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
               </span>
             )}
           </div>
-          {canAct && me.choice && (
-            <button type="button" className="btn btn-small al-choice-btn" onClick={() => setChoiceOpen(true)} data-testid="al-choice-open">
-              {me.choice.icon} 결정할 일
-            </button>
-          )}
           <nav className="al-tabs" role="tablist" aria-label="화면">
             {TABS.map((t, i) => (
               <button

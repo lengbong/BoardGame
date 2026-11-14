@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { shapeElement } from '../../components/shapes';
 import { useElementWidth } from '../../lib/useElementWidth';
-import { SEAT_COLORS } from '../common/players';
+import { coColors } from './brand';
 import { LandmarkIcon, MAP_PLANE_D, SEAT_SHAPES } from './Art';
 import { CITIES, CITY, REGIONS, REGION_INFO, citySize, dist, pairKey } from './cities';
 import { yearOf } from './time';
@@ -263,7 +263,7 @@ export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx,
         <g className="al-routes">
           {routes.map((r) => {
             const c = state.companies[r.company];
-            const color = SEAT_COLORS[c.seat].main;
+            const color = coColors(c).main;
             const mine = r.company === viewer;
             const sel = selRoute === r;
             const pulse = pulseRoute.get(`${r.company}|${r.pair}`);
@@ -278,6 +278,7 @@ export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx,
               >
                 <path d={r.d} className="al-route-hit" strokeWidth={10 * k} />
                 {sel && <path d={r.d} className="al-route-halo" strokeWidth={(mine ? 7 : 6) * k} />}
+                <path d={r.d} className="al-route-case" strokeWidth={(mine ? 4 : 2.9) * k} />
                 <path d={r.d} stroke={color} strokeWidth={(mine ? 2.4 : 1.5) * k} strokeDasharray={r.flying ? undefined : `${4 * k} ${3 * k}`} className="al-route-line" />
               </g>
             );
@@ -292,7 +293,7 @@ export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx,
             const begin = `${-((i * 1.37) % dur).toFixed(2)}s`;
             // 지도 끝을 넘는 노선은 두 벌 모두에 같은 때에 띄워서, 한쪽 끝으로 나가면 반대쪽에서 들어온다
             return r.copies.map((path, j) => (
-              <path key={`${r.key}-${j}-${flying ? 'f' : 'n'}`} d={MAP_PLANE_D} fill={SEAT_COLORS[c.seat].main} className="al-map-plane" transform={`scale(${(r.company === viewer ? 1 : 0.8) * k})`}>
+              <path key={`${r.key}-${j}-${flying ? 'f' : 'n'}`} d={MAP_PLANE_D} fill={coColors(c).main} className="al-map-plane" transform={`scale(${(r.company === viewer ? 1 : 0.8) * k})`}>
                 <animateMotion dur={`${dur.toFixed(1)}s`} repeatCount="indefinite" rotate="auto" path={path} begin={begin} />
               </path>
             ));
@@ -335,7 +336,7 @@ export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx,
                 <circle cx={p.x} cy={p.y} r={Math.max(r * 1.6, 6 * k)} className="al-city-hit" />
                 {sel && <circle cx={p.x} cy={p.y} r={r + 4 * k} className="al-city-ring" strokeWidth={1.6 * k} />}
                 {hubOf !== undefined && (
-                  <circle cx={p.x} cy={p.y} r={r + 2.4 * k} fill="none" stroke={SEAT_COLORS[state.companies[hubOf].seat].main} strokeWidth={1.8 * k} />
+                  <circle cx={p.x} cy={p.y} r={r + 2.4 * k} fill="none" stroke={coColors(state.companies[hubOf]).main} strokeWidth={1.8 * k} />
                 )}
                 <circle cx={p.x} cy={p.y} r={r} className="al-city-dot" strokeWidth={0.9 * k} />
                 {owners.map((ci, j) => {
@@ -343,7 +344,7 @@ export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx,
                   const ang = (-50 + j * 50) * (Math.PI / 180);
                   const ox = p.x + Math.cos(ang) * (r + 4.5 * k);
                   const oy = p.y - r - 3.5 * k + Math.sin(ang) * 2 * k;
-                  return <g key={ci}>{shapeElement(SEAT_SHAPES[co.seat], ox, oy, 2.6 * k, SEAT_COLORS[co.seat].main, { stroke: '#fff', strokeWidth: 0.7 * k })}</g>;
+                  return <g key={ci}>{shapeElement(SEAT_SHAPES[co.seat], ox, oy, 2.6 * k, coColors(co).main, { stroke: '#fff', strokeWidth: 0.7 * k })}</g>;
                 })}
                 {zoom >= 2.6 && (
                   <g transform={`translate(${p.x - 7 * k} ${p.y - r - 18 * k}) scale(${(14 / 24) * k})`} className="al-city-mark">
@@ -382,7 +383,7 @@ export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx,
           {state.companies.map((c, i) => (
             <li key={i} className={c.out ? 'al-out' : ''}>
               <svg viewBox="0 0 20 20" width={12} height={12} aria-hidden="true">
-                {shapeElement(SEAT_SHAPES[c.seat], 10, 10, 9, SEAT_COLORS[c.seat].main)}
+                {shapeElement(SEAT_SHAPES[c.seat], 10, 10, 9, coColors(c).main)}
               </svg>
               {c.name}
             </li>

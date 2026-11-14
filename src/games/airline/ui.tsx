@@ -1,6 +1,8 @@
-import type { ReactNode } from 'react';
-import { SEAT_COLORS } from '../common/players';
+import { useState, type ReactNode } from 'react';
 import { CompanyBadge, SEAT_SHAPES } from './Art';
+import { coColors, inkOn, realOf } from './brand';
+import { photoCredit } from './images';
+import type { RealAirline } from './realAirlines';
 import type { Company } from './types';
 
 /** 할 수 있으면 누를 수 있고, 못 하면 흐리게 + 이유를 작게 보여 주는 버튼 */
@@ -100,14 +102,50 @@ export function Stars({ n, max = 5 }: { n: number; max?: number }) {
   );
 }
 
-/** 회사 꼬리 배지 + 이름 */
-export function CoName({ c, bold }: { c: Company; bold?: boolean }) {
-  const col = SEAT_COLORS[c.seat];
+/** 회사 꼬리 배지(자리 모양) + 두 글자 부호 + 이름 */
+export function CoName({ c, bold, noIata }: { c: Company; bold?: boolean; noIata?: boolean }) {
+  const col = coColors(c);
+  const real = realOf(c);
   return (
     <span className="al-coname">
       <CompanyBadge color={col.main} shape={SEAT_SHAPES[c.seat]} size={16} />
+      {real && !noIata && <IataBadge airline={real} small />}
       {bold ? <b>{c.name}</b> : c.name}
     </span>
+  );
+}
+
+/**
+ * 실제 항공사의 두 글자 부호(IATA)를 회사 색 네모 안에 쓴다. 로고를 흉내 내지 않는 그냥 글자 배지.
+ * color를 주지 않으면 항공사 칠 색 그대로.
+ */
+export function IataBadge({ airline, color, small }: { airline: RealAirline; color?: string; small?: boolean }) {
+  const bg = color ?? airline.colors[0];
+  const edge = airline.colors[1] && airline.colors[1] !== bg ? airline.colors[1] : 'transparent';
+  return (
+    <span className={`al-iata${small ? ' al-iata-small' : ''}`} style={{ background: bg, color: inkOn(bg), boxShadow: `inset 0 -3px 0 ${edge}` }} title={`${airline.name} (${airline.nameEn}) · IATA ${airline.iata}`}>
+      {airline.iata}
+    </span>
+  );
+}
+
+/**
+ * 사진 (위키미디어 공용). 사진이 없거나 못 불러오면 fallback(그린 그림)을 보여 준다.
+ * credit: 'aircraft/<id>' 같은 출처 열쇠 — 사진 위에 작게 지은이와 라이선스를 쓴다.
+ */
+export function Photo({ src, credit, alt, fallback, className, ratio = '16 / 9' }: { src: string | undefined; credit?: string; alt: string; fallback: ReactNode; className?: string; ratio?: string }) {
+  const [broken, setBroken] = useState(false);
+  if (!src || broken) return <>{fallback}</>;
+  const info = credit ? photoCredit(credit) : undefined;
+  return (
+    <figure className={`al-photo${className ? ` ${className}` : ''}`} style={{ aspectRatio: ratio }}>
+      <img src={src} alt={alt} loading="lazy" decoding="async" onError={() => setBroken(true)} />
+      {info && (
+        <figcaption title={`${info.file} — ${info.author}, ${info.license}`}>
+          📷 {info.author} · {info.license}
+        </figcaption>
+      )}
+    </figure>
   );
 }
 

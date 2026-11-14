@@ -12,7 +12,12 @@ import { DEFAULT_NAMES, GOAL_VALUES, START_MONEY, companyName, hubCandidates } f
 import { companyValue } from './simulate';
 import type { SavedAirlineGame } from './storage';
 import { qLabel } from './time';
-import type { AiStyle, AirlineOptions, AirlineSetup, MoneyLevel, StartEra } from './types';
+import { AirlinePicker, AirlinePhoto, airlineYears } from './AirlinePicker';
+import { gameHub } from './brand';
+import { CreditsModal } from './CreditsModal';
+import { REAL_AIRLINE, airlinesAt } from './realAirlines';
+import type { AiStyle, AirlineOptions, AirlineSetup, MoneyLevel, NameMode, StartEra } from './types';
+import { IataBadge } from './ui';
 import { Meter } from './ui';
 
 interface SetupProps {
@@ -136,15 +141,39 @@ const STYLE_CHOICES: IconChoice<AiStyle>[] = [
   { value: 'fierce', short: '치열', label: '컴퓨터가 빠르게 넓히고 돈을 아끼지 않아요', icon: <StyleIcon n={3} /> },
 ];
 
+function NameIcon({ real }: { real: boolean }) {
+  return (
+    <ChoiceIcon>
+      <rect x="5" y="9" width="22" height="14" rx="3" {...ICON_DUO} />
+      {real ? <path d="M10 19v-6h3a2 2 0 0 1 0 4h-3M17 13h5M19.5 13v6" {...ICON_LINE} /> : <path d="M11 19l2-6 2 6M12 17h2M19 13v6M19 13h3M19 16h2" {...ICON_LINE} />}
+    </ChoiceIcon>
+  );
+}
+
+const NAME_CHOICES: IconChoice<NameMode>[] = [
+  { value: 'real', short: '실제 항공사', label: '그 해에 날던 실제 항공사 이름으로 (로고는 쓰지 않아요)', icon: <NameIcon real /> },
+  { value: 'fictional', short: '가상 항공사', label: '노을항공·바람길항공 같은 지어낸 이름으로', icon: <NameIcon real={false} /> },
+];
+
 export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, onStart, onResume, onBack }: SetupProps) {
   const [setup, setSetup] = useState<AirlineSetup>(initialSetup);
   const [choosing, setChoosing] = useState<number | null>(null);
+  const [pickingAirline, setPickingAirline] = useState<number | null>(null);
+  const [credits, setCredits] = useState(false);
   const opt = setup.options;
+  const real = opt.names === 'real';
   const setOpt = (patch: Partial<AirlineOptions>) => setSetup((s) => ({ ...s, options: { ...s.options, ...patch } }));
   const challenge = opt.mode === 'challenge';
   const humanIdx = setup.seats.findIndex((s) => s.kind === 'human');
   const count = activeSeatCount(setup.seats);
   const hubs = setup.hubs.map((h) => (h && hubCandidates(opt.era).includes(h) ? h : null));
+  // 그 해에 날던 항공사만, 사람 자리만, 겹치지 않게
+  const flying = new Set(airlinesAt(opt.era).map((a) => a.id));
+  const airlines = [0, 1, 2, 3].map((i) => {
+    const id = setup.airlines?.[i] ?? null;
+    if (!real || !id || !flying.has(id) || setup.seats[i]?.kind !== 'human') return null;
+    return setup.airlines.findIndex((x, j) => x === id && setup.seats[j]?.kind === 'human') === i ? id : null;
+  });
   const canStart = challenge ? !!opt.challenge : count >= 2;
 
   const start = () => {
@@ -161,7 +190,24 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
       });
       return;
     }
-    onStart({ ...setup, hubs });
+    onStart({ ...setup, hubs, airlines });
+  };
+
+  const setAirline = (seat: number, id: string | null) => {
+    const nextAir = [...airlines];
+    nextAir[seat] = id;
+    // 본사는 그 항공사의 본거지로 (다른 사람이 쓰면 가까운 도시)
+    const nextHubs = [...hubs];
+    if (id) {
+      const taken = hubs.filter((h, i) => h && i !== seat) as string[];
+      nextHubs[seat] = gameHub(REAL_AIRLINE[id], hubCandidates(opt.era), taken);
+    } else nextHubs[seat] = null;
+    setSetup((s) => ({ ...s, airlines: nextAir, hubs: nextHubs }));
+    setPickingAirline(null);
+  };
+  const humanName = (i: number) => {
+    const a = airlines[i];
+    return a ? REAL_AIRLINE[a].name : setup.seats[i].name.trim() || `${SEAT_COLORS[i as 0].name} 자리`;
   };
 
   const setHub = (seat: number, city: string | null) => {
@@ -213,7 +259,9 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
             <h2>누가 할까요?</h2>
             <SeatPicker seats={setup.seats} onChange={(seats) => setSetup((s) => ({ ...s, seats }))} />
             <p className="al-note">
-              이름을 비워 두면 {DEFAULT_NAMES.map((n, i) => `${SEAT_COLORS[i as 0].name} ‘${n}’`).join(', ')}로 불러요. 이름 뒤에는 ‘항공’이 붙어요. 모든 회사의 숫자가 공개되어 차례 넘김 화면 없이 함께 해요.
+              {real
+                ? '실제 항공사로 하면 아래에서 고른 항공사 이름을 써요. 모든 회사의 숫자가 공개되어 차례 넘김 화면 없이 함께 해요.'
+                : `이름을 비워 두면 ${DEFAULT_NAMES.map((n, i) => `${SEAT_COLORS[i as 0].name} ‘${n}’`).join(', ')}로 불러요. 이름 뒤에는 ‘항공’이 붙어요. 모든 회사의 숫자가 공개되어 차례 넘김 화면 없이 함께 해요.`}
             </p>
           </section>
 
@@ -236,6 +284,81 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
           </section>
 
           <section className="setup-section">
+            <h2>항공사</h2>
+            <IconPicker caption="항공사 이름" value={opt.names} options={NAME_CHOICES} onChange={(names) => setOpt({ names })} testId="al-names" />
+            {real ? (
+              <>
+                <p className="al-note">
+                  사람은 {opt.era}년에 날던 실제 항공사를 하나씩 골라요 (같은 항공사는 한 사람만). 컴퓨터는 남은 항공사 가운데 여러 지역에서 저절로 맡아요. 실제 회사의 이름·두 글자 부호·칠 색만 빌리고 로고는 쓰지 않으며, 게임 속 경영·사건은 모두 지어낸 이야기예요.
+                </p>
+                <ul className="al-hub-seats al-airline-seats">
+                  {setup.seats.map((seat, i) => {
+                    if (seat.kind === 'empty') return null;
+                    const a = airlines[i] ? REAL_AIRLINE[airlines[i]!] : null;
+                    return (
+                      <li key={i}>
+                        <span className="al-hub-who" style={{ borderColor: SEAT_COLORS[i as 0].main }}>
+                          {seat.kind === 'human' ? `${SEAT_COLORS[i as 0].name} · 사람` : `${SEAT_COLORS[i as 0].name} · 컴퓨터`}
+                        </span>
+                        {seat.kind === 'human' ? (
+                          <button
+                            type="button"
+                            className={`btn btn-small al-airline-btn${pickingAirline === i ? ' btn-selected' : ''}`}
+                            onClick={() => setPickingAirline(pickingAirline === i ? null : i)}
+                            data-testid={`al-airline-btn-${i}`}
+                          >
+                            {a ? (
+                              <>
+                                <IataBadge airline={a} small /> {a.name} <small className="al-muted">{airlineYears(a)}</small>
+                              </>
+                            ) : (
+                              '🎲 저절로 (눌러서 고르기)'
+                            )}
+                          </button>
+                        ) : (
+                          <span className="al-muted">그 해에 날던 항공사 가운데 저절로</span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                {pickingAirline !== null && setup.seats[pickingAirline]?.kind === 'human' && (
+                  <AirlinePicker
+                    era={opt.era}
+                    value={airlines[pickingAirline]}
+                    takenBy={Object.fromEntries(airlines.map((id, j) => [id, j]).filter(([id, j]) => id && j !== pickingAirline).map(([id, j]) => [id as string, humanName(j as number)]))}
+                    takenHubs={hubs.filter((h, j) => h && j !== pickingAirline) as string[]}
+                    onPick={(id) => setAirline(pickingAirline, id)}
+                  />
+                )}
+                {airlines.some(Boolean) && (
+                  <ul className="al-picked-airlines">
+                    {airlines.map((id, i) => {
+                      if (!id) return null;
+                      const a = REAL_AIRLINE[id];
+                      return (
+                        <li key={i}>
+                          <AirlinePhoto airline={a} width={120} />
+                          <span>
+                            <IataBadge airline={a} small /> <b>{a.name}</b>
+                            <small className="al-muted">
+                              {' '}
+                              · 본거지 {CITY[a.hub]?.name ?? a.hub}
+                              {hubs[i] && hubs[i] !== a.hub ? ` (게임 본사 ${CITY[hubs[i]!].name})` : ''}
+                            </small>
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </>
+            ) : (
+              <p className="al-note">지어낸 이름의 항공사로 해요. 이름은 위 자리 칸에 적을 수 있어요.</p>
+            )}
+          </section>
+
+          <section className="setup-section">
             <h2>본사 도시</h2>
             <p className="al-note">회사마다 다른 도시에 본사를 둬요. 본사 공항은 슬롯이 두 배이고, 본사를 오가는 노선은 갈아타는 손님 덕분에 손님이 조금 더 많아요. 컴퓨터와 고르지 않은 자리는 저절로 골라요.</p>
             <ul className="al-hub-seats">
@@ -243,7 +366,7 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
                 seat.kind === 'empty' ? null : (
                   <li key={i}>
                     <span className="al-hub-who" style={{ borderColor: SEAT_COLORS[i as 0].main }}>
-                      {companyName(seat.name, i)}
+                      {!real ? companyName(seat.name, i) : seat.kind === 'human' && airlines[i] ? REAL_AIRLINE[airlines[i]!].name : `${SEAT_COLORS[i as 0].name} · ${seat.kind === 'human' ? '사람' : '컴퓨터'}`}
                     </span>
                     {seat.kind === 'human' ? (
                       <button type="button" className={`btn btn-small${choosing === i ? ' btn-selected' : ''}`} onClick={() => setChoosing(choosing === i ? null : i)} data-testid={`al-hub-btn-${i}`}>
@@ -256,7 +379,7 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
                         )}
                       </button>
                     ) : (
-                      <span className="al-muted">컴퓨터가 고를게요</span>
+                      <span className="al-muted">{real ? '맡은 항공사의 본거지로' : '컴퓨터가 고를게요'}</span>
                     )}
                   </li>
                 ),
@@ -323,6 +446,12 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
       </section>
 
       <HowTo />
+      <p className="al-credits-link">
+        <button type="button" className="btn btn-small btn-ghost" onClick={() => setCredits(true)} data-testid="al-credits-open">
+          📷 사진 출처
+        </button>
+      </p>
+      {credits && <CreditsModal onClose={() => setCredits(false)} />}
     </div>
   );
 }
@@ -403,13 +532,16 @@ function HowTo() {
           <b>손님 나누기</b>: 두 도시 사이 손님은 도시 크기·사업과 관광·거리·계절·시대에 따라 정해져요. 같은 두 도시를 여러 회사가 날면, <b>운임이 싸고 자주 날고 편한 비행기를 띄우고 평판·광고가 좋은</b> 회사가 손님을 더 가져가요. 좌석보다 많이 태울 수는 없어요.
         </li>
         <li>
-          <b>돈</b>: 운임 수입에서 연료비·승무원과 정비·공항·서비스·판매 수수료·리스료·지점 유지비·광고·이자·세금을 빼면 분기 이익이에요. 돈이 모자라면 은행에서 빌리고, 두 분기 내내 모자라면 <b>파산</b>해요.
+          <b>돈</b>: 운임 수입에서 연료비·승무원과 정비·공항·서비스·판매 수수료·리스료·지점 유지비·광고·이자·세금을 빼면 분기 이익이에요. 돈이 모자라면 은행에서 빌리고, 두 분기 내내 모자라면 <b>운항을 멈추고</b> 게임에서 빠져요.
         </li>
         <li>
           <b>결정할 일과 목표</b>: 서너 분기마다 임금 협상·연료 계약·새 기종 제안 같은 <b>결정할 일</b>이 와요. 고르면 생길 일을 미리 보여 줘요. 해마다 작은 <b>올해 목표</b> 셋을 받고, 해가 끝나면 <b>S~D 경영 평가</b>를 받아요.
         </li>
         <li>
           <b>경영 비서</b>: 지도 아래 비서가 지난 분기 숫자를 보고 할 만한 일을 골라 주고, ‘적용’ 한 번으로 해 줘요. 첫해에는 리스 보증금이 없어요.
+        </li>
+        <li>
+          <b>실제 항공사와 사진</b>: ‘실제 항공사’로 하면 시작하는 해에 날던 항공사(대한항공·팬암·루프트한자…)를 골라 그 본거지에서 시작해요. 이름·두 글자 부호(IATA)·칠 색만 빌려 쓰고 로고는 쓰지 않으며, 게임 속 경영과 사건은 모두 지어낸 이야기예요. 기종·도시·항공사 사진은 위키미디어 공용의 자유 라이선스 사진이고, 지은이와 라이선스는 ‘📷 사진 출처’에서 볼 수 있어요.
         </li>
         <li>
           <b>세계는 움직여요</b>: 해마다 새 기종이 나오고 옛 기종은 생산이 끝나요. 도시가 자라고 공항이 커지며, 기름값·경기·여행 붐·올림픽·엑스포 같은 사건이 손님과 비용을 바꿔요.

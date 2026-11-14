@@ -10,7 +10,8 @@ import { branchBlocker, buildBlocker, closeBranchBlocker, routeOnPair } from './
 import { WEEK_HOURS, branchCost, branchUpkeep, businessCost, legFreq, pairDemand, planeHours, planesOnRoute, routeFreq, slotCapacity, slotsUsed } from './simulate';
 import { QUARTER_NAMES, yearOf } from './time';
 import type { AirlineAction, AirlineState } from './types';
-import { ActButton, CoName, LoadMeter, Meter, Stars } from './ui';
+import { cityPhoto } from './images';
+import { ActButton, CoName, LoadMeter, Meter, Photo, Stars } from './ui';
 import type { Selection } from './MapView';
 
 interface Common {
@@ -72,9 +73,18 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
     <div className="al-info al-city-info" data-testid="al-city-panel">
       <div className="al-info-main">
         <header className="al-info-head">
-          <span className="al-landmark" aria-hidden="true">
-            <LandmarkIcon kind={c.landmark} size={34} />
-          </span>
+          <Photo
+            src={cityPhoto(city)}
+            credit={`cities/${city}`}
+            alt={`${c.name} 사진`}
+            ratio="4 / 3"
+            className="al-city-photo"
+            fallback={
+              <span className="al-landmark" aria-hidden="true">
+                <LandmarkIcon kind={c.landmark} size={34} />
+              </span>
+            }
+          />
           <div>
             <h3>
               {c.name} <small>{c.country} · {REGION_INFO[c.region].name}</small>

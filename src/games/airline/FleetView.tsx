@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SEAT_COLORS } from '../common/players';
+import { coColors } from './brand';
 import { BODY_INFO, MODEL, MODELS, availableModels, commonalityMult, launchDiscount, leadTime, sizeClass, type SizeClass } from './aircraft';
 import { PlaneArt, SEAT_SHAPES } from './Art';
 import { AIRPORT_INFO, CITY } from './cities';
@@ -18,7 +18,8 @@ import {
 } from './simulate';
 import { qLabel, yearOf } from './time';
 import type { AirlineAction, AirlineState, ModelDef } from './types';
-import { ActButton, Meter, Stars } from './ui';
+import { aircraftPhoto } from './images';
+import { ActButton, Meter, Photo, Stars } from './ui';
 
 interface FleetViewProps {
   state: AirlineState;
@@ -42,7 +43,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
   const [tab, setTab] = useState<Tab>(me.planes.length === 0 && me.orders.length === 0 ? 'shop' : 'hangar');
   const [size, setSize] = useState<SizeClass | 'all'>('all');
   const year = yearOf(state.q);
-  const color = SEAT_COLORS[me.seat];
+  const color = coColors(me);
   const shape = SEAT_SHAPES[me.seat];
   const planes = [...me.planes].sort((a, b) => (a.legs.length === 0 ? 0 : 1) - (b.legs.length === 0 ? 0 : 1) || planeHours(me, a) - planeHours(me, b));
   const models = availableModels(year).filter((m) => size === 'all' || sizeClass(m) === size);
@@ -100,7 +101,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                     const m = MODEL[o.model];
                     return (
                       <li key={o.id}>
-                        <PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={64} />
+                        <Photo src={aircraftPhoto(m.id)} alt={`${m.name} 사진`} className="al-thumb" fallback={<PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={64} />} />
                         <b>{m.name}</b>
                         <span>
                           {qLabel(o.due)} 도착 <small className="al-muted">({o.due - state.q}분기 뒤)</small>
@@ -142,7 +143,9 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
               const amount = sellAmount(state, p);
               return (
                 <li key={p.id} className={p.legs.length ? '' : 'al-idle'}>
-                  <PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={96} />
+                  <span className="al-pl-art">
+                    <Photo src={aircraftPhoto(m.id)} alt={`${m.name} 사진`} className="al-thumb" fallback={<PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={96} />} />
+                  </span>
                   <div className="al-pl-name">
                     <b>{m.name}</b>
                     <small>
@@ -232,7 +235,12 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
               return (
                 <li key={m.id} className="al-model-card" data-testid={`al-model-${m.id}`}>
                   <div className="al-mc-art">
-                    <PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={150} title={`${m.name} 옆모습`} />
+                    <Photo
+                      src={aircraftPhoto(m.id)}
+                      credit={`aircraft/${m.id}`}
+                      alt={`${m.maker} ${m.name} 사진`}
+                      fallback={<PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={150} title={`${m.name} 옆모습`} />}
+                    />
                   </div>
                   <h4>
                     {m.name} <small>{m.maker}</small>
@@ -337,7 +345,12 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
               return (
                 <li key={u.id} className="al-model-card al-used-card" data-testid={`al-used-${u.id}`}>
                   <div className="al-mc-art">
-                    <PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={130} title={`${m.name} 옆모습`} />
+                    <Photo
+                      src={aircraftPhoto(m.id)}
+                      credit={`aircraft/${m.id}`}
+                      alt={`${m.maker} ${m.name} 사진`}
+                      fallback={<PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={130} title={`${m.name} 옆모습`} />}
+                    />
                   </div>
                   <h4>
                     {m.name} <small>{m.maker}</small>

@@ -9,6 +9,8 @@ import { rankings } from './rules';
 import { companyValue, regionsServed } from './simulate';
 import { qLabel } from './time';
 import type { AirlineState, QuarterReport as Report } from './types';
+import { AirlinePhoto } from './AirlinePicker';
+import { realOf } from './brand';
 import { CoName, Kbd } from './ui';
 
 const MEDALS = ['🥇', '🥈', '🥉', '4등'];
@@ -34,7 +36,7 @@ export function QuarterReport({ state, report, viewer, onClose, onDetail }: { st
 
   let tip = '';
   if (me.out) tip = '회사가 문을 닫았어요. 다른 회사들의 경쟁을 끝까지 지켜볼 수 있어요.';
-  else if (me.crisis > 0) tip = '⚠ 돈이 모자라요! 다음 분기에도 모자라면 파산해요. 손해 보는 노선을 닫고, 쉬는 비행기를 팔고, 대출을 받아 보세요.';
+  else if (me.crisis > 0) tip = '⚠ 돈이 모자라요! 다음 분기에도 모자라면 운항을 멈춰야 해요. 손해 보는 노선을 닫고, 쉬는 비행기를 팔고, 대출을 받아 보세요.';
   else if (r.pax === 0) tip = '아직 나는 비행기가 없어요. 🧑‍💼 경영 비서가 권하는 노선이나 노선 화면에서 비행기를 띄워 보세요.';
   else if (lf < 0.55) tip = '빈 좌석이 많아요. 운임을 내리거나, 횟수를 줄이거나, 작은 비행기로 바꿔 보세요.';
   else if (lf > 0.95) tip = '좌석이 꽉 찼어요! 운임을 올리거나 비행기를 더 넣으면 더 벌 수 있어요.';
@@ -184,14 +186,19 @@ export function GameOver({ state, onRestart, onChangeSetup, onExit, onLook }: Ga
             const c = state.companies[i];
             return (
               <li key={i} className={result.winners.includes(i) ? 'al-rank-winner' : ''} style={{ animationDelay: `${0.25 + rank * 0.15}s` }}>
-                <span className="medal">{c.out ? '💥' : MEDALS[rank]}</span>
+                <span className="medal">{c.out ? '🛑' : MEDALS[rank]}</span>
+                {realOf(c) && (
+                  <span className="al-rank-photo">
+                    <AirlinePhoto airline={realOf(c)!} width={80} />
+                  </span>
+                )}
                 <span className="al-rank-name">
                   <CoName c={c} bold />
                   <small>
                     {CITY[c.hub].name} · 비행기 {c.planes.length}대 · 노선 {c.routes.length}개 · 지역 {regionsServed(c).size}/6 · 태운 손님 {fmtPax(c.stats.pax)}
                   </small>
                 </span>
-                <b className="al-rank-value">{c.out ? '파산' : fmtMoney(companyValue(state, i))}</b>
+                <b className="al-rank-value">{c.out ? '운항 중단' : fmtMoney(companyValue(state, i))}</b>
               </li>
             );
           })}

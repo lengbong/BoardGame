@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SEAT_COLORS } from '../common/players';
+import { coColors, realOf } from './brand';
 import { SEAT_SHAPES } from './Art';
 import { LineChart, Legend, ShareBars, type Series, type ShareRow } from './Charts';
 import { CITY, REGIONS, REGION_INFO } from './cities';
@@ -10,6 +10,7 @@ import { rankings } from './rules';
 import { companyValue, regionsServed } from './simulate';
 import { qLabel, qShort, quarterOf, yearOf } from './time';
 import type { AirlineState } from './types';
+import { AirlinePhoto } from './AirlinePicker';
 import { CoName } from './ui';
 
 export function ReportView({ state, viewer }: { state: AirlineState; viewer: number }) {
@@ -17,7 +18,7 @@ export function ReportView({ state, viewer }: { state: AirlineState; viewer: num
   const hist = state.history;
   const series: Series[] = state.companies.map((c, i) => ({
     name: c.name,
-    color: SEAT_COLORS[c.seat].main,
+    color: coColors(c).main,
     shape: SEAT_SHAPES[c.seat],
     values: hist.map((h) => (c.out && h.value[i] === 0 ? null : h.value[i])),
   }));
@@ -32,7 +33,7 @@ export function ReportView({ state, viewer }: { state: AirlineState; viewer: num
   };
   const rep = state.report;
   const shareRows: ShareRow[] = REGIONS.map((r) => {
-    const parts = state.companies.map((c, i) => ({ name: c.name, color: SEAT_COLORS[c.seat].main, shape: SEAT_SHAPES[c.seat], value: rep?.companies[i]?.regionPax[r] ?? 0 }));
+    const parts = state.companies.map((c, i) => ({ name: c.name, color: coColors(c).main, shape: SEAT_SHAPES[c.seat], value: rep?.companies[i]?.regionPax[r] ?? 0 }));
     return { label: `${REGION_INFO[r].emoji} ${REGION_INFO[r].short}`, total: parts.reduce((s, p) => s + p.value, 0), parts };
   });
   const routes = rep ? [...rep.routes].sort((a, b) => b.profit - a.profit) : [];
@@ -211,7 +212,7 @@ export function ReportView({ state, viewer }: { state: AirlineState; viewer: num
                 const r = rep?.companies[i];
                 return (
                   <tr key={i} className={i === viewer ? 'al-row-mine' : ''}>
-                    <td>{c.out ? '파산' : `${rank + 1}등`}</td>
+                    <td>{c.out ? '운항 중단' : `${rank + 1}등`}</td>
                     <td>
                       <CoName c={c} /> <small className="al-muted">{CITY[c.hub].name}</small>
                     </td>
@@ -263,7 +264,7 @@ export function NewsView({ state, onCity, viewer }: { state: AirlineState; onCit
             <span className="al-news-icon" aria-hidden="true">
               {n.icon}
             </span>
-            <div>
+            <div className="al-news-body">
               <b>{n.title}</b> {n.for?.includes(viewer) && <span className="al-flag al-flag-warn">우리 회사</span>} <small className="al-muted">{qLabel(n.q)}</small>
               <p>{n.text}</p>
               {n.city && (
@@ -272,6 +273,11 @@ export function NewsView({ state, onCity, viewer }: { state: AirlineState; onCit
                 </button>
               )}
             </div>
+            {n.company !== undefined && state.companies[n.company] && realOf(state.companies[n.company]) && (
+              <span className="al-news-photo">
+                <AirlinePhoto airline={realOf(state.companies[n.company])!} width={90} />
+              </span>
+            )}
           </li>
         ))}
       </ul>

@@ -2601,3 +2601,319 @@
   max-height: calc(100vh - 32px);
   overflow-y: auto;
 }
+
+/* ---------------------------------------------------------------- 3판: 실제 항공사·사진 */
+.al-topbar {
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+.al-me {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.al-me-name {
+  min-width: 0;
+}
+.al-me-name b,
+.al-me-name small {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.al-tabs {
+  flex-wrap: nowrap;
+  flex: none;
+}
+@media (max-width: 1100px) and (min-width: 1001px) {
+  .al-tab-kbd {
+    display: none;
+  }
+  .al-tab {
+    padding: 6px 6px;
+  }
+}
+.al-iata {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 20px;
+  padding: 0 5px 2px;
+  border-radius: 5px;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  flex: none;
+  vertical-align: middle;
+}
+.al-iata-small {
+  min-width: 24px;
+  height: 17px;
+  font-size: 10.5px;
+  padding: 0 4px 2px;
+  border-radius: 4px;
+}
+.al-coname .al-iata {
+  margin-right: 1px;
+}
+.al-photo {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--surface-2);
+  width: 100%;
+}
+.al-photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.al-photo figcaption {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  max-width: 100%;
+  padding: 1px 5px;
+  border-top-left-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 9.5px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.al-mc-art .al-photo {
+  border-radius: 10px;
+}
+.al-thumb {
+  width: 96px;
+  border-radius: 6px;
+}
+.al-orders .al-thumb {
+  width: 64px;
+}
+.al-pl-art {
+  display: grid;
+  place-items: center;
+}
+.al-city-photo {
+  flex: none;
+  width: 132px;
+  border-radius: 10px;
+}
+.al-airline-photo {
+  border-radius: 8px;
+}
+.al-airline-art {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+}
+.al-airline-picker {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.al-ap-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.al-ap-search {
+  flex: 1 1 240px;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.al-ap-note {
+  margin: 6px 0 8px;
+  font-size: 12.5px;
+}
+.al-ap-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+  max-height: 520px;
+  overflow-y: auto;
+}
+.al-ap-card {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.al-ap-card:hover:not(:disabled),
+.al-ap-card:focus-visible {
+  border-color: var(--accent);
+}
+.al-ap-card.al-on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.al-ap-card:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.al-ap-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12.5px;
+}
+.al-ap-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+.al-ap-desc {
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.al-ap-text .al-flag {
+  margin: 2px 0 0;
+  align-self: flex-start;
+}
+.al-airline-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.al-picked-airlines {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.al-picked-airlines li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.al-picked-airlines .al-photo,
+.al-picked-airlines .al-airline-art {
+  width: 120px;
+}
+.al-turn {
+  position: relative;
+}
+.al-turn-photo {
+  float: right;
+  width: 96px;
+  margin: 0 0 4px 8px;
+}
+.al-turn-photo figcaption {
+  display: none;
+}
+.al-rank-photo {
+  width: 72px;
+  flex: none;
+}
+.al-rank-photo figcaption,
+.al-news-photo figcaption,
+.al-thumb figcaption {
+  display: none;
+}
+.al-news-body {
+  flex: 1;
+  min-width: 0;
+}
+.al-news-photo {
+  width: 90px;
+  flex: none;
+  align-self: center;
+}
+.al-credits {
+  max-width: 760px;
+  width: 100%;
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+.al-credits-list {
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
+  margin: 8px 0;
+  font-size: 12.5px;
+}
+.al-credits-list a {
+  color: var(--accent-dark);
+}
+.al-credits-link {
+  text-align: center;
+  margin: 8px 0 0;
+}
+.al-credits-btn {
+  align-self: center;
+}
+.al-route-case {
+  fill: none;
+  stroke: var(--al-halo);
+  stroke-linecap: round;
+  opacity: 0.55;
+  pointer-events: none;
+}
+.al-route-idle .al-route-case {
+  opacity: 0.3;
+}
+.al-turn-photo {
+  float: none;
+  width: auto;
+  height: 54px;
+  margin: 4px 0 6px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.al-turn-photo .al-photo,
+.al-turn-photo .al-airline-art {
+  aspect-ratio: auto !important;
+  height: 100%;
+}
+.al-turn-photo .al-airline-art svg {
+  height: 100%;
+  width: auto;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .al-routes,
+  :root:not([data-theme='light']) .al-planes {
+    filter: brightness(1.45) saturate(1.05);
+  }
+}
+:root[data-theme='dark'] .al-routes,
+:root[data-theme='dark'] .al-planes {
+  filter: brightness(1.45) saturate(1.05);
+}

@@ -8,6 +8,7 @@ import { SEAT_COLORS } from '../common/players';
 import type { GameSettings } from '../common/settings';
 import { aiManage, type AiLevel } from './ai';
 import { CompanyBadge, SEAT_SHAPES } from './Art';
+import { ChoiceModal } from './ChoiceModal';
 import { CITY, pairKey } from './cities';
 import { FinanceView } from './FinanceView';
 import { FleetView } from './FleetView';
@@ -19,7 +20,7 @@ import { NewsView, ReportView } from './ReportView';
 import { GameOver, QuarterReport } from './Results';
 import { RoutesView, type Planner } from './RoutesView';
 import { actor, applyAction, idlePlanes, rankings } from './rules';
-import { companyValue } from './simulate';
+import { companyValue, routeFreq } from './simulate';
 import { AIRLINE_SONG } from './song';
 import { alSound } from './sounds';
 import { AIRLINE_DELAYS, clearSavedAirlineGame, saveAirlineGame } from './storage';
@@ -87,6 +88,8 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   const [notice, setNotice] = useState<{ id: number; text: string } | null>(null);
   const [zoomCmd, setZoomCmd] = useState<{ n: number; kind: 'in' | 'out' | 'reset' } | undefined>(undefined);
   const [showResult, setShowResult] = useState(true);
+  const [choiceOpen, setChoiceOpen] = useState(false);
+  const seenChoice = useRef<number | null>(null);
   const prevGame = useRef<AirlineState | null>(null);
   const managedKey = useRef<string>('');
   const lastHuman = useRef<number | null>(null);
@@ -105,6 +108,14 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   const me = game.companies[viewer];
   const locked = flying || report !== null;
   const canAct = game.phase === 'manage' && act === viewer && actorCo?.kind === 'human' && !locked;
+
+  // 내 차례에 새 결정 사건이 있으면 한 번 열어 준다
+  const pendingChoice = canAct ? me.choice : null;
+  useEffect(() => {
+    if (!pendingChoice || seenChoice.current === pendingChoice.id) return;
+    seenChoice.current = pendingChoice.id;
+    setChoiceOpen(true);
+  }, [pendingChoice]);
 
   // 알림은 잠깐 보였다가 사라진다
   useEffect(() => {
@@ -149,6 +160,9 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
         else if (e.type === 'sell') e.amount > 0 ? alSound.coins() : alSound.pay();
         else if (e.type === 'money') e.what === 'borrow' ? alSound.coins() : alSound.pay();
         else if (e.type === 'assign') alSound.takeoff();
+        else if (e.type === 'order') alSound.stamp();
+        else if (e.type === 'choice') alSound.bell();
+        else if (e.type === 'alliance') e.ok ? alSound.chime() : alSound.nope();
       }
     }
     for (const e of game.events) {
@@ -270,6 +284,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
       const t = e.target as HTMLElement | null;
       const typing = t && ['INPUT', 'SELECT', 'TEXTAREA'].includes(t.tagName) && (t as HTMLInputElement).type !== 'range' && (t as HTMLInputElement).type !== 'checkbox';
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (choiceOpen) return;
       if (report) {
         if (e.key === 'Enter' || e.key === 'Escape') {
           e.preventDefault();
@@ -302,17 +317,26 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   // ------------------------------------------------------------ 안내
   let hint: ReactNode;
   const idle = idlePlanes(me).length;
-  const empty = me.routes.filter((r) => !me.planes.some((p) => p.route === r.id)).length;
+  const empty = me.routes.filter((r) => routeFreq(me, r.id) === 0).length;
   if (game.phase === 'gameover') hint = game.result?.reason ?? '게임이 끝났어요.';
   else if (flying) hint = '✈️ 석 달 동안 비행기들이 날고 있어요…';
   else if (report) hint = '분기 결산을 보고 있어요. Enter로 넘겨요.';
   else if (!actorCo || actorCo.kind !== 'human') hint = `${withJosa(actorCo?.name ?? '', '이/가')} 경영하고 있어요…`;
   else if (notice) hint = <span className="al-notice">{notice.text}</span>;
   else if (me.crisis > 0) hint = '⚠ 돈이 모자라요! 손해 보는 노선을 닫고 쉬는 비행기를 팔거나 대출을 받아요. 이번에도 모자라면 파산해요.';
+  else if (me.choice)
+    hint = (
+      <>
+        결정할 일이 있어요: <b>{me.choice.title}</b>{' '}
+        <button type="button" className="al-link" onClick={() => setChoiceOpen(true)}>
+          고르기
+        </button>
+      </>
+    );
   else if (me.planes.length === 0 && me.routes.length === 0)
     hint = (
       <>
-        지도에서 도시를 눌러 지점을 열거나, 지도 아래 <b>💡 추천 노선</b>의 ‘리스로 열기’로 시작해 보세요.
+        지도 아래 <b>🧑‍💼 경영 비서</b>가 권하는 첫 노선을 ‘노선 열기’로 열거나, 지도에서 도시를 눌러 직접 시작해 보세요.
       </>
     );
   else if (idle > 0) hint = `쉬는 비행기 ${idle}대가 있어요. 노선 화면(3)에서 넣어 주세요.`;
@@ -344,6 +368,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
           onEditRoute={editRoute}
           onSelect={setSelected}
           selected={selected}
+          onOpenChoice={() => setChoiceOpen(true)}
         />
       </div>
     );
@@ -365,7 +390,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
     );
   else if (tab === 'finance') content = <FinanceView state={game} viewer={viewer} canAct={canAct} perform={perform} />;
   else if (tab === 'report') content = <ReportView state={game} viewer={viewer} />;
-  else content = <NewsView state={game} onCity={showCity} />;
+  else content = <NewsView state={game} onCity={showCity} viewer={viewer} />;
 
   return (
     <div className="al-game">
@@ -396,6 +421,11 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
               </span>
             )}
           </div>
+          {canAct && me.choice && (
+            <button type="button" className="btn btn-small al-choice-btn" onClick={() => setChoiceOpen(true)} data-testid="al-choice-open">
+              {me.choice.icon} 결정할 일
+            </button>
+          )}
           <nav className="al-tabs" role="tablist" aria-label="화면">
             {TABS.map((t, i) => (
               <button
@@ -449,6 +479,18 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
         onExit={onExit}
       />
 
+      {choiceOpen && !report && !flying && me.choice && (
+        <ChoiceModal
+          state={game}
+          viewer={viewer}
+          canAct={canAct}
+          onChoose={(option) => {
+            perform({ type: 'choose', option });
+            setChoiceOpen(false);
+          }}
+          onLater={() => setChoiceOpen(false)}
+        />
+      )}
       {report && !flying && (
         <QuarterReport
           state={game}

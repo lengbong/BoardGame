@@ -5,6 +5,7 @@ import { LineChart, Legend, ShareBars, type Series, type ShareRow } from './Char
 import { CITY, REGIONS, REGION_INFO } from './cities';
 import { FIXED_ICON } from './events';
 import { axisMoney, fmtMoney, fmtPax, pct, signedMoney } from './format';
+import { GRADE_INFO } from './goals';
 import { rankings } from './rules';
 import { companyValue, regionsServed } from './simulate';
 import { qLabel, qShort, quarterOf, yearOf } from './time';
@@ -38,6 +39,16 @@ export function ReportView({ state, viewer }: { state: AirlineState; viewer: num
   const best = routes.slice(0, 5);
   const worst = routes.length > 5 ? routes.slice(-5).reverse() : [];
   const order = rankings(state);
+  // 허브마다 갈아탄 손님 (지난 분기)
+  const hubs = new Map<string, { pax: number; companies: Set<number>; top: { a: string; b: string; pax: number }[] }>();
+  for (const x of rep?.xfers ?? []) {
+    const h = hubs.get(x.via) ?? { pax: 0, companies: new Set<number>(), top: [] };
+    h.pax += x.pax;
+    x.companies.forEach((ci) => h.companies.add(ci));
+    h.top.push({ a: x.a, b: x.b, pax: x.pax });
+    hubs.set(x.via, h);
+  }
+  const hubRows = [...hubs.entries()].sort((a, b) => b[1].pax - a[1].pax).slice(0, 6);
   const legendSeries = series.map((s) => ({ name: s.name, color: s.color, shape: s.shape }));
 
   return (
@@ -133,6 +144,47 @@ export function ReportView({ state, viewer }: { state: AirlineState; viewer: num
       </div>
 
       <section className="al-card">
+        <h4>
+          갈아타는 손님 <small>{rep ? `${qLabel(rep.q)} · 허브마다` : ''}</small>
+        </h4>
+        {hubRows.length === 0 ? (
+          <p className="al-muted">아직 갈아타는 손님이 없어요. 본사에서 여러 곳으로 노선을 내면, 곧장 가는 노선이 없는 두 도시 손님이 본사에서 갈아타요.</p>
+        ) : (
+          <table className="al-table al-xfer-table">
+            <thead>
+              <tr>
+                <th>갈아타는 도시</th>
+                <th>회사</th>
+                <th>분기 손님</th>
+                <th>많이 간 연결</th>
+              </tr>
+            </thead>
+            <tbody>
+              {hubRows.map(([via, h]) => (
+                <tr key={via} className={h.companies.has(viewer) ? 'al-row-mine' : ''}>
+                  <th>{CITY[via].name}</th>
+                  <td>
+                    {[...h.companies].map((ci) => (
+                      <CoName key={ci} c={state.companies[ci]} />
+                    ))}
+                  </td>
+                  <td>{fmtPax(h.pax)}</td>
+                  <td>
+                    <small>
+                      {h.top
+                        .slice(0, 3)
+                        .map((t) => `${CITY[t.a].name}→${CITY[t.b].name}`)
+                        .join(', ')}
+                    </small>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section className="al-card">
         <h4>회사 비교</h4>
         <div className="al-table-wrap">
           <table className="al-table al-compare">
@@ -148,7 +200,9 @@ export function ReportView({ state, viewer }: { state: AirlineState; viewer: num
                 <th>지역</th>
                 <th>지난 분기 손님</th>
                 <th>지난 분기 이익</th>
+                <th>갈아탄 손님</th>
                 <th>평판</th>
+                <th>평가</th>
               </tr>
             </thead>
             <tbody>
@@ -169,7 +223,17 @@ export function ReportView({ state, viewer }: { state: AirlineState; viewer: num
                     <td>{regionsServed(c).size}/6</td>
                     <td>{r ? fmtPax(r.pax) : '—'}</td>
                     <td className={r && r.profit < 0 ? 'al-neg' : 'al-pos'}>{r ? signedMoney(r.profit) : '—'}</td>
+                    <td>{r ? fmtPax(r.xferPax) : '—'}</td>
                     <td>{Math.round(c.reputation)}</td>
+                    <td>
+                      {c.reviews.length > 0 ? (
+                        <span className="al-grade al-grade-small" style={{ background: GRADE_INFO[c.reviews[c.reviews.length - 1].grade].color }} title={c.reviews[c.reviews.length - 1].text}>
+                          {c.reviews[c.reviews.length - 1].grade}
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -181,21 +245,26 @@ export function ReportView({ state, viewer }: { state: AirlineState; viewer: num
   );
 }
 
-export function NewsView({ state, onCity }: { state: AirlineState; onCity: (id: string) => void }) {
+export function NewsView({ state, onCity, viewer }: { state: AirlineState; onCity: (id: string) => void; viewer: number }) {
   const items = [...state.news].reverse();
+  const [mineOnly, setMineOnly] = useState(false);
+  const shown = mineOnly ? items.filter((n) => n.for?.includes(viewer)) : items;
   return (
     <div className="al-news">
       <h3>
         📰 하늘길 뉴스 <small>최근 {items.length}개</small>
+        <label className="al-check al-news-filter">
+          <input type="checkbox" checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} /> 우리 회사 소식만
+        </label>
       </h3>
       <ul>
-        {items.map((n) => (
-          <li key={n.id} className={`al-news-${n.tone}`}>
+        {shown.map((n) => (
+          <li key={n.id} className={`al-news-${n.tone}${n.for?.includes(viewer) ? ' al-news-for' : ''}`}>
             <span className="al-news-icon" aria-hidden="true">
               {n.icon}
             </span>
             <div>
-              <b>{n.title}</b> <small className="al-muted">{qLabel(n.q)}</small>
+              <b>{n.title}</b> {n.for?.includes(viewer) && <span className="al-flag al-flag-warn">우리 회사</span>} <small className="al-muted">{qLabel(n.q)}</small>
               <p>{n.text}</p>
               {n.city && (
                 <button type="button" className="al-link" onClick={() => onCity(n.city!)}>

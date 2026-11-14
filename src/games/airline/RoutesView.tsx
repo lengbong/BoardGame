@@ -5,21 +5,26 @@ import { openSuggestion, type Candidate } from './ai';
 import { PlaneArt, SEAT_SHAPES } from './Art';
 import { AIRPORT_INFO, CITIES, CITY, REGIONS, REGION_INFO, airportClass, dist, pairKey } from './cities';
 import { fareText, fmtMoney, fmtPax, km, pct, signedMoney } from './format';
-import { FARE_MAX, FARE_MIN, applyAction, assignBlocker, bestFreq, buyBlocker, maxRangeNow, routeBlocker, routeOnPair } from './rules';
+import { FARE_MAX, FARE_MIN, applyAction, assignBlocker, bestFreq, buyBlocker, depositFor, maxRangeNow, routeBlocker, routeOnPair, usedBlocker } from './rules';
 import {
+  WEEK_HOURS,
   branchCost,
   branchUpkeep,
+  draftsOf,
   estimateExisting,
   estimateRoute,
-  leaseDeposit,
+  legFreq,
+  legHours,
   leaseRent,
   maxFreq,
-  modelPrice,
   pairDemand,
   planeAge,
+  planeHours,
+  planesOnRoute,
+  routeFreq,
+  routeOf,
   slotCapacity,
   slotsUsed,
-  type DraftPlane,
   type RouteEstimate,
 } from './simulate';
 import { yearOf } from './time';
@@ -78,8 +83,8 @@ export function RoutesView(props: RoutesViewProps) {
         {routes.length === 0 && <p className="al-muted al-empty">아직 노선이 없어요. ‘＋ 새 노선’이나 지도에서 도시를 눌러 시작해요.</p>}
         <ul>
           {routes.map((r) => {
-            const planes = me.planes.filter((p) => p.route === r.id);
-            const freq = planes.reduce((s, p) => s + p.freq, 0);
+            const planes = planesOnRoute(me, r.id);
+            const freq = routeFreq(me, r.id);
             const st = r.stats;
             const warn = planes.length === 0 ? '비행기 없음' : st && st.profit < 0 ? '적자' : st && st.lf > 0.97 ? '꽉 참' : null;
             return (
@@ -133,11 +138,16 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
   const me = state.companies[viewer];
   const r = me.routes.find((x) => x.id === routeId)!;
   const d = dist(r.a, r.b);
-  const planes = me.planes.filter((p) => p.route === r.id);
+  const planes = planesOnRoute(me, r.id);
   const est = estimateExisting(state, viewer, r);
   const dem = pairDemand(state, r.a, r.b);
   const color = SEAT_COLORS[me.seat];
-  const idle = me.planes.filter((p) => p.route === null || p.freq === 0);
+  // 이 노선에 더 넣을 수 있는 비행기: 쉬는 비행기 + 다른 노선을 날고도 시간이 남는 비행기
+  const others = me.planes
+    .filter((p) => legFreq(p, r.id) === 0)
+    .map((p) => ({ p, f: bestFreq(state, viewer, p.id, r.id), idle: p.legs.length === 0 }))
+    .filter((x) => x.idle || x.f > 0)
+    .sort((x, y) => Number(y.idle) - Number(x.idle) || y.f - x.f);
   const year = yearOf(state.q);
   const block = canAct ? null : notMine;
   const key = pairKey(r.a, r.b);
@@ -146,21 +156,21 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
   // 이 노선에 보태기 좋은 새 기종 (리스로 한 대 더 띄웠을 때 늘어나는 이익)
   const extra = useMemo(() => {
     const out: { m: ModelDef; freq: number; gain: number }[] = [];
-    const base: DraftPlane[] = planes.map((p) => ({ model: p.model, freq: p.freq, age: planeAge(state, p), leased: p.leased, rent: p.rent }));
+    const base = draftsOf(state, me, r.id);
     const left = Math.min(slotCapacity(state, viewer, r.a) - slotsUsed(me, r.a), slotCapacity(state, viewer, r.b) - slotsUsed(me, r.b));
     for (const m of availableModels(year)) {
       if (m.range < d || airportClass(CITY[r.a], year) < m.runway || airportClass(CITY[r.b], year) < m.runway) continue;
       const f = Math.min(maxFreq(m, d), left);
       if (f < 1) continue;
-      const e = estimateRoute(state, viewer, r.a, r.b, [...base, { model: m.id, freq: f, leased: true, rent: leaseRent(state, m) }], r.fare);
+      const e = estimateExisting(state, viewer, r, { planes: [...base, { model: m.id, freq: f }] });
       out.push({ m, freq: f, gain: e.profit - est.profit });
     }
     return out.filter((x) => x.gain > 1).sort((a, b) => b.gain - a.gain).slice(0, 3);
-  }, [state, viewer, r, planes, me, year, d, est.profit]);
+  }, [state, viewer, r, me, year, d, est.profit]);
 
-  const acquire = (m: ModelDef, lease: boolean) =>
+  const acquire = (how: { lease: string } | { used: number }) =>
     apply((s) => {
-      const t = applyAction(s, { type: lease ? 'lease' : 'buy', model: m.id });
+      const t = applyAction(s, 'lease' in how ? { type: 'lease', model: how.lease } : { type: 'buyUsed', listing: how.used });
       if (t === s) return s;
       const c = t.companies[viewer];
       const pid = c.planes[c.planes.length - 1].id;
@@ -208,40 +218,51 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
             <ul className="al-plane-rows">
               {planes.map((p) => {
                 const m = MODEL[p.model];
-                const max = Math.max(p.freq, bestFreq(state, viewer, p.id, r.id));
+                const now = legFreq(p, r.id);
+                const max = Math.max(now, bestFreq(state, viewer, p.id, r.id));
+                const elsewhere = p.legs.filter((l) => l.route !== r.id).map((l) => routeOf(me, l.route)).filter((x) => !!x);
+                const use = planeHours(me, p) / WEEK_HOURS;
                 return (
                   <li key={p.id}>
                     <PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={SEAT_SHAPES[me.seat]} width={58} />
                     <span className="al-pr-name">
                       <b>{m.name}</b>
                       <small>
-                        {m.seats}석 · {Math.floor(planeAge(state, p))}년 · {p.leased ? '리스' : '내 것'}
+                        {m.seats}석 · {p.leased ? '리스' : '내 것'} · 가동 {Math.round(use * 100)}%
                       </small>
+                      {elsewhere.length > 0 && (
+                        <small className="al-muted" title={elsewhere.map((x) => `${CITY[x!.a].name}–${CITY[x!.b].name}`).join(', ')}>
+                          다른 노선 {elsewhere.length}개도 날아요
+                        </small>
+                      )}
                     </span>
                     <span className="al-pr-freq">
                       <small>주간 왕복</small>
-                      <Stepper value={p.freq} min={1} max={max} disabled={!canAct} label={`${m.name} 주간 왕복`} onChange={(f) => perform({ type: 'setFreq', plane: p.id, freq: f })} />
-                      <small className="al-muted">최대 {maxFreq(m, d)}</small>
+                      <Stepper value={now} min={1} max={max} disabled={!canAct} label={`${m.name} 주간 왕복`} onChange={(f) => perform({ type: 'assign', plane: p.id, route: r.id, freq: f })} />
+                      <small className="al-muted">이 비행기로 최대 {max}</small>
                     </span>
-                    <button type="button" className="btn btn-small" disabled={!canAct} onClick={() => perform({ type: 'assign', plane: p.id, route: null, freq: 0 })} title="이 노선에서 빼서 쉬게 해요">
+                    <button type="button" className="btn btn-small" disabled={!canAct} onClick={() => perform({ type: 'assign', plane: p.id, route: r.id, freq: 0 })} title="이 노선에서만 빼요 (다른 노선은 그대로)">
                       빼기
                     </button>
                   </li>
                 );
               })}
             </ul>
-            {idle.length > 0 && (
+            {others.length > 0 && (
               <>
-                <h5>쉬는 비행기 넣기</h5>
+                <h5>내 비행기 더 넣기</h5>
                 <ul className="al-idle-rows">
-                  {idle.map((p) => {
+                  {others.slice(0, 8).map(({ p, f, idle }) => {
                     const m = MODEL[p.model];
-                    const f = bestFreq(state, viewer, p.id, r.id);
                     const why = f > 0 ? null : assignBlocker(state, viewer, p.id, r.id, 1) ?? '슬롯이 모자라요';
+                    const spare = WEEK_HOURS - planeHours(me, p);
                     return (
                       <li key={p.id}>
                         <span>
-                          {m.name} <small className="al-muted">({Math.floor(planeAge(state, p))}년)</small>
+                          {m.name}{' '}
+                          <small className="al-muted">
+                            ({Math.floor(planeAge(state, p))}년 · {idle ? '쉬는 중' : `다른 노선을 날고 ${Math.round(spare)}시간 남음`})
+                          </small>
                         </span>
                         <ActButton small blocker={canAct ? why : notMine} onClick={() => perform({ type: 'assign', plane: p.id, route: r.id, freq: f })}>
                           넣기 · 주 {f}회
@@ -256,22 +277,34 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
               <>
                 <h5>새로 들여서 넣기</h5>
                 <ul className="al-idle-rows">
-                  {extra.map(({ m, freq, gain }) => (
-                    <li key={m.id}>
-                      <span>
-                        {m.name} <small className="al-muted">주 {freq}회 · 이익 {signedMoney(gain)}</small>
-                      </span>
-                      <span className="al-two">
-                        <ActButton small blocker={canAct ? buyBlocker(state, viewer, m.id, true) : notMine} onClick={() => acquire(m, true)} title={`분기 리스료 ${fmtMoney(leaseRent(state, m))}`}>
-                          리스 {fmtMoney(leaseDeposit(state, m))}
-                        </ActButton>
-                        <ActButton small blocker={canAct ? buyBlocker(state, viewer, m.id, false) : notMine} onClick={() => acquire(m, false)}>
-                          사기 {fmtMoney(modelPrice(state, m))}
-                        </ActButton>
-                      </span>
-                    </li>
-                  ))}
+                  {extra.map(({ m, freq, gain }) => {
+                    const used = state.market.find((u) => u.model === m.id);
+                    const deposit = depositFor(state, viewer, m.id);
+                    return (
+                      <li key={m.id}>
+                        <span>
+                          {m.name} <small className="al-muted">주 {freq}회 · 이익 {signedMoney(gain)}</small>
+                        </span>
+                        <span className="al-two">
+                          <ActButton
+                            small
+                            blocker={canAct ? buyBlocker(state, viewer, m.id, true) : notMine}
+                            onClick={() => acquire({ lease: m.id })}
+                            title={deposit > 0 ? `보증금 ${fmtMoney(deposit)} (돌려줄 때 돌려받아요)` : '첫해에는 보증금이 없어요'}
+                          >
+                            리스 · 분기 {fmtMoney(leaseRent(state, m))}
+                          </ActButton>
+                          {used && (
+                            <ActButton small blocker={canAct ? usedBlocker(state, viewer, used.id) : notMine} onClick={() => acquire({ used: used.id })} title={`${used.age}년 된 중고`}>
+                              중고 {fmtMoney(used.price)}
+                            </ActButton>
+                          )}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
+                <p className="al-muted al-tip">새 비행기 주문은 ‘비행기’ 화면에서 해요 (싸지만 몇 분기 뒤에 와요).</p>
               </>
             )}
           </section>
@@ -311,12 +344,12 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
               <h4>라이벌</h4>
               <ul className="al-rivals">
                 {rivals.map(({ c, i, rt }) => {
-                  const ps = c.planes.filter((p) => p.route === rt!.id);
+                  const ps = planesOnRoute(c, rt!.id);
                   return (
                     <li key={i}>
                       <CoName c={c} />
                       <small>
-                        {ps.map((p) => `${MODEL[p.model].name}×${p.freq}`).join(', ') || '비행기 없음'} · {fareText(rt!.fare)}
+                        {ps.map((p) => `${MODEL[p.model].name}×${legFreq(p, rt!.id)}`).join(', ') || '비행기 없음'} · {fareText(rt!.fare)}
                         {rt!.stats ? ` · 탑승률 ${pct(rt!.stats.lf)}` : ''}
                       </small>
                     </li>
@@ -439,7 +472,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
       const fit = Math.max(1, Math.min(max, Math.round(((dem.biz + dem.leisure) * 0.7) / m.seats)));
       let best: { m: ModelDef; freq: number; e: RouteEstimate } | null = null;
       for (const f of new Set([fit, max, Math.max(1, Math.round((fit + max) / 2))])) {
-        const e = estimateRoute(state, viewer, from, to, [{ model: m.id, freq: f, leased: true, rent: leaseRent(state, m) }], 0);
+        const e = estimateRoute(state, viewer, from, to, [{ model: m.id, freq: f }], 0);
         if (!best || e.profit > best.e.profit) best = { m, freq: f, e };
       }
       if (best) out.push(best);
@@ -473,10 +506,28 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
       return u;
     });
 
-  const openWith = (o: { m: ModelDef; freq: number; e: RouteEstimate }, buy: boolean) =>
+  // 비행시간이 남는 내 비행기 (쉬는 비행기 포함): 이 노선을 몇 번 날 수 있는지
+  const mine = useMemo(() => {
+    if (!to) return [];
+    const d = dist(from, to);
+    return me.planes
+      .map((p) => {
+        const m = MODEL[p.model];
+        if (m.range < d || airportClass(CITY[from], year) < m.runway || airportClass(CITY[to], year) < m.runway) return null;
+        const f = Math.min(maxFreq(m, d), Math.floor((WEEK_HOURS - planeHours(me, p)) / (2 * legHours(m, d)) + 1e-9));
+        if (f < 1) return null;
+        const e = estimateRoute(state, viewer, from, to, [{ model: m.id, freq: f, age: planeAge(state, p), fixed: 0 }], 0);
+        return { p, m, freq: f, e };
+      })
+      .filter((x) => !!x)
+      .sort((x, y) => Number(y!.p.legs.length === 0) - Number(x!.p.legs.length === 0) || y!.e.profit - x!.e.profit)
+      .slice(0, 4) as { p: (typeof me.planes)[number]; m: ModelDef; freq: number; e: RouteEstimate }[];
+  }, [state, viewer, me, from, to, year]);
+
+  const openWith = (o: { m: ModelDef; freq: number; e: RouteEstimate }, how: 'lease' | 'used' | number) =>
     apply((s) => {
       const cand: Candidate = { a: from, b: to!, model: o.m, freq: o.freq, fare: 0, profit: o.e.profit, capital: 0, needBranch, score: 0 };
-      const u = openSuggestion(s, viewer, cand, buy);
+      const u = openSuggestion(s, viewer, cand, how);
       if (u === s) return s;
       const id = routeOnPair(u.companies[viewer], from, to!)?.id ?? null;
       queueMicrotask(() => {
@@ -576,18 +627,50 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                           small
                           primary
                           blocker={why ?? buyBlocker(state, viewer, o.m.id, true)}
-                          onClick={() => openWith(o, false)}
-                          title={`계약금 ${fmtMoney(leaseDeposit(state, o.m))}, 분기 리스료 ${fmtMoney(leaseRent(state, o.m))}`}
+                          onClick={() => openWith(o, 'lease')}
+                          title={(() => {
+                            const dep = depositFor(state, viewer, o.m.id);
+                            return `분기 리스료 ${fmtMoney(leaseRent(state, o.m))}${dep > 0 ? `, 보증금 ${fmtMoney(dep)} (돌려줄 때 돌려받아요)` : ', 첫해 보증금 없음'}`;
+                          })()}
                         >
                           리스로 열기
                         </ActButton>
-                        <ActButton small blocker={why ?? buyBlocker(state, viewer, o.m.id, false)} onClick={() => openWith(o, true)} title={`값 ${fmtMoney(modelPrice(state, o.m))}`}>
-                          사서 열기
-                        </ActButton>
+                        {(() => {
+                          const used = state.market.find((u) => u.model === o.m.id);
+                          return used ? (
+                            <ActButton small blocker={why ?? usedBlocker(state, viewer, used.id)} onClick={() => openWith(o, 'used')} title={`${used.age}년 된 중고`}>
+                              중고 {fmtMoney(used.price)}
+                            </ActButton>
+                          ) : null;
+                        })()}
                       </span>
                     </li>
                   ))}
                 </ul>
+              )}
+              {mine.length > 0 && (
+                <>
+                  <h5>내 비행기로 열기</h5>
+                  <ul className="al-options">
+                    {mine.map((o) => (
+                      <li key={o.p.id}>
+                        <PlaneArt body={o.m.body} engines={o.m.engines} color={color.main} dark={color.dark} shape={SEAT_SHAPES[me.seat]} width={70} />
+                        <span className="al-opt-text">
+                          <b>{o.m.name}</b>
+                          <small>
+                            {o.p.legs.length === 0 ? '쉬는 중' : `남는 시간으로`} 주 {o.freq}회 · 탑승률 {pct(o.e.lf)}
+                          </small>
+                          <small>
+                            이 노선 이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/분기 <span className="al-muted">(리스료는 이미 내는 중)</span>
+                          </small>
+                        </span>
+                        <ActButton small blocker={why} onClick={() => openWith(o, o.p.id)}>
+                          이 비행기로 열기
+                        </ActButton>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
               <div className="al-nr-foot">
                 <ActButton blocker={why} onClick={openRouteOnly} testId="al-open-route-only">

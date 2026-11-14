@@ -12,7 +12,7 @@ import { DEFAULT_NAMES, GOAL_VALUES, START_MONEY, companyName, hubCandidates } f
 import { companyValue } from './simulate';
 import type { SavedAirlineGame } from './storage';
 import { qLabel } from './time';
-import type { AirlineOptions, AirlineSetup, MoneyLevel, StartEra } from './types';
+import type { AiStyle, AirlineOptions, AirlineSetup, MoneyLevel, StartEra } from './types';
 import { Meter } from './ui';
 
 interface SetupProps {
@@ -120,6 +120,22 @@ const MONEY_CHOICES: IconChoice<MoneyLevel>[] = [
   { value: 'tight', short: `빠듯 ${fmtMoney(START_MONEY.tight.cash)}`, label: `빠듯하게 ${fmtMoney(START_MONEY.tight.cash)}`, icon: <MoneyIcon n={2} /> },
 ];
 
+function StyleIcon({ n }: { n: number }) {
+  return (
+    <ChoiceIcon>
+      {Array.from({ length: 3 }, (_, i) => (
+        <path key={i} d={`M${6 + i * 8} 24 l4 -${6 + i * 5} l4 ${6 + i * 5}z`} {...(i < n ? ICON_DUO : ICON_LINE)} />
+      ))}
+    </ChoiceIcon>
+  );
+}
+
+const STYLE_CHOICES: IconChoice<AiStyle>[] = [
+  { value: 'relaxed', short: '느긋', label: '컴퓨터가 천천히 넓히고 돈을 넉넉히 남겨요 (처음 하는 사람에게)', icon: <StyleIcon n={1} /> },
+  { value: 'normal', short: '보통', label: '컴퓨터가 알맞게 넓혀요. 경영 비서를 따라 하면 해 볼 만해요', icon: <StyleIcon n={2} /> },
+  { value: 'fierce', short: '치열', label: '컴퓨터가 빠르게 넓히고 돈을 아끼지 않아요', icon: <StyleIcon n={3} /> },
+];
+
 export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, onStart, onResume, onBack }: SetupProps) {
   const [setup, setSetup] = useState<AirlineSetup>(initialSetup);
   const [choosing, setChoosing] = useState<number | null>(null);
@@ -216,6 +232,7 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
               )}
             </div>
             <IconPicker caption="시작 자금" value={opt.money} options={MONEY_CHOICES} onChange={(money) => setOpt({ money })} testId="al-money" />
+            <IconPicker caption="컴퓨터 성향" value={opt.aiStyle} options={STYLE_CHOICES} onChange={(aiStyle) => setOpt({ aiStyle })} testId="al-aistyle" />
           </section>
 
           <section className="setup-section">
@@ -365,7 +382,7 @@ function HowTo() {
           <b>한 차례 = 한 분기(3개월)</b>: 회사마다 돌아가며 이번 분기 경영을 하고 <kbd>Enter</kbd>로 마쳐요. 모두 마치면 석 달 동안 비행기가 날고, <b>분기 결산</b>이 나와요.
         </li>
         <li>
-          <b>지점 → 노선 → 비행기</b>: 지도에서 도시를 눌러 <b>지점</b>을 열고, 지점이 있는 두 도시 사이에 <b>노선</b>을 열어요. 비행기를 <b>사거나</b>(값을 다 냄) <b>리스</b>(계약금만 내고 분기마다 빌린 값을 냄)해서 노선에 넣고 한 주에 몇 번 왕복할지 정해요.
+          <b>지점 → 노선 → 비행기</b>: 지도에서 도시를 눌러 <b>지점</b>을 열고, 지점이 있는 두 도시 사이에 <b>노선</b>을 열어요. 비행기는 <b>리스</b>(바로 받고 분기마다 값의 3.5%를 냄, 보증금은 돌려줄 때 돌려받음)하거나 <b>주문</b>(값을 먼저 내고 1~4분기 뒤에 받음, 막 나온 인기 기종일수록 오래 기다리지만 처음 2년은 15% 싸요)하거나 <b>중고 시장</b>에서 바로 사요. 같은 계열 비행기가 많으면 정비·승무원비가 줄어요.
           <span className="al-howto-planes" aria-hidden="true">
             <PlaneArt body="prop" engines={2} color="#30a46c" shape="star" width={70} />
             <PlaneArt body="narrow" engines={2} color="#e5484d" shape="circle" width={70} />
@@ -374,7 +391,13 @@ function HowTo() {
           </span>
         </li>
         <li>
+          <b>한 대로 여러 노선</b>: 비행기 한 대는 한 주에 98시간까지 날아요. 한 노선에 다 쓰지 않으면 남는 시간으로 다른 노선도 날 수 있어요. 비행기 화면의 <b>가동률</b> 막대를 채워 보세요.
+        </li>
+        <li>
           <b>비행기마다 달라요</b>: 멀리 못 가는 비행기, 작은 공항에 못 내리는 큰 비행기가 있어요. 공항마다 한 주에 쓸 수 있는 운항 횟수(<b>슬롯</b>)도 정해져 있어요. 새 기종은 연료를 덜 먹고 손님이 좋아해요.
+        </li>
+        <li>
+          <b>갈아타는 손님</b>: 곧장 가는 노선이 없는 두 도시 손님은 본사(허브)처럼 노선이 모이는 도시에서 한 번 갈아타고 가기도 해요. 좌석은 두 구간 모두 차지하고 운임은 거리만큼 나눠요. 다른 회사와 <b>제휴(코드셰어)</b>하면 서로의 노선을 이어 태워요.
         </li>
         <li>
           <b>손님 나누기</b>: 두 도시 사이 손님은 도시 크기·사업과 관광·거리·계절·시대에 따라 정해져요. 같은 두 도시를 여러 회사가 날면, <b>운임이 싸고 자주 날고 편한 비행기를 띄우고 평판·광고가 좋은</b> 회사가 손님을 더 가져가요. 좌석보다 많이 태울 수는 없어요.
@@ -383,13 +406,19 @@ function HowTo() {
           <b>돈</b>: 운임 수입에서 연료비·승무원과 정비·공항·서비스·판매 수수료·리스료·지점 유지비·광고·이자·세금을 빼면 분기 이익이에요. 돈이 모자라면 은행에서 빌리고, 두 분기 내내 모자라면 <b>파산</b>해요.
         </li>
         <li>
+          <b>결정할 일과 목표</b>: 서너 분기마다 임금 협상·연료 계약·새 기종 제안 같은 <b>결정할 일</b>이 와요. 고르면 생길 일을 미리 보여 줘요. 해마다 작은 <b>올해 목표</b> 셋을 받고, 해가 끝나면 <b>S~D 경영 평가</b>를 받아요.
+        </li>
+        <li>
+          <b>경영 비서</b>: 지도 아래 비서가 지난 분기 숫자를 보고 할 만한 일을 골라 주고, ‘적용’ 한 번으로 해 줘요. 첫해에는 리스 보증금이 없어요.
+        </li>
+        <li>
           <b>세계는 움직여요</b>: 해마다 새 기종이 나오고 옛 기종은 생산이 끝나요. 도시가 자라고 공항이 커지며, 기름값·경기·여행 붐·올림픽·엑스포 같은 사건이 손님과 비용을 바꿔요.
         </li>
         <li>
-          <b>이기기</b>: 정해진 해까지 회사 가치(현금 + 내 비행기·호텔 가치 − 빚) 1등, 또는 여러 지역 취항과 가치 목표를 먼저 이루기, 또는 도전 과제 성공!
+          <b>이기기</b>: 정해진 해까지 회사 가치(현금 + 내 비행기·호텔 가치 + 리스 보증금·주문한 비행기 − 빚) 1등, 또는 여러 지역 취항과 가치 목표를 먼저 이루기, 또는 도전 과제 성공!
         </li>
         <li>
-          조작: 화면 <kbd>1</kbd> 지도 · <kbd>2</kbd> 비행기 · <kbd>3</kbd> 노선 · <kbd>4</kbd> 재무 · <kbd>5</kbd> 보고서 · <kbd>6</kbd> 뉴스, 이번 분기 마치기 <kbd>Enter</kbd>, 닫기 <kbd>Esc</kbd>, 지도 확대 <kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd>. 처음이면 지도 아래 <b>💡 추천 노선</b>의 ‘리스로 열기’부터 눌러 보세요!
+          조작: 화면 <kbd>1</kbd> 지도 · <kbd>2</kbd> 비행기 · <kbd>3</kbd> 노선 · <kbd>4</kbd> 재무 · <kbd>5</kbd> 보고서 · <kbd>6</kbd> 뉴스, 이번 분기 마치기 <kbd>Enter</kbd>, 닫기 <kbd>Esc</kbd>, 지도 확대 <kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd>. 처음이면 지도 아래 <b>🧑‍💼 경영 비서</b>의 첫 노선 ‘노선 열기’부터 눌러 보세요!
         </li>
       </ol>
     </details>

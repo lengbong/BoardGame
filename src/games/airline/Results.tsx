@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { Confetti } from '../../components/Confetti';
+import { advise } from './advisor';
 import { CHALLENGE } from './challenges';
 import { CITY } from './cities';
 import { fmtMoney, fmtPax, pct, signedMoney } from './format';
+import { GRADE_INFO } from './goals';
 import { rankings } from './rules';
 import { companyValue, regionsServed } from './simulate';
 import { qLabel } from './time';
@@ -26,11 +28,14 @@ export function QuarterReport({ state, report, viewer, onClose, onDetail }: { st
   const costs = r.fuel + r.crew + r.airport + r.service + r.sales + r.lease + r.fleet + r.branch + r.ads + r.interest + r.tax;
   const btn = useRef<HTMLButtonElement>(null);
   useEffect(() => btn.current?.focus(), []);
+  const review = r.review;
+  const goals = r.goals ?? [];
+  const tips = me.out ? [] : advise(state, viewer, 3).filter((a) => a.key !== 'choice');
 
   let tip = '';
   if (me.out) tip = '회사가 문을 닫았어요. 다른 회사들의 경쟁을 끝까지 지켜볼 수 있어요.';
   else if (me.crisis > 0) tip = '⚠ 돈이 모자라요! 다음 분기에도 모자라면 파산해요. 손해 보는 노선을 닫고, 쉬는 비행기를 팔고, 대출을 받아 보세요.';
-  else if (r.pax === 0) tip = '아직 나는 비행기가 없어요. 💡 추천 노선이나 노선 화면에서 비행기를 띄워 보세요.';
+  else if (r.pax === 0) tip = '아직 나는 비행기가 없어요. 🧑‍💼 경영 비서가 권하는 노선이나 노선 화면에서 비행기를 띄워 보세요.';
   else if (lf < 0.55) tip = '빈 좌석이 많아요. 운임을 내리거나, 횟수를 줄이거나, 작은 비행기로 바꿔 보세요.';
   else if (lf > 0.95) tip = '좌석이 꽉 찼어요! 운임을 올리거나 비행기를 더 넣으면 더 벌 수 있어요.';
   else if (r.profit > 0) tip = '좋아요! 번 돈으로 새 노선을 열어 회사를 키워 보세요.';
@@ -65,6 +70,34 @@ export function QuarterReport({ state, report, viewer, onClose, onDetail }: { st
         <p className="al-qr-sub">
           수입 {fmtMoney(r.ticket + r.side)} · 비용 {fmtMoney(costs)} (연료 {fmtMoney(r.fuel)})
         </p>
+        {review && (
+          <div className="al-review" data-testid="al-review">
+            <span className="al-grade al-grade-big" style={{ background: GRADE_INFO[review.grade].color }} aria-label={`${review.year}년 경영 평가 ${review.grade}`}>
+              {review.grade}
+            </span>
+            <div>
+              <b>
+                {review.year}년 경영 평가 · {GRADE_INFO[review.grade].word}
+              </b>
+              <p>{review.text}</p>
+              {goals.length > 0 && (
+                <ul className="al-review-goals">
+                  {goals.map((g) => (
+                    <li key={g.kind}>
+                      {g.done ? '✅' : '❌'} {g.text}
+                      {g.done && <small className="al-pos"> +{fmtMoney(g.reward.cash)} · 평판 +{g.reward.rep}</small>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
+        {r.xferPax > 0 && (
+          <p className="al-qr-sub">
+            🔁 갈아탄 손님 {fmtPax(r.xferPax)} — 본사(허브)를 거쳐 두 노선을 이어 탔어요.
+          </p>
+        )}
         {(best || worst) && (
           <ul className="al-qr-routes">
             {best && (
@@ -90,6 +123,18 @@ export function QuarterReport({ state, report, viewer, onClose, onDetail }: { st
           </ul>
         )}
         {tip && <p className={`al-qr-tip${me.crisis > 0 ? ' al-qr-warn' : ''}`}>{tip}</p>}
+        {tips.length > 0 && (
+          <div className="al-qr-advice">
+            <b>🧑‍💼 비서의 한마디</b>
+            <ul>
+              {tips.map((t) => (
+                <li key={t.key}>
+                  {t.icon} {t.title}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="result-actions">
           <button ref={btn} type="button" className="btn btn-primary" onClick={onClose} data-testid="al-qr-close">
             다음 분기로 <Kbd>Enter</Kbd>

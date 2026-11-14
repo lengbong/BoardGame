@@ -266,26 +266,74 @@ export function distanceToShape(x: number, y: number, pts: readonly Pt[]): numbe
   return best;
 }
 
+
+export interface RouteArc {
+  /** 지도에 그릴 경로 (지도 끝을 넘으면 반대쪽에 한 벌 더) */
+  copies: string[];
+  /** 모든 벌을 이은 경로 (선·누르는 자리) */
+  d: string;
+  /** 가운데 점 (지도 안쪽 좌표) */
+  mid: { x: number; y: number };
+  /** 지도 끝을 넘는지 */
+  wraps: boolean;
+}
+
 /**
- * 두 도시 사이 노선 곡선. 지도 끝을 건너는 짧은 길이면 양쪽에 나누어 그린다.
- * 반환: SVG path 문자열들과 곡선 가운데(라벨·클릭용)
+ * 두 도시를 잇는 대권 항로 (지구 위 가장 짧은 길)를 점으로 찍어 그린다.
+ * 지도 끝을 넘으면 x를 이어서 셈하고, 반대쪽에 같은 선을 한 벌 더 그려 끊김 없이 보이게 한다.
+ * lane: 같은 두 도시를 여러 회사가 날 때 옆으로 조금씩 비키는 칸 (… −1, 0, 1 …)
  */
-export function arcPath(a: { x: number; y: number }, b: { x: number; y: number }, lane = 0): { d: string; mid: { x: number; y: number }; wraps: boolean } {
-  let bx = b.x;
-  const raw = bx - a.x;
-  if (raw > MAP_W / 2) bx -= MAP_W;
-  else if (raw < -MAP_W / 2) bx += MAP_W;
-  const wraps = bx !== b.x;
-  const dx = bx - a.x;
-  const dy = b.y - a.y;
-  const len = Math.hypot(dx, dy);
-  // 북반구 지도에서 대권 항로처럼 위로 살짝 휜다
-  const bend = Math.min(80, len * 0.18) * (1 + 0.22 * lane) + lane * 2;
-  const cx = (a.x + bx) / 2 + (dy / (len || 1)) * bend * 0.15;
-  const cy = (a.y + b.y) / 2 - bend;
-  const one = (shift: number) => `M${(a.x + shift).toFixed(1)} ${a.y.toFixed(1)}Q${(cx + shift).toFixed(1)} ${cy.toFixed(1)} ${(bx + shift).toFixed(1)} ${b.y.toFixed(1)}`;
-  const d = wraps ? `${one(0)}${one(bx < 0 ? MAP_W : -MAP_W)}` : one(0);
-  const mx = 0.25 * a.x + 0.5 * cx + 0.25 * bx;
-  const my = 0.25 * a.y + 0.5 * cy + 0.25 * b.y;
-  return { d, mid: { x: ((mx % MAP_W) + MAP_W) % MAP_W, y: my }, wraps };
+export function greatCircleArc(a: { lon: number; lat: number }, b: { lon: number; lat: number }, lane = 0): RouteArc {
+  const rad = Math.PI / 180;
+  const toVec = (lon: number, lat: number) => [Math.cos(lat * rad) * Math.cos(lon * rad), Math.cos(lat * rad) * Math.sin(lon * rad), Math.sin(lat * rad)];
+  const va = toVec(a.lon, a.lat);
+  const vb = toVec(b.lon, b.lat);
+  const dot = Math.max(-1, Math.min(1, va[0] * vb[0] + va[1] * vb[1] + va[2] * vb[2]));
+  const omega = Math.acos(dot);
+  const n = Math.max(8, Math.min(48, Math.round(omega / (3 * rad))));
+  const pts: { x: number; y: number }[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    let v: number[];
+    if (omega < 1e-6) v = va;
+    else {
+      const s1 = Math.sin((1 - t) * omega) / Math.sin(omega);
+      const s2 = Math.sin(t * omega) / Math.sin(omega);
+      v = [s1 * va[0] + s2 * vb[0], s1 * va[1] + s2 * vb[1], s1 * va[2] + s2 * vb[2]];
+    }
+    const lat = Math.atan2(v[2], Math.hypot(v[0], v[1])) / rad;
+    const lon = Math.atan2(v[1], v[0]) / rad;
+    const p = project(lon, lat);
+    // 앞 점과 이어지게 x를 펼친다
+    if (pts.length) {
+      const prev = pts[pts.length - 1].x;
+      while (p.x - prev > MAP_W / 2) p.x -= MAP_W;
+      while (p.x - prev < -MAP_W / 2) p.x += MAP_W;
+    }
+    pts.push(p);
+  }
+  // 짧은 노선은 대권이 거의 곧아서 겹치기 쉬우니 살짝 휘게 하고, 회사마다 옆으로 비킨다
+  const first = pts[0];
+  const last = pts[pts.length - 1];
+  const dx = last.x - first.x;
+  const dy = last.y - first.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = dy / len;
+  const ny = -dx / len;
+  const bend = Math.min(18, len * 0.08);
+  const side = ny <= 0 ? 1 : -1;
+  const shifted = pts.map((p, i) => {
+    const t = i / n;
+    const hump = 4 * t * (1 - t);
+    const off = (bend * side + lane * 3.2) * hump;
+    return { x: p.x + nx * off, y: p.y + ny * off };
+  });
+  const minX = Math.min(...shifted.map((p) => p.x));
+  const maxX = Math.max(...shifted.map((p) => p.x));
+  const line = (shift: number) => shifted.map((p, i) => `${i ? 'L' : 'M'}${(p.x + shift).toFixed(1)} ${p.y.toFixed(1)}`).join('');
+  const copies = [line(0)];
+  if (minX < 0) copies.push(line(MAP_W));
+  if (maxX > MAP_W) copies.push(line(-MAP_W));
+  const m = shifted[Math.floor(shifted.length / 2)];
+  return { copies, d: copies.join(''), mid: { x: ((m.x % MAP_W) + MAP_W) % MAP_W, y: m.y }, wraps: copies.length > 1 };
 }

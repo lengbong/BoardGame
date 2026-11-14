@@ -6,7 +6,8 @@ import { LandmarkIcon, MAP_PLANE_D, SEAT_SHAPES } from './Art';
 import { CITIES, CITY, REGIONS, REGION_INFO, citySize, dist, pairKey } from './cities';
 import { yearOf } from './time';
 import type { AirlineState, RegionId } from './types';
-import { LAND, MAP_H, MAP_W, WATER, arcPath, project, shapePath } from './worldmap';
+import { LAND, MAP_H, MAP_W, WATER, greatCircleArc, project, shapePath } from './worldmap';
+import { routeFreq } from './simulate';
 
 export type Selection = { kind: 'city'; id: string } | { kind: 'route'; company: number; route: number } | null;
 
@@ -68,11 +69,6 @@ const LABEL_POS: Record<string, 'l' | 't' | 'b'> = {
   bali: 'b',
   jakarta: 'l',
   manila: 'b',
-};
-
-const pos = (id: string) => {
-  const c = CITY[id];
-  return project(c.lon, c.lat);
 };
 
 function clampView(v: View): View {
@@ -183,17 +179,16 @@ export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx,
   // 노선들 (같은 두 도시를 여러 회사가 날면 조금씩 다르게 휘게)
   const routes = useMemo(() => {
     const lanes = new Map<string, number>();
-    const out: { key: string; company: number; route: number; d: string; mid: { x: number; y: number }; flying: boolean; freq: number; pair: string; dist: number }[] = [];
+    const out: { key: string; company: number; route: number; d: string; copies: string[]; mid: { x: number; y: number }; flying: boolean; freq: number; pair: string; dist: number }[] = [];
     state.companies.forEach((c, ci) => {
       if (c.out) return;
       for (const r of c.routes) {
         const pair = pairKey(r.a, r.b);
         const lane = lanes.get(pair) ?? 0;
         lanes.set(pair, lane + 1);
-        const arc = arcPath(pos(r.a), pos(r.b), lane === 0 ? 0 : lane % 2 === 1 ? Math.ceil(lane / 2) : -lane / 2);
-        let freq = 0;
-        for (const p of c.planes) if (p.route === r.id) freq += p.freq;
-        out.push({ key: `${ci}-${r.id}`, company: ci, route: r.id, d: arc.d, mid: arc.mid, flying: freq > 0, freq, pair, dist: dist(r.a, r.b) });
+        const arc = greatCircleArc(CITY[r.a], CITY[r.b], lane === 0 ? 0 : lane % 2 === 1 ? Math.ceil(lane / 2) : -lane / 2);
+        const freq = routeFreq(c, r.id);
+        out.push({ key: `${ci}-${r.id}`, company: ci, route: r.id, d: arc.d, copies: arc.copies, mid: arc.mid, flying: freq > 0, freq, pair, dist: dist(r.a, r.b) });
       }
     });
     return out;
@@ -291,14 +286,16 @@ export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx,
 
         {/* 나는 비행기 */}
         <g className="al-planes" aria-hidden="true">
-          {animated.map((r, i) => {
+          {animated.flatMap((r, i) => {
             const c = state.companies[r.company];
             const dur = (flying ? 1.6 : 6) + r.dist / (flying ? 6000 : 1600);
-            return (
-              <path key={`${r.key}-${flying ? 'f' : 'n'}`} d={MAP_PLANE_D} fill={SEAT_COLORS[c.seat].main} className="al-map-plane" transform={`scale(${(r.company === viewer ? 1 : 0.8) * k})`}>
-                <animateMotion dur={`${dur.toFixed(1)}s`} repeatCount="indefinite" rotate="auto" path={r.d} begin={`${-((i * 1.37) % dur).toFixed(2)}s`} />
+            const begin = `${-((i * 1.37) % dur).toFixed(2)}s`;
+            // 지도 끝을 넘는 노선은 두 벌 모두에 같은 때에 띄워서, 한쪽 끝으로 나가면 반대쪽에서 들어온다
+            return r.copies.map((path, j) => (
+              <path key={`${r.key}-${j}-${flying ? 'f' : 'n'}`} d={MAP_PLANE_D} fill={SEAT_COLORS[c.seat].main} className="al-map-plane" transform={`scale(${(r.company === viewer ? 1 : 0.8) * k})`}>
+                <animateMotion dur={`${dur.toFixed(1)}s`} repeatCount="indefinite" rotate="auto" path={path} begin={begin} />
               </path>
-            );
+            ));
           })}
         </g>
 
@@ -335,7 +332,7 @@ export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx,
                   }
                 }}
               >
-                <circle cx={p.x} cy={p.y} r={Math.max(r * 2.2, 7 * k)} className="al-city-hit" />
+                <circle cx={p.x} cy={p.y} r={Math.max(r * 1.6, 6 * k)} className="al-city-hit" />
                 {sel && <circle cx={p.x} cy={p.y} r={r + 4 * k} className="al-city-ring" strokeWidth={1.6 * k} />}
                 {hubOf !== undefined && (
                   <circle cx={p.x} cy={p.y} r={r + 2.4 * k} fill="none" stroke={SEAT_COLORS[state.companies[hubOf].seat].main} strokeWidth={1.8 * k} />

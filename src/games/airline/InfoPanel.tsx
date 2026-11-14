@@ -1,13 +1,13 @@
 import { useMemo } from 'react';
-import { SEAT_COLORS } from '../common/players';
 import { MODEL } from './aircraft';
-import { openSuggestion, suggestRoutes, type Candidate } from './ai';
-import { LandmarkIcon, PlaneArt, SEAT_SHAPES } from './Art';
+import { advise } from './advisor';
+import { LandmarkIcon } from './Art';
 import { AIRPORT_INFO, CITIES, CITY, FEE_INFO, REGION_INFO, SEASON_INFO, airportClass, citySize, dist, pairKey } from './cities';
 import { FIXED_EVENTS, FIXED_ICON } from './events';
 import { fmtMoney, fmtPax, km, pct, signedMoney } from './format';
+import { goalProgress } from './goals';
 import { branchBlocker, buildBlocker, closeBranchBlocker, routeOnPair } from './rules';
-import { branchCost, branchUpkeep, businessCost, leaseDeposit, pairDemand, slotCapacity, slotsUsed } from './simulate';
+import { WEEK_HOURS, branchCost, branchUpkeep, businessCost, legFreq, pairDemand, planeHours, planesOnRoute, routeFreq, slotCapacity, slotsUsed } from './simulate';
 import { QUARTER_NAMES, yearOf } from './time';
 import type { AirlineAction, AirlineState } from './types';
 import { ActButton, CoName, LoadMeter, Meter, Stars } from './ui';
@@ -22,6 +22,7 @@ interface Common {
   onPlanRoute: (from: string, to?: string) => void;
   onEditRoute: (routeId: number) => void;
   onSelect: (sel: Selection) => void;
+  onOpenChoice: () => void;
 }
 
 const notMine = '내 차례에만 할 수 있어요';
@@ -58,6 +59,11 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
         .slice(0, 6),
     [state, city],
   );
+  const xfers = (state.report?.xfers ?? []).filter((x) => x.via === city).slice(0, 4);
+  const through = state.companies
+    .flatMap((co, i) => (co.out ? [] : co.routes.filter((r) => r.a === city || r.b === city).map((r) => ({ co, i, r }))))
+    .sort((x, y) => Number(y.i === viewer) - Number(x.i === viewer) || routeFreq(y.co, y.r.id) - routeFreq(x.co, x.r.id))
+    .slice(0, 8);
   const hotel = me.businesses.find((b) => b.city === city && b.kind === 'hotel');
   const agency = me.businesses.find((b) => b.city === city && b.kind === 'agency');
   const season = SEASON_INFO[c.season].mult;
@@ -203,6 +209,40 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
             </>
           )}
         </section>
+        {xfers.length > 0 && (
+          <section>
+            <h4>여기서 갈아타는 손님 <small className="al-muted">지난 분기</small></h4>
+            <ol className="al-dests">
+              {xfers.map((x) => (
+                <li key={`${x.a}-${x.b}`}>
+                  <span>
+                    {CITY[x.a].name} → {CITY[x.b].name}
+                  </span>
+                  <small>
+                    {fmtPax(x.pax)} · {x.companies.map((ci) => state.companies[ci].name).join('·')}
+                  </small>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+        {through.length > 0 && (
+          <section>
+            <h4>이 도시를 지나는 노선</h4>
+            <ul className="al-through">
+              {through.map(({ co, i, r }) => (
+                <li key={`${i}-${r.id}`}>
+                  <button type="button" className="al-link" onClick={() => onSelect({ kind: 'route', company: i, route: r.id })}>
+                    <CoName c={co} /> {CITY[r.a === city ? r.b : r.a].name}
+                  </button>
+                  <small>
+                    주 {routeFreq(co, r.id)}회{r.stats ? ` · 탑승률 ${pct(r.stats.lf)}` : ''}
+                  </small>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         <section>
           <h4>여기서 손님이 많은 곳</h4>
           <ol className="al-dests">
@@ -232,7 +272,7 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
 function RoutePanel({ state, viewer, canAct, onEditRoute, onPlanRoute, onSelect, company, route }: Common & { company: number; route: number }) {
   const owner = state.companies[company];
   const r = owner?.routes.find((x) => x.id === route);
-  if (!owner || !r) return <Overview {...{ state, viewer, canAct, perform: () => {}, setState: () => {}, onPlanRoute, onEditRoute, onSelect }} />;
+  if (!owner || !r) return <Overview {...{ state, viewer, canAct, perform: () => {}, setState: () => {}, onPlanRoute, onEditRoute, onSelect, onOpenChoice: () => {} }} />;
   const key = pairKey(r.a, r.b);
   const me = state.companies[viewer];
   const ops = state.companies
@@ -273,14 +313,14 @@ function RoutePanel({ state, viewer, canAct, onEditRoute, onPlanRoute, onSelect,
           </thead>
           <tbody>
             {ops.map(({ co, i, rt }) => {
-              const planes = co.planes.filter((p) => p.route === rt!.id);
+              const planes = planesOnRoute(co, rt!.id);
               const st = rt!.stats;
               return (
                 <tr key={i} className={i === viewer ? 'al-row-mine' : ''}>
                   <td>
                     <CoName c={co} />
                   </td>
-                  <td>{planes.length === 0 ? '비행기 없음' : planes.map((p) => `${MODEL[p.model].name}×${p.freq}`).join(', ')}</td>
+                  <td>{planes.length === 0 ? '비행기 없음' : planes.map((p) => `${MODEL[p.model].name}×${legFreq(p, rt!.id)}`).join(', ')}</td>
                   <td>{rt!.fare === 0 ? '보통' : `${rt!.fare > 0 ? '+' : ''}${rt!.fare}%`}</td>
                   <td>
                     {st ? (
@@ -314,6 +354,11 @@ function RoutePanel({ state, viewer, canAct, onEditRoute, onPlanRoute, onSelect,
             </small>
           </>
         )}
+        {r.stats && r.stats.xfer > 0 && (
+          <p className="al-muted">
+            {owner.name}의 이 노선에는 갈아타는 손님도 주 {fmtPax(r.stats.xfer)}씩 타요.
+          </p>
+        )}
         <p className="al-muted al-tip">손님은 운임이 싸고, 자주 날고, 새롭고 편한 비행기를 띄우고, 평판·광고가 좋은 회사를 더 많이 골라요.</p>
       </div>
     </div>
@@ -322,73 +367,90 @@ function RoutePanel({ state, viewer, canAct, onEditRoute, onPlanRoute, onSelect,
 
 // ------------------------------------------------------------------ 아무것도 고르지 않았을 때
 
-function Overview({ state, viewer, canAct, setState, onPlanRoute, onSelect }: Common) {
+function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice }: Common) {
   const me = state.companies[viewer];
-  const tips = useMemo(() => (canAct ? suggestRoutes(state, viewer, 4) : []), [state, viewer, canAct]);
-  const color = SEAT_COLORS[me.seat];
-  const flying = me.planes.filter((p) => p.route !== null && p.freq > 0).length;
-  const open = (cand: Candidate, buy: boolean) => setState(openSuggestion(state, viewer, cand, buy));
+  const tips = useMemo(() => (canAct ? advise(state, viewer) : []), [state, viewer, canAct]);
+  const flying = me.planes.filter((p) => p.legs.length > 0);
+  const use = flying.length ? flying.reduce((s, p) => s + planeHours(me, p), 0) / (flying.length * WEEK_HOURS) : 0;
+  const first = state.q - state.startQ < 4;
   return (
     <div className="al-info al-overview">
       <div className="al-info-main">
         <h3>
-          💡 추천 노선 <small>지금 비행기로 어림한 이번 분기 이익</small>
+          🧑‍💼 경영 비서 <small>지난 분기 숫자로 고른 할 만한 일</small>
         </h3>
         {!canAct ? (
-          <p className="al-muted">내 차례가 되면 추천 노선을 보여 줄게요. 그동안 지도와 보고서를 둘러보세요.</p>
+          <p className="al-muted">내 차례가 되면 할 만한 일을 골라 드릴게요. 그동안 지도와 보고서를 둘러보세요.</p>
         ) : tips.length === 0 ? (
-          <p className="al-muted">지금은 이익이 날 만한 새 노선이 잘 안 보여요. 돈이 모이면 다시 살펴보거나, 지도에서 도시를 눌러 직접 찾아보세요.</p>
+          <p className="al-muted">지금은 딱히 고칠 곳이 없어요. 지도에서 도시를 눌러 새 노선을 찾아보거나 차례를 마치세요.</p>
         ) : (
-          <ul className="al-tips">
-            {tips.map((t) => {
-              const m = t.model;
-              const deposit = leaseDeposit(state, m);
-              const need = t.needBranch.reduce((s, c) => s + branchCost(c, state.q), 0);
-              return (
-                <li key={`${t.a}-${t.b}`}>
-                  <PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={SEAT_SHAPES[me.seat]} width={64} />
-                  <div className="al-tip-text">
-                    <button type="button" className="al-link" onClick={() => onSelect({ kind: 'city', id: t.b === me.hub ? t.a : t.b })}>
-                      {CITY[t.a].name} ⇄ {CITY[t.b].name}
+          <ul className="al-tips al-advice" data-testid="al-advice">
+            {tips.map((t) => (
+              <li key={t.key}>
+                <span className="al-tip-icon" aria-hidden="true">
+                  {t.icon}
+                </span>
+                <div className="al-tip-text">
+                  <b>{t.title}</b>
+                  <small>{t.detail}</small>
+                </div>
+                <div className="al-tip-acts">
+                  {t.key === 'choice' ? (
+                    <button type="button" className="btn btn-small btn-primary" onClick={onOpenChoice}>
+                      고르기
                     </button>
-                    <small>
-                      {m.name} 주 {t.freq}회 · 예상 이익 <b className="al-pos">{signedMoney(t.profit)}</b>/분기
-                      {t.needBranch.length > 0 && ` · 지점 ${t.needBranch.map((c) => CITY[c].name).join('·')} ${fmtMoney(need)}`}
-                    </small>
-                  </div>
-                  <div className="al-tip-acts">
-                    <button type="button" className="btn btn-small btn-primary" onClick={() => open(t, false)} title={`계약금 ${fmtMoney(deposit)} + 지점`} data-testid="al-tip-lease">
-                      리스로 열기
+                  ) : t.apply ? (
+                    <button
+                      type="button"
+                      className="btn btn-small btn-primary"
+                      onClick={() => {
+                        const next = t.apply!(state);
+                        if (next !== state) setState(next);
+                      }}
+                      data-testid="al-advice-apply"
+                    >
+                      {t.label ?? '적용'}
                     </button>
-                    <button type="button" className="btn btn-small" onClick={() => onPlanRoute(t.a, t.b)}>
-                      자세히
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
+                  ) : null}
+                </div>
+              </li>
+            ))}
           </ul>
         )}
+        {canAct && first && <p className="al-muted al-tip">처음 한 해는 비서가 권하는 대로 해 봐도 좋아요. 첫해에는 리스 보증금이 없어요.</p>}
       </div>
       <div className="al-info-side">
         <h4>내 회사 한눈에</h4>
         <ul className="al-facts">
           <li>
-            본사 <b>{CITY[me.hub].name}</b>
+            본사 <b>{CITY[me.hub].name}</b> · 지점 <b>{me.branches.length}</b>곳 · 노선 <b>{me.routes.length}</b>개
           </li>
           <li>
-            지점 <b>{me.branches.length}</b>곳 · 노선 <b>{me.routes.length}</b>개
-          </li>
-          <li>
-            비행기 <b>{me.planes.length}</b>대 (나는 중 {flying})
+            비행기 <b>{me.planes.length}</b>대 (가동률 {Math.round(use * 100)}%){me.orders.length > 0 && ` · 주문 ${me.orders.length}`}
           </li>
           <li>
             평판 <b>{Math.round(me.reputation)}</b> · 서비스 {me.service}단계
+            {me.partner !== null && ` · 제휴 ${state.companies[me.partner].name}`}
           </li>
         </ul>
-        <p className="al-muted al-tip">
-          지도에서 도시를 누르면 도시 정보와 지점 열기, 노선을 누르면 탑승률과 라이벌이 보여요. 끌어서 옮기고 휠로 확대해요.
-        </p>
+        {me.goals.length > 0 && (
+          <>
+            <h4>올해 목표</h4>
+            <ul className="al-goals-mini">
+              {me.goals.map((g) => {
+                const v = goalProgress(state, viewer, g);
+                return (
+                  <li key={g.kind}>
+                    <span>
+                      {v >= 1 ? '✅' : '🎯'} {g.text}
+                    </span>
+                    <Meter value={v} tone={v >= 1 ? 'good' : 'blue'} label={`${g.text} ${Math.round(v * 100)}%`} />
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
         {canAct && (
           <button type="button" className="btn btn-small" onClick={() => onPlanRoute(me.hub)}>
             ✈️ {CITY[me.hub].name}에서 새 노선 찾기

@@ -1,10 +1,12 @@
-import { MODEL, availableModels } from './aircraft';
-import { Planner, suggestRoutes, openSuggestion } from './ai';
+import { MODEL, availableModels, leadTime } from './aircraft';
+import { Planner, bestTimes, suggestRoutes, openSuggestion } from './ai';
+import { ACADEMY_COST, STAFF_GROUPS, STAFF_INFO, hireCost, hireTime, staffCap, staffNeed, staffPipe } from './staff';
 import { weather } from './calendar';
 import { CITY, REGIONS, airportClass, dist } from './cities';
 import { goalProgress } from './goals';
-import { CRISIS_MONTHS, bestFreq, buyBlocker, creditLimit, fmtMoney, idlePlanes, planeById, routeById } from './rules';
+import { CRISIS_MONTHS, MAX_ROUTES, applyAction, bestFreq, buyBlocker, creditLimit, fmtFine, fmtMoney, idlePlanes, planeById, routeById, usedBlocker } from './rules';
 import {
+  MAINT_COST,
   MAINT_NAMES,
   WEEK_HOURS,
   spareCover,
@@ -13,6 +15,7 @@ import {
   legFreq,
   maxFreq,
   newLeaseFixed,
+  orderPrice,
   planeAge,
   planeHours,
 } from './simulate';
@@ -130,6 +133,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   }
 
   // 4. 노선마다: 운임·횟수·닫기
+  const fullRoutes: { route: number; model: string; gain: number }[] = [];
   for (const r of c.routes) {
     const st = r.stats;
     if (!st || c.planes.every((p) => legFreq(p, r.id) === 0)) continue;
@@ -153,6 +157,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
       const gainFare = e.profit - now.profit;
       // 비행기를 하나 더 리스하면?
       const lease = bestLeaseFor(state, ci, r.id);
+      if (lease && lease.gain > 0.3 && up === r.fare) fullRoutes.push({ route: r.id, model: lease.model, gain: lease.gain });
       if (lease && lease.gain > gainFare && lease.gain > 3) {
         out.push({
           key: `add-${r.id}`,
@@ -165,6 +170,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
           weight: 300 + lease.gain,
         });
       } else if (gainFare > 1 && up !== r.fare) {
+        if (lease && lease.gain > 0.3) fullRoutes.push({ route: r.id, model: lease.model, gain: lease.gain });
         out.push({
           key: `fareup-${r.id}`,
           icon: '💹',
@@ -173,7 +179,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
           gain: gainFare,
           label: `운임 ${signed(up)}%`,
           apply: (s) => afterAct(s, ci, { type: 'setFare', route: r.id, fare: up }),
-          weight: 250 + gainFare,
+          weight: 150 + gainFare * 2,
         });
       }
     } else if (st.lf < 0.6) {
@@ -199,7 +205,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
           gain: gainFreq,
           label: `주 ${less}회로`,
           apply: (s) => afterAct(s, ci, { type: 'assign', plane: p.id, route: r.id, freq: less }),
-          weight: 220 + gainFreq,
+          weight: 150 + gainFreq * 2,
         });
       } else if (gainFare > 1 && down !== r.fare) {
         out.push({
@@ -210,9 +216,55 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
           gain: gainFare,
           label: `운임 ${signed(down)}%`,
           apply: (s) => afterAct(s, ci, { type: 'setFare', route: r.id, fare: down }),
-          weight: 200 + gainFare,
+          weight: 145 + gainFare * 2,
         });
       }
+    }
+  }
+
+  // 4¼. 꽉 찬 노선의 작은 비행기를 더 큰 리스기로 바꾸기 (노선 수 한도에 닿아도 자랄 수 있게)
+  {
+    const fullIds = new Set(c.routes.filter((r) => r.stats && r.stats.lf > 0.95 && r.fare >= 20).map((r) => r.id));
+    const small = c.planes
+      .filter((p) => p.legs.length === 1 && fullIds.has(p.legs[0].route))
+      .sort((x, y) => MODEL[x.model].seats - MODEL[y.model].seats)
+      .slice(0, 3);
+    for (const p of small) {
+      const rep = replacementFor(state, ci, p.id);
+      if (!rep || rep.gain <= 2 || MODEL[rep.model].seats <= MODEL[p.model].seats * 1.15) continue;
+      out.push({
+        key: `upgrade-${p.id}`,
+        icon: '⬆️',
+        title: `${routeName(c, p.legs[0].route)}: ${MODEL[p.model].name} → ${MODEL[rep.model].name}`,
+        detail: `좌석이 꽉 찼어요. ${MODEL[p.model].name}(${MODEL[p.model].seats}석)${p.leased ? '를 돌려주고' : '를 팔고'} 더 큰 ${MODEL[rep.model].name}(${MODEL[rep.model].seats}석)를 리스해 띄우면 달 이익 약 +${fmtMoney(rep.gain)}.`,
+        gain: rep.gain,
+        label: '큰 비행기로',
+        apply: (s2) => replacePlane(s2, ci, p.id, rep.model),
+        weight: 200 + rep.gain,
+      });
+      break;
+    }
+  }
+
+  // 4½. 꽉 찬 노선에 리스로는 남는 게 적으면 새 비행기를 주문해 두기 (리스보다 싸고, 오면 그 노선에 넣는다)
+  if (fullRoutes.length > 0) {
+    const f = fullRoutes.sort((x, y) => y.gain - x.gain)[0];
+    const m = MODEL[f.model];
+    const rep2 = state.report?.companies[ci];
+    const costs = rep2 ? rep2.fuel + rep2.crew + rep2.airport + rep2.service + rep2.sales + rep2.lease + rep2.fleet + rep2.branch + rep2.ads + rep2.interest + rep2.staff : 0;
+    const price = orderPrice(state, m, c);
+    const lead = leadTime(m, yearOf(state.q));
+    const waiting = c.orders.length;
+    if (lead <= 12 && waiting < 2 + Math.floor(c.planes.length / 8) && c.cash - price > costs * 2 + 150 && !buyBlocker(state, ci, m.id, false)) {
+      out.push({
+        key: `orderfull-${m.id}`,
+        icon: '🛒',
+        title: `${m.name} 주문해서 ${routeName(c, f.route)}에 보태기`,
+        detail: `좌석이 꽉 찬 노선이 ${fullRoutes.length}개예요. 리스로는 남는 게 적지만, ${fmtMoney(price)}에 주문하면 ${lead}달 뒤에 와서 리스료 없이 손님을 더 태워요.`,
+        label: '주문하기',
+        apply: (s2) => afterAct(s2, ci, { type: 'buy', model: m.id }),
+        weight: 180 + f.gain * 4,
+      });
     }
   }
 
@@ -234,29 +286,159 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     }
   }
 
-  // 6. 새 노선
+  // 6. 새 노선 (노선 수 한도에 닿으면 가장 못한 노선과 바꾸기)
   if (c.routes.length > 0 && c.planes.length > 0) {
     const cand = suggestRoutes(state, ci, 1)[0];
     const reserve = Math.max(60, (state.report?.companies[ci]?.ticket ?? 0) * 0.45);
-    if (cand && cand.profit > 3 && c.cash - cand.capital > reserve) {
+    const full = c.routes.length >= MAX_ROUTES;
+    const worst = full
+      ? [...c.routes].filter((r) => r.stats && state.t - r.since >= 6).sort((x, y) => (x.stats?.profit ?? 0) - (y.stats?.profit ?? 0))[0]
+      : undefined;
+    if (full && cand && worst && cand.profit > (worst.stats?.profit ?? 0) + 4 && c.cash - cand.capital > reserve) {
+      const freed = c.planes.find((p) => p.legs.length === 1 && p.legs[0].route === worst.id && MODEL[p.model].range >= dist(cand.a, cand.b));
+      out.push({
+        key: `swaproute-${cand.a}-${cand.b}`,
+        icon: '🔀',
+        title: `노선 바꾸기: ${routeName(c, worst.id)} → ${cityName(cand.a)}–${cityName(cand.b)}`,
+        detail: `노선은 ${MAX_ROUTES}개까지예요. 지난달 ${fmtMoney(worst.stats?.profit ?? 0)}를 번 ${routeName(c, worst.id)}를 닫고 ${cityName(cand.a)}–${cityName(cand.b)}를 열면 달 이익 약 ${fmtMoney(cand.profit)} 어림${freed ? ` (그 노선의 ${MODEL[freed.model].name}를 옮겨요)` : ''}.`,
+        gain: cand.profit - (worst.stats?.profit ?? 0),
+        label: '노선 바꾸기',
+        apply: (s2) => {
+          const closed = applyAction(s2, { type: 'closeRoute', route: worst.id });
+          if (closed === s2) return s2;
+          const opened = openSuggestion(closed, ci, cand, freed ? freed.id : 'lease');
+          return opened === closed ? s2 : opened;
+        },
+        weight: 130 + cand.profit - (worst.stats?.profit ?? 0),
+      });
+    } else if (!full && cand && cand.profit > 3 && c.cash - cand.capital > reserve) {
+      // 시간이 많이 남는 내 비행기가 있으면 그 비행기로, 같은 기종 중고가 있고 돈이 넉넉하면 중고로, 아니면 리스로
+      const d = dist(cand.a, cand.b);
+      const year = yearOf(state.q);
+      const own = c.planes
+        .map((p) => ({ p, m: MODEL[p.model], spare: WEEK_HOURS - planeHours(c, p) }))
+        .filter((x) => x.m.range >= d && airportClass(CITY[cand.a], year) >= x.m.runway && airportClass(CITY[cand.b], year) >= x.m.runway && x.spare >= 2 * (d / x.m.speed + 0.75) * Math.min(cand.freq, 5))
+        .sort((x, y) => y.spare - x.spare)[0];
+      const used = state.market.find((u) => u.model === cand.model.id && u.age <= 14);
+      const useUsed = !own && used && c.cash - used.price > reserve * 2.5 && !usedBlocker(state, ci, used.id);
+      const how: 'lease' | 'used' | number = own ? own.p.id : useUsed ? 'used' : 'lease';
+      const howText = own ? `남는 시간이 있는 ${own.m.name}로` : useUsed ? `${cand.model.name} 중고(${fmtMoney(used!.price)})로` : `${cand.model.name} 리스로`;
       out.push({
         key: `route-${cand.a}-${cand.b}`,
         icon: '🗺️',
         title: `새 노선: ${cityName(cand.a)}–${cityName(cand.b)}`,
-        detail: `${cand.model.name} 리스로 주 ${cand.freq}회, 달 이익 약 ${fmtMoney(cand.profit)} 어림${cand.needBranch.length ? ` (지점 ${cand.needBranch.map(cityName).join('·')} 함께)` : ''}.`,
+        detail: `${howText} 주 ${cand.freq}회쯤, 달 이익 약 ${fmtMoney(cand.profit)} 어림${cand.needBranch.length ? ` (지점 ${cand.needBranch.map(cityName).join('·')} 함께)` : ''}.`,
         gain: cand.profit,
         label: '노선 열기',
-        apply: (s) => openSuggestion(s, ci, cand),
+        apply: (s2) => {
+          const next = openSuggestion(s2, ci, cand, how);
+          return next === s2 && how !== 'lease' ? openSuggestion(s2, ci, cand, 'lease') : next;
+        },
         weight: 150 + cand.profit,
       });
     }
+  }
+
+  // 6¼. 직원: 모자라거나 곧 모자랄 그룹은 미리 뽑기, 만족도가 낮으면 임금
+  const need = staffNeed(state, c);
+  const cap = staffCap(need, c);
+  const flyingN = Math.max(1, c.planes.filter((p) => p.legs.length > 0).length);
+  {
+    const hires: { g: (typeof STAFF_GROUPS)[number]; n: number; fast: boolean }[] = [];
+    let urgent = false;
+    for (const g of STAFF_GROUPS) {
+      const st = c.staff[g];
+      const supply = st.have + staffPipe(c, g);
+      const lead = hireTime(c, g, false);
+      const perPlane = c.planes.length > 0 ? need[g] / flyingN : { pilot: 11, cabin: 20, tech: 6, ground: 4 }[g];
+      const buffer = { pilot: 0.15, cabin: 0.1, tech: 0.08, ground: 0.05 }[g];
+      const dueSoon = c.orders.filter((o) => o.due <= state.t + lead).length;
+      const target = Math.ceil(need[g] * (1 + buffer) + perPlane * (lead / 3 + dueSoon) + (g === 'pilot' ? 2 : 0));
+      // 조금 모자란 것은 기다렸다가 한꺼번에 (자주 누르지 않게)
+      if (need[g] <= 0 || supply >= target * 0.92) continue;
+      const short = st.have < need[g];
+      if (short && (g === 'pilot' || g === 'cabin')) urgent = true;
+      hires.push({ g, n: Math.min(400, Math.ceil(target * 1.05) - supply), fast: short && STAFF_INFO[g].fast < STAFF_INFO[g].hire });
+    }
+    if (hires.length > 0) {
+      const cost = hires.reduce((sum, h) => sum + hireCost(state, c, h.g, h.n, h.fast), 0);
+      const months = Math.max(...hires.map((h) => hireTime(c, h.g, h.fast)));
+      out.push({
+        key: 'hire',
+        icon: '👥',
+        title: `직원 뽑기: ${hires.map((h) => `${STAFF_INFO[h.g].name} ${h.n}명`).join(' · ')}`,
+        detail: `${urgent ? (cap < 1 ? '일손이 모자라 결항이 나고 있어요. ' : '초과 근무로 버티는 중이에요. ') : '앞으로 늘 비행기 몫까지 미리 뽑아 두면 좋아요. '}길게는 ${months}달 걸리고 모두 ${fmtFine(cost)} 들어요.`,
+        label: '모두 뽑기',
+        apply: (s2) => {
+          const pl = planner(s2, ci);
+          for (const h of hires) pl.act({ type: 'hire', group: h.g, n: h.n, fast: h.fast });
+          return pl.s;
+        },
+        weight: urgent ? (cap < 1 ? 700 : 420) : 210,
+      });
+    }
+  }
+  if (c.morale < 45) {
+    out.push({
+      key: 'pay',
+      icon: '💸',
+      title: '조종사·승무원 임금 올리기',
+      detail: `조직 만족도가 ${Math.round(c.morale)}이에요. 낮으면 지연이 늘고 서비스가 덜 친절해지고, 30 아래로 떨어지면 파업이 날 수 있어요. 임금 수준을 5% 올려 보세요.`,
+      label: '임금 +5%',
+      apply: (s2) => {
+        const pl = planner(s2, ci);
+        for (const g of ['pilot', 'cabin'] as const) pl.act({ type: 'setPay', group: g, level: Math.min(1.3, Math.round((pl.c.staff[g].pay + 0.05) * 100) / 100) });
+        return pl.s;
+      },
+      weight: c.morale < 32 ? 600 : 230,
+    });
+  }
+  if (!c.academy && c.planes.length >= 14 && c.cash > ACADEMY_COST * 2.5) {
+    out.push({ key: 'academy', icon: '🎓', title: '우리 훈련원 세우기', detail: `${fmtMoney(ACADEMY_COST)}으로 세우면 조종사를 3달(보통 5달) 만에 키우고 뽑는 돈이 40% 줄어요. 조직 만족도도 조금 올라요.`, label: '세우기', apply: (s2) => afterAct(s2, ci, { type: 'buildAcademy' }), weight: 95 });
+  }
+
+  // 6⅓. 시간표: 손님이 좋아하는 시간대로 (큰 노선 몇 개만)
+  const bigRoutes = [...c.routes].filter((r) => r.stats && r.stats.revenue > 0).sort((x, y) => (y.stats?.revenue ?? 0) - (x.stats?.revenue ?? 0)).slice(0, 4);
+  for (const r of bigRoutes) {
+    const b = bestTimes(state, ci, r.id);
+    if (!b || b.gain < 0.8) continue;
+    out.push({
+      key: `times-${r.id}`,
+      icon: '🕘',
+      title: `${routeName(c, r.id)} 시간대 바꾸기`,
+      detail: `아침 ${b.times[0]} · 낮 ${b.times[1]} · 저녁 ${b.times[2]} · 밤 ${b.times[3]} 비율로 나누면 손님이 좋아하는 때에 떠서 달 이익 약 +${fmtMoney(b.gain)}.`,
+      gain: b.gain,
+      label: '시간대 바꾸기',
+      apply: (s2) => afterAct(s2, ci, { type: 'setTimes', route: r.id, times: b.times }),
+      weight: 140 + b.gain,
+    });
+    break;
   }
 
   // 6½. 운항 현장: 지연·결항이 잦으면 정비와 예비기
   const repM = state.report?.companies[ci];
   if (repM && repM.flights > 0) {
     const cancelRate = repM.cancelled / repM.flights;
-    if ((c.onTime < 0.8 || cancelRate > 0.03) && c.maint < 5) {
+    // 날씨 한 달로 흔들리지 않게 최근 석 달로 본다
+    const recent = state.ledger.slice(-3).map((l) => l.companies[ci]).filter((x) => x && x.flights > 0);
+    const cancel3 = recent.reduce((a, x) => a + x.cancelled, 0) / Math.max(1, recent.reduce((a, x) => a + x.flights, 0));
+    if (c.maint >= 4 && c.onTime > 0.9 && cancel3 < 0.015) {
+      const next = c.maint - 1;
+      const save = repM.crew * (1 - MAINT_COST[next] / MAINT_COST[c.maint]);
+      if (save > 1) {
+        out.push({
+          key: 'maintdown',
+          icon: '🔧',
+          title: `정비 수준을 ‘${MAINT_NAMES[next]}’로 낮추기`,
+          detail: `최근 정시 운항률 ${Math.round(c.onTime * 100)}%, 결항 ${(cancel3 * 100).toFixed(1)}%로 안정됐어요. 한 단계 낮추면 승무원·정비비가 달 약 ${fmtMoney(save)} 줄어요.`,
+          gain: save,
+          label: '정비 낮추기',
+          apply: (s) => afterAct(s, ci, { type: 'setMaint', level: next }),
+          weight: 120 + save,
+        });
+      }
+    }
+    if ((c.onTime < 0.8 || cancel3 > 0.03) && c.maint < 5) {
       const next = c.maint + 1;
       out.push({
         key: 'maint',
@@ -285,6 +467,57 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   }
   if ((m0 === 10 || m0 === 11) && c.routes.some((r) => weather(r.a, 0).cause === 'snow' || weather(r.b, 0).cause === 'snow')) {
     out.push({ key: 'snow', icon: '❄️', title: '12~2월은 눈이 많이 와요', detail: '북쪽 공항은 폭설로 지연·결항이 늘어요. 정비 수준과 예비 승무원을 넉넉히 하면 덜 흔들려요.', weight: 80 });
+  }
+
+  // 6¾. 돈이 넉넉하면 많이 리스한 기종을 주문해 두기 (도착하면 리스기를 돌려줘 리스료를 아낀다)
+  {
+    const leased = c.planes.filter((p) => p.leased);
+    const rep2 = state.report?.companies[ci];
+    const costs = rep2 ? rep2.fuel + rep2.crew + rep2.airport + rep2.service + rep2.sales + rep2.lease + rep2.fleet + rep2.branch + rep2.ads + rep2.interest + rep2.staff : 0;
+    if (leased.length >= 2 && c.orders.length < 3) {
+      const count = new Map<string, number>();
+      for (const p of leased) count.set(p.model, (count.get(p.model) ?? 0) + 1);
+      const [model] = [...count.entries()].sort((x, y) => y[1] - x[1])[0];
+      const m = MODEL[model];
+      const price = orderPrice(state, m, c);
+      const lead = leadTime(m, yearOf(state.q));
+      if (lead <= 9 && c.cash - price > costs * 3 + 200 && !buyBlocker(state, ci, model, false)) {
+        out.push({
+          key: `order-${model}`,
+          icon: '🛒',
+          title: `${m.name} 한 대 주문해 두기`,
+          detail: `리스기 ${count.get(model)}대가 달마다 리스료를 내고 있어요. ${fmtMoney(price)}에 주문하면 ${lead}달 뒤에 와요. 오면 리스기 하나를 돌려주면 리스료(달 ${fmtMoney(leased.find((p) => p.model === model)!.rent)})를 아껴요.`,
+          label: '주문하기',
+          apply: (s2) => afterAct(s2, ci, { type: 'buy', model }),
+          weight: 170,
+        });
+      }
+    }
+    // 주문한 비행기가 와서 쉬고 있으면 같은 계열 리스기 노선을 넘겨받게
+    const idleOwn = idlePlanes(c).find((p) => !p.leased);
+    if (idleOwn) {
+      const lease = c.planes.find((x) => x.leased && x.legs.length > 0 && MODEL[x.model].family === MODEL[idleOwn.model].family);
+      if (lease) {
+        out.push({
+          key: `swap-${idleOwn.id}`,
+          icon: '🔁',
+          title: `새 ${MODEL[idleOwn.model].name}로 리스기 바꾸기`,
+          detail: `쉬는 내 비행기가 리스기 ${MODEL[lease.model].name}의 노선을 넘겨받고, 리스기는 돌려줘요 (리스료 달 ${fmtMoney(lease.rent)} 아낌).`,
+          label: '바꾸기',
+          apply: (s2) => {
+            const pl = planner(s2, ci);
+            const legs = planeById(pl.c, lease.id)?.legs.map((l) => ({ ...l })) ?? [];
+            if (!pl.act({ type: 'sell', plane: lease.id })) return s2;
+            for (const l of legs) {
+              const f = Math.min(l.freq, bestFreq(pl.s, ci, idleOwn.id, l.route));
+              if (f >= 1) pl.act({ type: 'assign', plane: idleOwn.id, route: l.route, freq: f });
+            }
+            return pl.s;
+          },
+          weight: 520,
+        });
+      }
+    }
   }
 
   // 7. 돈

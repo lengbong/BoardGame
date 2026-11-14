@@ -14,6 +14,7 @@ import { FOURLINE_SONG } from './song';
 import { fourLineSfx } from './sounds';
 import { FOURLINE_DELAYS, clearSavedFourLineGame, dropTiming, saveFourLineGame } from './storage';
 import type { FourLineSetup, FourLineState } from './types';
+import { soloOutcome, useRecordOutcome } from '../../lib/stats';
 
 interface FourLineGameProps {
   setup: FourLineSetup;
@@ -37,6 +38,7 @@ export function FourLineGame({ setup, initialState, settings, onSettings, onRest
   const later = useTimers();
   const delays = FOURLINE_DELAYS[settings.speed];
   useMusic(FOURLINE_SONG, settings.music);
+  useRecordOutcome('fourline', game.phase === 'gameover', () => soloOutcome(game.players.map((p) => p.kind), [game.winner]));
 
   const locked = lockUntil !== null;
   const active = game.phase === 'play';

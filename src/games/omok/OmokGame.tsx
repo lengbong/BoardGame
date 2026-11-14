@@ -13,6 +13,7 @@ import { OMOK_SONG } from './song';
 import { okSound } from './sounds';
 import { OMOK_DELAYS, clearSavedOmokGame, saveOmokGame } from './storage';
 import type { Cell, DuelAiLevel, OmokOptions, OmokSetup, OmokState } from './types';
+import { soloOutcome, useRecordOutcome } from '../../lib/stats';
 
 interface OmokGameProps {
   setup: OmokSetup;
@@ -37,6 +38,7 @@ export function OmokGame({ setup, initialState, settings, onSettings, onRestart,
   const later = useTimers();
   const delays = OMOK_DELAYS[settings.speed];
   useMusic(OMOK_SONG, settings.music);
+  useRecordOutcome('omok', game.phase === 'gameover', () => soloOutcome(game.players.map((p) => p.kind), [game.winner]));
 
   const size = game.size;
   const rule = game.options.rule;

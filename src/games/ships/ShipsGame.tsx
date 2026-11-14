@@ -16,6 +16,7 @@ import { SHIPS_SONG } from './song';
 import { shipsSfx } from './sounds';
 import { SHIPS_DELAYS, clearSavedShipsGame, saveShipsGame } from './storage';
 import { HIT, type PlacedShip, type ShipsSetup, type ShipsState, type ShotResult, type Side } from './types';
+import { soloOutcome, useRecordOutcome } from '../../lib/stats';
 
 interface ShipsGameProps {
   setup: ShipsSetup;
@@ -117,6 +118,7 @@ export function ShipsGame({ setup, initialState, settings, onSettings, onRestart
   const delays = SHIPS_DELAYS[settings.speed];
 
   useMusic(SHIPS_SONG, settings.music);
+  useRecordOutcome('ships', game.phase === 'gameover', () => soloOutcome(game.players.map((p) => p.kind), [game.winner]));
 
   const locked = anim !== null;
   const current = game.players[game.current];

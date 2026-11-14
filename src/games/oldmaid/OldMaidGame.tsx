@@ -18,6 +18,7 @@ import { omSound } from './sounds';
 import { OLDMAID_DELAYS, clearSavedOldMaidGame, saveOldMaidGame } from './storage';
 import { Table, pileTilt, type CenterFx, type SeatFx } from './Table';
 import type { OldMaidAction, OldMaidSetup, OldMaidState } from './types';
+import { soloOutcome, useRecordOutcome } from '../../lib/stats';
 
 interface OldMaidGameProps {
   setup: OldMaidSetup;
@@ -100,6 +101,7 @@ export function OldMaidGame({ setup, initialState, settings, onSettings, onResta
   const later = useTimers();
   const delays = OLDMAID_DELAYS[settings.speed];
   useMusic(OLDMAID_SONG, settings.music);
+  useRecordOutcome('oldmaid', game.phase === 'gameover', () => soloOutcome(game.players.map((p) => p.kind), game.players.map((_, i) => i).filter((i) => i !== game.thief)) === 'loss' ? 'loss' : soloOutcome(game.players.map((p) => p.kind), [0]) === null ? null : 'win');
 
   const locked = anim !== null;
   const dealing = anim?.dealing ?? false;

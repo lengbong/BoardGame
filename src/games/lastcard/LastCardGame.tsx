@@ -13,6 +13,7 @@ import { HAND_SIZE, applyAction, canCall, playableCards, playerName } from './ru
 import { LASTCARD_DELAYS, clearSavedLastCardGame, saveLastCardGame, type LastCardSettings } from './storage';
 import { Table, type CenterFx, type Flyer, type SeatFx, type TableRefs } from './Table';
 import type { CardColor, LastCardAction, LastCardSetup, LastCardState } from './types';
+import { soloOutcome, useRecordOutcome } from '../../lib/stats';
 
 interface LastCardGameProps {
   setup: LastCardSetup;
@@ -51,6 +52,7 @@ const EMPTY = new Set<number>();
 
 export function LastCardGame({ setup, initialState, settings, onSettings, onRestart, onChangeSetup, onExit }: LastCardGameProps) {
   const [game, setGame] = useState<LastCardState>(initialState);
+  useRecordOutcome('lastcard', game.phase === 'gameover', () => soloOutcome(game.players.map((p) => p.kind), [game.rankings[0]]));
   /** 연출이 끝날 때까지 입력을 막는다. dealing: 카드를 나눠 주는 중 */
   const [anim, setAnim] = useState<{ until: number; dealing: boolean } | null>(null);
   const [revealed, setRevealed] = useState<number | null>(null);

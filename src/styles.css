@@ -246,6 +246,16 @@ button.game-card:hover {
   vertical-align: middle;
   white-space: nowrap;
 }
+.game-stats {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 700;
+}
 .hub-resume {
   margin-bottom: 28px;
   padding: 14px 18px;

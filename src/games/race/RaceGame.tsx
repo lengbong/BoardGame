@@ -8,6 +8,7 @@ import { Panel } from './Panel';
 import { advanceTurn, applyMove, applyRoll, legalMoves, rollDieValue } from './rules';
 import { SPEED_DELAYS, clearSavedGame, saveGame, type Settings, type Speed } from './storage';
 import type { GameSetup, GameState, Move } from './types';
+import { soloOutcome, useRecordOutcome } from '../../lib/stats';
 
 interface RaceGameProps {
   setup: GameSetup;
@@ -31,6 +32,7 @@ const MEDALS = ['🥇', '🥈', '🥉', '4등'];
 
 export function RaceGame({ setup, initialState, settings, onSettings, onRestart, onChangeSetup, onExit }: RaceGameProps) {
   const [game, setGame] = useState<GameState>(initialState);
+  useRecordOutcome('race', game.phase === 'gameover', () => soloOutcome(game.players.map((p) => p.kind), [game.rankings[0]]));
   const [anim, setAnim] = useState<Animation | null>(null);
   const [rollingFace, setRollingFace] = useState<number | null>(null);
   const busy = useRef(false);

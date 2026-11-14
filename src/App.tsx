@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { CATEGORIES, GAMES } from './games/registry';
+import { loadStats, statsText } from './lib/stats';
 import { openFromHub, useHashRoute } from './lib/useHashRoute';
 
 /** 하던 판이 저장되어 있는 게임들 (게임마다 'family-boardgame.<id>.save.v1'에 저장하고, 끝나면 지운다) */
@@ -19,6 +20,9 @@ export function App() {
   // 목록으로 돌아올 때마다 다시 살펴본다
   const saved = useMemo(() => (game ? new Set<string>() : gamesInProgress()), [game]);
   const resumable = GAMES.filter((g) => saved.has(g.id));
+  // 컴퓨터와 겨룬 전적 (목록으로 돌아올 때마다 다시 읽는다)
+  const stats = useMemo(() => (game ? {} : loadStats()), [game]);
+  const totalWins = Object.values(stats).reduce((n, st) => n + st.wins, 0);
 
   // 게임을 열거나 닫을 때 맨 위에서 시작한다. (좁은 화면에서 처음 화면의 스크롤 위치가 남지 않게)
   useEffect(() => {
@@ -79,6 +83,11 @@ export function App() {
                       <small>
                         <span className="nowrap">👨‍👩‍👧‍👦 {g.players}</span> · <span className="nowrap">⏱ {g.playTime}</span>
                       </small>
+                      {statsText(stats[g.id]) && (
+                        <span className="game-stats" title="컴퓨터와 겨룬 전적" data-testid={`stats-${g.id}`}>
+                          🏆 {statsText(stats[g.id])}
+                        </span>
+                      )}
                     </span>
                   </button>
                 </li>
@@ -87,7 +96,10 @@ export function App() {
           </section>
         );
       })}
-      <footer className="hub-footer">인터넷 없이도 실행돼요 · 진행 중인 게임은 자동으로 저장돼요</footer>
+      <footer className="hub-footer">
+        인터넷 없이도 실행돼요 · 진행 중인 게임은 자동으로 저장돼요
+        {totalWins > 0 && <> · 지금까지 컴퓨터를 {totalWins}번 이겼어요 🏆</>}
+      </footer>
     </main>
   );
 }

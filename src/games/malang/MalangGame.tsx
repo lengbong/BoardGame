@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
+import { recordOutcome, soloOutcome } from '../../lib/stats';
 import { useMusic } from '../../lib/useMusic';
 import type { GameSettings } from '../common/settings';
 import { aiTick, newBrain, type AiBrain } from './ai';
@@ -235,6 +236,8 @@ export function MalangGame({ setup, initialState, resumed, settings, onSettings,
             else mpSound.win();
             if (st.phase === 'over') {
               clearSavedMalangGame();
+              const result = solo ? null : soloOutcome(st.players.map((p) => p.kind), [st.winner]);
+              if (result) recordOutcome('malang', result);
               const r = loadRecords();
               let fresh = false;
               const chain = Math.max(...st.players.filter((p) => p.kind === 'human').map((p) => p.stats.maxChain), 0);

@@ -18,6 +18,7 @@ import { MANCALA_SONG } from './song';
 import { mcSfx } from './sounds';
 import { MANCALA_DELAYS, clearSavedMancalaGame, loadMancalaSetup, saveMancalaGame, saveMancalaSetup } from './storage';
 import type { MancalaAction, MancalaSetup, MancalaState, MoveResult, Side } from './types';
+import { soloOutcome, useRecordOutcome } from '../../lib/stats';
 
 interface MancalaGameProps {
   setup: MancalaSetup;
@@ -123,6 +124,7 @@ export function MancalaGame({ setup, initialState, settings, onSettings, onResta
   const reduced = useMemo(prefersReducedMotion, []);
 
   useMusic(MANCALA_SONG, settings.music);
+  useRecordOutcome('mancala', game.phase === 'gameover', () => soloOutcome(game.players.map((p) => p.kind), [game.result?.winner]));
 
   const humans = humanSides(game);
   const bottom: Side = humans.length === 1 ? humans[0] : 0;

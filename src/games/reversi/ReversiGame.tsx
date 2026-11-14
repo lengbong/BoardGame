@@ -14,6 +14,7 @@ import { REVERSI_SONG } from './song';
 import { reversiSfx } from './sounds';
 import { REVERSI_DELAYS, clearSavedReversiGame, saveReversiGame } from './storage';
 import type { ReversiSetup, ReversiState } from './types';
+import { soloOutcome, useRecordOutcome } from '../../lib/stats';
 
 interface ReversiGameProps {
   setup: ReversiSetup;
@@ -42,6 +43,7 @@ export function ReversiGame({ setup, initialState, settings, onSettings, onResta
   const later = useTimers();
   const delays = REVERSI_DELAYS[settings.speed];
   useMusic(REVERSI_SONG, settings.music);
+  useRecordOutcome('reversi', game.phase === 'gameover', () => soloOutcome(game.players.map((p) => p.kind), [game.winner]));
 
   const locked = lockUntil !== null;
   const active = game.phase === 'play';

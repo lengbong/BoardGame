@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { MODEL } from './aircraft';
+import { defaultCabin } from './cabin';
 import { seededRandom } from '../../lib/random';
 import { aiTurn } from './ai';
 import { createGame } from './rules';
@@ -47,7 +49,7 @@ describe('저장과 이어하기', () => {
       (s) => (s.companies[0].debt = -5),
       (s) => (s.companies = []),
       (s) => (s.turnPos = 9),
-      (s) => (s.companies[1].planes = [{ id: 1, model: 'not-a-plane', leased: false, rent: 0, deposit: 0, since: 0, legs: [] }]),
+      (s) => (s.companies[1].planes = [{ id: 1, model: 'not-a-plane', leased: false, rent: 0, deposit: 0, since: 0, legs: [], cabin: { first: 0, business: 0, pitch: 1 }, meal: 3 }]),
       (s) => ((s as unknown as Record<string, unknown>).version = 1),
       (s) => ((s.companies[0] as unknown as Record<string, unknown>).orders = undefined),
       (s) => (s.companies[0].goals = [{ kind: 'moon' } as unknown as AirlineState['companies'][0]['goals'][0]]),
@@ -91,5 +93,27 @@ describe('저장과 이어하기', () => {
       delete c.orders;
     }
     expect(parseSaved({ setup, state: old, savedAt: 1 })).toBeNull();
+  });
+
+  it('좌석 배치·기내식이 없는 예전 저장은 표준 배치와 회사 기내식으로 불러온다', () => {
+    const { setup, state } = played(4);
+    const old = clone(state);
+    const c = old.companies[0];
+    expect(c.planes.length).toBeGreaterThan(0);
+    c.service = 4;
+    for (const p of c.planes) {
+      delete (p as Partial<typeof p>).cabin;
+      delete (p as Partial<typeof p>).meal;
+    }
+    const back = parseSaved({ setup, state: old, savedAt: 1 })!;
+    expect(back).not.toBeNull();
+    for (const p of back.state.companies[0].planes) {
+      expect(p.cabin).toEqual(defaultCabin(MODEL[p.model]));
+      expect(p.meal).toBe(4);
+    }
+    // 이상한 배치는 버린다
+    const bad = clone(state);
+    bad.companies[0].planes[0].cabin = { first: 0, business: 9999, pitch: 1 };
+    expect(isValidState(bad)).toBe(false);
   });
 });

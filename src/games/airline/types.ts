@@ -152,6 +152,16 @@ export interface ModelDef {
   note: string;
 }
 
+/** 일반석 앞뒤 간격: 0 촘촘, 1 보통, 2 넓게 */
+export type Pitch = 0 | 1 | 2;
+
+/** 비행기 한 대의 좌석 배치 (일반석 수는 남은 자리와 간격으로 정해진다: cabin.ts) */
+export interface Cabin {
+  first: number;
+  business: number;
+  pitch: Pitch;
+}
+
 /** 우리 회사 비행기 한 대 */
 export interface Plane {
   id: number;
@@ -165,6 +175,12 @@ export interface Plane {
   since: number;
   /** 띄우는 노선들 (한 대가 비행시간 안에서 여러 노선을 난다). 비면 쉬는 중 */
   legs: Leg[];
+  /** 좌석 배치 */
+  cabin: Cabin;
+  /** 기내식 1~5 */
+  meal: number;
+  /** 우리 회사에 온 분기 (이 분기에는 좌석 배치를 공짜로 바꾼다). 없으면 since */
+  got?: number;
 }
 
 /** 비행기 한 대가 한 노선을 한 주에 몇 번 왕복하는지 */
@@ -297,6 +313,8 @@ export interface RouteStats {
   xfer: number;
   /** 갈아타는 손님에게 받은 주간 수입 (억) */
   xferRev: number;
+  /** 고급 좌석(일등·비즈니스) 탑승률 0~1 (고급 좌석이 없으면 없음) */
+  premLf?: number;
 }
 
 export interface Route {
@@ -348,7 +366,7 @@ export interface Company {
   ads: Record<RegionId, number>;
   /** 지역마다 알려진 정도 0~1 (광고가 쌓인다) */
   awareness: Record<RegionId, number>;
-  /** 기내 서비스 1~5 */
+  /** 기내식 기본값 1~5 (새 비행기에 쓰고, 바꾸면 모든 비행기에 한꺼번에) */
   service: number;
   /** 평판 0~100 */
   reputation: number;
@@ -577,7 +595,12 @@ export type AirlineAction =
   | { type: 'endAlliance' }
   | { type: 'setFare'; route: number; fare: number }
   | { type: 'setAds'; region: RegionId; amount: number }
+  /** 기내식 기본값: 모든 비행기에 한꺼번에 */
   | { type: 'setService'; level: number }
+  /** 비행기 좌석 배치 (all이면 같은 기종 모두) */
+  | { type: 'setCabin'; plane: number; cabin: Cabin; all?: boolean }
+  /** 비행기 기내식 (all이면 같은 기종 모두) */
+  | { type: 'setMeal'; plane: number; level: number; all?: boolean }
   | { type: 'borrow'; amount: number }
   | { type: 'repay'; amount: number }
   | { type: 'build'; city: string; kind: BusinessKind }
@@ -596,6 +619,7 @@ export type GameEvent =
   | { id: number; type: 'alliance'; company: number; with: number; ok: boolean }
   | { id: number; type: 'sell'; company: number; model: string; amount: number }
   | { id: number; type: 'assign'; company: number; route: number }
+  | { id: number; type: 'cabin'; company: number; plane: number; cost: number }
   | { id: number; type: 'money'; company: number; amount: number; what: 'borrow' | 'repay' }
   | { id: number; type: 'build'; company: number; city: string; kind: BusinessKind }
   | { id: number; type: 'turn'; company: number }

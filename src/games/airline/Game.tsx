@@ -160,7 +160,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
         else if (e.type === 'sell') e.amount > 0 ? alSound.coins() : alSound.pay();
         else if (e.type === 'money') e.what === 'borrow' ? alSound.coins() : alSound.pay();
         else if (e.type === 'assign') alSound.takeoff();
-        else if (e.type === 'order') alSound.stamp();
+        else if (e.type === 'order' || e.type === 'cabin') alSound.stamp();
         else if (e.type === 'choice') alSound.bell();
         else if (e.type === 'alliance') e.ok ? alSound.chime() : alSound.nope();
       }

@@ -18,6 +18,7 @@ import {
 } from './simulate';
 import { qLabel, yearOf } from './time';
 import type { AirlineAction, AirlineState, ModelDef } from './types';
+import { CabinEditor, cabinSummary } from './CabinEditor';
 import { PlaneImage } from './PlaneImage';
 import { ActButton, Meter, Stars } from './ui';
 
@@ -42,6 +43,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
   const me = state.companies[viewer];
   const [tab, setTab] = useState<Tab>(me.planes.length === 0 && me.orders.length === 0 ? 'shop' : 'hangar');
   const [size, setSize] = useState<SizeClass | 'all'>('all');
+  const [cabinFor, setCabinFor] = useState<number | null>(null);
   const year = yearOf(state.q);
   const color = coColors(me);
   const paint = { main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] };
@@ -149,8 +151,11 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                   <div className="al-pl-name">
                     <b>{m.name}</b>
                     <small>
-                      {m.maker} · {m.seats}석 · {km(m.range)}
+                      {m.maker} · {km(m.range)}
                     </small>
+                    <button type="button" className="al-link al-small al-cabin-link" onClick={() => setCabinFor(cabinFor === p.id ? null : p.id)} aria-expanded={cabinFor === p.id} data-testid={`al-cabin-open-${p.id}`}>
+                      🪑 {cabinSummary(p)}
+                    </button>
                     <small>
                       {Math.floor(age)}년째 · {p.leased ? `리스 (분기 ${fmtMoney(p.rent)}${p.deposit > 0 ? ` · 보증금 ${fmtMoney(p.deposit)}` : ''})` : `내 것 (가치 ${fmtMoney(planeValue(state, p))})`}
                       {old && ' · 단종'}
@@ -202,6 +207,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                       {p.leased ? `반납 ${amount >= 0 ? '+' : '−'}${fmtMoney(Math.abs(amount))}` : `팔기 +${fmtMoney(amount)}`}
                     </ActButton>
                   </div>
+                  {cabinFor === p.id && <CabinEditor state={state} viewer={viewer} plane={p} canAct={canAct} perform={perform} onClose={() => setCabinFor(null)} />}
                 </li>
               );
             })}

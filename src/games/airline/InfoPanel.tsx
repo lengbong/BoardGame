@@ -439,7 +439,7 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice }
             비행기 <b>{me.planes.length}</b>대 (가동률 {Math.round(use * 100)}%){me.orders.length > 0 && ` · 주문 ${me.orders.length}`}
           </li>
           <li>
-            평판 <b>{Math.round(me.reputation)}</b> · 서비스 {me.service}단계
+            평판 <b>{Math.round(me.reputation)}</b> · 기내식 평균 {(me.planes.length > 0 ? me.planes.reduce((t, p) => t + p.meal, 0) / me.planes.length : me.service).toFixed(1)}단계
             {me.partner !== null && ` · 제휴 ${state.companies[me.partner].name}`}
           </li>
         </ul>

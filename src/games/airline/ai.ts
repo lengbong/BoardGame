@@ -1,5 +1,6 @@
 import { MODEL, availableModels, leadTime } from './aircraft';
 import { MAX_ROUTES } from './limits';
+import { cabinPresets, sameCabin } from './cabin';
 import { aiChoose, allianceScore } from './choices';
 import { CITIES, CITY, REGIONS, airportClass, citySize, dist, pairKey } from './cities';
 import {
@@ -41,7 +42,7 @@ import {
   type DraftPlane,
 } from './simulate';
 import { yearOf } from './time';
-import type { AirlineAction, AirlineState, Company, ModelDef, RegionId, Rng } from './types';
+import type { AirlineAction, AirlineState, Cabin, Company, ModelDef, RegionId, Rng } from './types';
 
 export type AiLevel = 'ai-easy' | 'ai-normal';
 
@@ -155,7 +156,8 @@ export class Planner {
       this.renewFleet();
       this.orderAhead();
       this.setAds();
-      this.setService();
+      this.configureCabins();
+      this.setMeals();
       this.maybePropose();
       this.manageLoans(false);
     } else {
@@ -684,11 +686,66 @@ export class Planner {
     if (Math.abs(want - this.c.ads[region]) > 3) this.act({ type: 'setAds', region, amount: want });
   }
 
-  private setService(): void {
+  /** 비행기가 나는 노선들의 평균 거리와 사업 손님 비율 (왕복 수 가중) */
+  private planeMix(planeId: number): { d: number; biz: number } | null {
+    const p = planeById(this.c, planeId);
+    if (!p || p.legs.length === 0) return null;
+    let w = 0;
+    let d = 0;
+    let biz = 0;
+    for (const l of p.legs) {
+      const r = routeById(this.c, l.route);
+      if (!r) continue;
+      const dem = pairDemand(this.s, r.a, r.b);
+      const tot = dem.biz + dem.leisure;
+      w += l.freq;
+      d += dist(r.a, r.b) * l.freq;
+      biz += (tot > 0 ? dem.biz / tot : 0.4) * l.freq;
+    }
+    return w > 0 ? { d: d / w, biz: biz / w } : null;
+  }
+
+  /** 새로 받은 비행기는 (공짜로 바꿀 수 있을 때) 노선 이익이 가장 큰 좌석 배치로 */
+  private configureCabins(): void {
+    for (const p0 of this.c.planes) {
+      if ((p0.got ?? p0.since) !== this.s.q || p0.legs.length === 0) continue;
+      const presets = cabinPresets(MODEL[p0.model]);
+      if (presets.length === 0) continue;
+      const profitWith = (cabin: Cabin) => {
+        let sum = 0;
+        for (const l of p0.legs) {
+          const route = routeById(this.c, l.route);
+          if (!route) continue;
+          const planes: DraftPlane[] = [];
+          for (const q of this.c.planes) {
+            const f = legFreq(q, route.id);
+            if (f > 0) planes.push({ model: q.model, freq: f, age: planeAge(this.s, q), fixed: fixedShare(this.c, q, route.id), cabin: q.id === p0.id ? cabin : q.cabin, meal: q.meal });
+          }
+          sum += estimateExisting(this.s, this.ci, route, { planes }).profit;
+        }
+        return sum;
+      };
+      const now = profitWith(p0.cabin);
+      let best: { cabin: Cabin; profit: number } = { cabin: p0.cabin, profit: now };
+      for (const pr of presets) {
+        if (sameCabin(pr.cabin, p0.cabin)) continue;
+        const v = profitWith(pr.cabin);
+        if (v > best.profit + Math.abs(now) * 0.01 + 0.5) best = { cabin: pr.cabin, profit: v };
+      }
+      if (!sameCabin(best.cabin, p0.cabin)) this.act({ type: 'setCabin', plane: p0.id, cabin: best.cabin });
+    }
+  }
+
+  /** 기내식: 짧은 노선은 간식, 먼 노선은 좋은 식사 (평판이 낮고 돈을 벌면 한 단계 더) */
+  private setMeals(): void {
     const rep = this.s.report?.companies[this.ci];
-    const profitable = !!rep && rep.profit > 0;
-    const want = profitable && this.c.reputation < 55 ? 4 : 3;
-    if (want !== this.c.service) this.act({ type: 'setService', level: want });
+    const boost = !!rep && rep.profit > 0 && this.c.reputation < 55 ? 1 : 0;
+    for (const p0 of this.c.planes) {
+      const mix = this.planeMix(p0.id);
+      if (!mix) continue;
+      const want = Math.min(5, (mix.d < 1200 ? 2 : mix.d < 4500 ? 3 : 4) + boost);
+      if (want !== p0.meal) this.act({ type: 'setMeal', plane: p0.id, level: want });
+    }
   }
 
   private manageLoans(before: boolean): void {

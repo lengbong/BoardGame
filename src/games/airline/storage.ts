@@ -2,6 +2,7 @@ import { loadJson, removeKey, saveJson } from '../../lib/storage';
 import { SEAT_KIND_OPTIONS } from '../common/players';
 import type { Speed } from '../common/speed';
 import { MODEL } from './aircraft';
+import { cabinBlocker, defaultCabin } from './cabin';
 import { CHALLENGE } from './challenges';
 import { CITY, REGIONS } from './cities';
 import { REAL_AIRLINE } from './realAirlines';
@@ -100,6 +101,10 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
     if (!isObj(p) || !isInt(p.id) || p.id >= nextId || typeof p.model !== 'string' || !MODEL[p.model] || typeof p.leased !== 'boolean') return false;
     if (!isNum(p.rent) || !isNum(p.deposit) || !isInt(p.since) || !Array.isArray(p.legs)) return false;
     if (!p.legs.every((l) => isObj(l) && isInt(l.route) && routeIds.has(l.route) && isInt(l.freq) && l.freq >= 1 && l.freq <= 28)) return false;
+    // 좌석 배치·기내식 (예전 판 저장에는 없을 수 있다 → 불러올 때 표준 배치)
+    if (p.cabin !== undefined && !(isObj(p.cabin) && cabinBlocker(MODEL[p.model], p.cabin) === null)) return false;
+    if (p.meal !== undefined && !(isInt(p.meal) && p.meal >= 1 && p.meal <= 5)) return false;
+    if (p.got !== undefined && !isInt(p.got)) return false;
   }
   if (!Array.isArray(k.orders) || !k.orders.every((o) => isObj(o) && isInt(o.id) && o.id < nextId && typeof o.model === 'string' && !!MODEL[o.model] && isInt(o.due) && isNum(o.price))) return false;
   if (!Array.isArray(k.mods) || !k.mods.every((m) => isObj(m) && isInt(m.id) && MOD_KINDS.includes(m.kind) && isNum(m.value) && isInt(m.until) && typeof m.label === 'string')) return false;
@@ -150,7 +155,12 @@ export function parseSaved(v: unknown): SavedAirlineGame | null {
   if (!isValidSetup(saved.setup) || !isValidState(saved.state)) return null;
   const options = parseOptions(saved.state.options);
   // 항공사 자료가 바뀌어 없어진 항공사는 가상 항공사로 (이름·색은 그대로)
-  const companies = saved.state.companies.map((c) => ({ ...c, airline: c.airline && REAL_AIRLINE[c.airline] ? c.airline : null, color: c.color ?? null }));
+  const companies = saved.state.companies.map((c) => ({
+    ...c,
+    airline: c.airline && REAL_AIRLINE[c.airline] ? c.airline : null,
+    color: c.color ?? null,
+    planes: c.planes.map((p) => ({ ...p, cabin: p.cabin ?? defaultCabin(MODEL[p.model]), meal: p.meal ?? c.service })),
+  }));
   return {
     setup: { ...saved.setup, hubs: saved.setup.hubs ?? [null, null, null, null], airlines: parseAirlines(saved.setup.airlines), options: parseOptions(saved.setup.options) },
     state: { ...saved.state, companies, options, events: [] },

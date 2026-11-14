@@ -4,6 +4,7 @@ import { MODEL, availableModels } from './aircraft';
 import { openSuggestion, type Candidate } from './ai';
 import { SEAT_SHAPES } from './Art';
 import { PlaneImage } from './PlaneImage';
+import { cabinSeats } from './cabin';
 import { AIRPORT_INFO, CITIES, CITY, REGIONS, REGION_INFO, airportClass, dist, pairKey } from './cities';
 import { fareText, fmtMoney, fmtPax, km, pct, signedMoney } from './format';
 import { FARE_MAX, FARE_MIN, applyAction, assignBlocker, bestFreq, buyBlocker, depositFor, maxRangeNow, routeBlocker, routeOnPair, usedBlocker } from './rules';
@@ -229,7 +230,7 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
                     <span className="al-pr-name">
                       <b>{m.name}</b>
                       <small>
-                        {m.seats}석 · {p.leased ? '리스' : '내 것'} · 가동 {Math.round(use * 100)}%
+                        {cabinSeats(m, p.cabin)}석 · {p.leased ? '리스' : '내 것'} · 가동 {Math.round(use * 100)}%
                       </small>
                       {elsewhere.length > 0 && (
                         <small className="al-muted" title={elsewhere.map((x) => `${CITY[x!.a].name}–${CITY[x!.b].name}`).join(', ')}>
@@ -339,7 +340,7 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
           </section>
         </div>
         <div className="al-editor-right">
-          <EstimateCard est={est} lastProfit={r.stats?.profit ?? null} lastLf={r.stats?.lf ?? null} />
+          <EstimateCard est={est} lastProfit={r.stats?.profit ?? null} lastLf={r.stats?.lf ?? null} lastPremLf={r.stats?.premLf ?? null} />
           {rivals.length > 0 && (
             <section className="al-card">
               <h4>라이벌</h4>
@@ -375,7 +376,19 @@ const COST_PARTS: { key: keyof RouteEstimate['cost']; name: string; cls: string 
 ];
 
 /** 이번 분기 어림 (손님·탑승률·수입·비용·이익) */
-export function EstimateCard({ est, lastProfit, lastLf, title = '이번 분기 어림' }: { est: RouteEstimate; lastProfit: number | null; lastLf: number | null; title?: string }) {
+export function EstimateCard({
+  est,
+  lastProfit,
+  lastLf,
+  lastPremLf = null,
+  title = '이번 분기 어림',
+}: {
+  est: RouteEstimate;
+  lastProfit: number | null;
+  lastLf: number | null;
+  lastPremLf?: number | null;
+  title?: string;
+}) {
   const total = Math.max(est.revenue, est.cost.total, 1);
   return (
     <section className="al-card al-estimate" aria-live="polite">
@@ -430,6 +443,7 @@ export function EstimateCard({ est, lastProfit, lastLf, title = '이번 분기 �
         <p className="al-muted al-last">
           지난 분기 실제: 이익 {signedMoney(lastProfit)}
           {lastLf !== null && ` · 탑승률 ${pct(lastLf)}`}
+          {lastPremLf !== null && ` · 고급 좌석 ${pct(lastPremLf)}`}
         </p>
       )}
     </section>

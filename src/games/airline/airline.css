@@ -2929,3 +2929,103 @@
 :root[data-theme='dark'] .al-planes {
   filter: brightness(1.45) saturate(1.05);
 }
+
+/* ---------------------------------------------------------------- 좌석 배치·기내식 */
+.al-cabin-link {
+  text-align: left;
+  font-size: 12px;
+  margin-top: 2px;
+}
+.al-cabin {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  margin-top: 4px;
+  border-top: 1px dashed var(--border);
+}
+.al-cabin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.al-cabin h5 {
+  margin: 0;
+  font-size: 15px;
+}
+.al-seatmap {
+  width: 100%;
+  max-height: 120px;
+  display: block;
+}
+.al-seatmap-small {
+  max-height: 60px;
+}
+.al-seatmap-body {
+  fill: color-mix(in srgb, var(--surface-2) 70%, #fff);
+  stroke: var(--border);
+  stroke-width: 0.25;
+}
+.al-seatmap-cockpit {
+  fill: #2b3a4d;
+  opacity: 0.75;
+}
+.al-seat-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 13px;
+}
+.al-seat-legend i {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  vertical-align: -1px;
+  margin-right: 3px;
+}
+.al-cabin-presets small {
+  opacity: 0.75;
+  margin-left: 2px;
+}
+.al-cabin-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  font-size: 13.5px;
+}
+.al-cabin-controls label,
+.al-cabin-pitch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.al-cabin-pitch > span,
+.al-cabin-controls label > span {
+  font-weight: 700;
+}
+.al-cabin-outlook {
+  margin: 0;
+  font-size: 13.5px;
+}
+.al-cabin .al-good {
+  color: var(--al-good);
+}
+.al-cabin .al-bad {
+  color: var(--al-bad);
+}
+.al-cabin-apply {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.al-meal-title {
+  margin-top: 4px !important;
+}
+.al-cabin .al-svc small.al-muted {
+  font-size: 10.5px;
+}

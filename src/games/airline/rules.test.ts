@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { defaultCabin } from './cabin';
 import { seededRandom } from '../../lib/random';
 import { MODEL, availableModels, commonalityMult, launchDiscount, leadTime } from './aircraft';
 import { CHALLENGE } from './challenges';
@@ -209,7 +210,7 @@ describe('비행기', () => {
     const s = twoHumans({ money: 'rich' });
     const crew = () => estimateRoute(s, 0, 'seoul', 'tokyo', [{ model: 'a320', freq: 10 }], 0).cost.crew;
     const before = crew();
-    for (let i = 0; i < 4; i++) s.companies[0].planes.push({ id: s.nextId++, model: 'a321', leased: false, rent: 0, deposit: 0, since: s.q, legs: [] });
+    for (let i = 0; i < 4; i++) s.companies[0].planes.push({ id: s.nextId++, model: 'a321', leased: false, rent: 0, deposit: 0, since: s.q, legs: [], cabin: defaultCabin(MODEL['a321']), meal: 3 });
     expect(MODEL.a321.family).toBe(MODEL.a320.family);
     expect(commonalityMult(4)).toBeLessThan(1);
     expect(crew()).toBeLessThan(before);
@@ -258,7 +259,7 @@ describe('비행기', () => {
 
   it('팔면 가치의 90%를 받고, 리스기를 돌려주면 위약금을 낸다', () => {
     let s = twoHumans();
-    s.companies[0].planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.q - 8, legs: [] });
+    s.companies[0].planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.q - 8, legs: [], cabin: defaultCabin(MODEL['a320']), meal: 3 });
     s = act(s, { type: 'lease', model: 'a320' });
     const [own, leased] = s.companies[0].planes;
     const cash = s.companies[0].cash;
@@ -313,7 +314,7 @@ describe('비행기', () => {
     expect(bestFreq(s, 0, small.id, tyo.id)).toBe(max);
     // 도쿄 슬롯을 거의 다 쓴 것처럼 꾸민다
     const cap = slotCapacity(s, 0, 'tokyo');
-    s.companies[0].planes.push({ id: 999, model: 'a320', leased: true, rent: 1, deposit: 0, since: s.q, legs: [{ route: tyo.id, freq: cap - 2 }] });
+    s.companies[0].planes.push({ id: 999, model: 'a320', leased: true, rent: 1, deposit: 0, since: s.q, legs: [{ route: tyo.id, freq: cap - 2 }], cabin: defaultCabin(MODEL['a320']), meal: 3 });
     s.nextId = 1000;
     expect(assignBlocker(s, 0, small.id, tyo.id, 3)).toContain('도쿄 슬롯이 모자라요');
     expect(bestFreq(s, 0, small.id, tyo.id)).toBe(2);
@@ -430,7 +431,7 @@ describe('승리 조건', () => {
       for (const city of [a, b]) if (!c.branches.includes(city)) c.branches.push(city);
       const rid = s.nextId++;
       c.routes.push({ id: rid, a, b, fare: 0, since: s.q, stats: null });
-      c.planes.push({ id: s.nextId++, model, leased: true, rent: 10, deposit: 0, since: s.q, legs: [{ route: rid, freq: 2 }] });
+      c.planes.push({ id: s.nextId++, model, leased: true, rent: 10, deposit: 0, since: s.q, legs: [{ route: rid, freq: 2 }], cabin: defaultCabin(MODEL[model]), meal: 3 });
     }
     s = runQuarter(s, seededRandom(1));
     expect(s.phase).toBe('gameover');

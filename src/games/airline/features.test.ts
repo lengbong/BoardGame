@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { MODEL } from './aircraft';
+import { defaultCabin } from './cabin';
 import { seededRandom } from '../../lib/random';
 import { advise } from './advisor';
 import { aiTurn, planTurn } from './ai';
@@ -37,7 +39,7 @@ function addRoute(s: AirlineState, ci: number, a: string, b: string, model: stri
   for (const city of [a, b]) if (!c.branches.includes(city)) c.branches.push(city);
   const rid = s.nextId++;
   c.routes.push({ id: rid, a, b, fare: 0, since: s.q, stats: null });
-  c.planes.push({ id: s.nextId++, model, leased: true, rent: 10, deposit: 0, since: s.q, legs: [{ route: rid, freq }] });
+  c.planes.push({ id: s.nextId++, model, leased: true, rent: 10, deposit: 0, since: s.q, legs: [{ route: rid, freq }], cabin: defaultCabin(MODEL[model]), meal: 3 });
   return rid;
 }
 
@@ -148,7 +150,7 @@ describe('결정 사건', () => {
       ]) {
         addRoute(s, 0, a, b, era === 1963 ? 'b707' : era === 1983 ? 'b737-200' : 'a320', 3);
       }
-      s.companies[0].planes.push({ id: s.nextId++, model: era === 1963 ? 'b707' : 'a320', leased: false, rent: 0, deposit: 0, since: s.q, legs: [] });
+      s.companies[0].planes.push({ id: s.nextId++, model: era === 1963 ? 'b707' : 'a320', leased: false, rent: 0, deposit: 0, since: s.q, legs: [], cabin: defaultCabin(MODEL[era === 1963 ? 'b707' : 'a320']), meal: 3 });
       const here = new Set<string>();
       for (let k = 0; k < 60; k++) {
         const d = makeChoice(s, 0, seededRandom(k * 7 + era));
@@ -219,7 +221,7 @@ describe('파산과 중고 시장', () => {
   it('파산한 회사의 내 비행기는 중고 시장에 나오고, 슬롯이 비었다는 소식이 뜬다', () => {
     let s = createGame(setup(['human', 'human', 'human']), seededRandom(1));
     const c = s.companies[0];
-    for (let i = 0; i < 3; i++) c.planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.q - 8, legs: [] });
+    for (let i = 0; i < 3; i++) c.planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.q - 8, legs: [], cabin: defaultCabin(MODEL['a320']), meal: 3 });
     c.cash = -99999;
     c.baseCredit = 0;
     c.crisis = 1;
@@ -345,7 +347,7 @@ describe('컴퓨터 성향과 기타', () => {
 
   it(`비행기는 주문까지 ${MAX_PLANES}대까지`, () => {
     const s = twoHumans();
-    for (let i = 0; i < MAX_PLANES; i++) s.companies[0].planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.q, legs: [] });
+    for (let i = 0; i < MAX_PLANES; i++) s.companies[0].planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.q, legs: [], cabin: defaultCabin(MODEL['a320']), meal: 3 });
     s.companies[0].cash = 1e6;
     expect(applyAction(s, { type: 'buy', model: 'a320' })).toBe(s);
     expect(applyAction(s, { type: 'lease', model: 'a320' })).toBe(s);

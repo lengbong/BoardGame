@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
 import { MODEL } from './aircraft';
+import { MEAL_ICONS, MEAL_NAMES } from './cabin';
 import { CITY, REGIONS, REGION_INFO } from './cities';
 import { fmtMoney, signedMoney } from './format';
 import { GRADE_INFO, goalProgress } from './goals';
 import { ADS_MAX, allianceOutlook, borrowBlocker, proposeBlocker, repayBlocker } from './rules';
 import {
-  SERVICE_NAMES,
   businessValue,
   companyValue,
   computeQuarter,
@@ -58,6 +58,8 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
   const amounts = [100, 500, 1000];
   const adsTotal = REGIONS.reduce((s, r) => s + me.ads[r], 0);
   const target = reputationTarget(state, me);
+  const avgMeal = me.planes.length > 0 ? me.planes.reduce((s, p) => s + p.meal, 0) / me.planes.length : me.service;
+  const mixed = me.planes.some((p) => p.meal !== me.service);
   const deposits = me.planes.reduce((s, p) => s + p.deposit, 0);
   const ordered = me.orders.reduce((s, o) => s + o.price, 0);
   const mods = me.mods.filter((m) => m.until > state.q);
@@ -302,9 +304,9 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
 
       <section className="al-card al-service">
         <h4>
-          기내 서비스 <small>평판 {Math.round(me.reputation)} → {Math.round(target)}</small>
+          기내식 기본값 <small>평판 {Math.round(me.reputation)} → {Math.round(target)}</small>
         </h4>
-        <div className="al-service-row" role="radiogroup" aria-label="기내 서비스">
+        <div className="al-service-row" role="radiogroup" aria-label="기내식 기본값">
           {[1, 2, 3, 4, 5].map((lv) => (
             <button
               key={lv}
@@ -312,17 +314,22 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
               role="radio"
               aria-checked={me.service === lv}
               className={`al-svc${me.service === lv ? ' al-on' : ''}`}
+              title={`모든 비행기의 기내식을 '${MEAL_NAMES[lv]}'(으)로`}
               disabled={!canAct}
               onClick={() => perform({ type: 'setService', level: lv })}
             >
-              <span aria-hidden="true">{'🍽️'.repeat(1)}{lv >= 4 ? '✨' : ''}</span>
+              <span aria-hidden="true">{MEAL_ICONS[lv]}</span>
               <b>{lv}</b>
-              <small>{SERVICE_NAMES[lv]}</small>
+              <small>{MEAL_NAMES[lv]}</small>
             </button>
           ))}
         </div>
         <Meter value={me.reputation / 100} tone="good" label="평판" />
-        <p className="al-muted al-tip">서비스가 좋으면 손님 한 명당 돈이 더 들지만 평판이 올라 손님이 우리를 더 골라요. 새 비행기도 평판을 올려 줘요.</p>
+        <p className="al-muted al-tip">
+          누르면 모든 비행기의 기내식이 한꺼번에 바뀌고, 새로 받는 비행기도 이 단계로 시작해요. 비행기마다 따로 정하려면 비행기 화면에서 🪑 좌석·기내식을 누르세요. 기내식이 좋을수록 손님 한 명당
+          돈이 더 들지만 평판이 올라 손님이 우리를 더 골라요.
+          {mixed && <b> 지금은 비행기마다 기내식이 달라요 (평균 {avgMeal.toFixed(1)}단계).</b>}
+        </p>
         {me.businesses.length > 0 && (
           <>
             <h4>호텔·여행사</h4>

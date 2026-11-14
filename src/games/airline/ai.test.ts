@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { defaultCabin } from './cabin';
 import { seededRandom } from '../../lib/random';
 import { MODEL } from './aircraft';
 import { aiManage, aiTurn, planTurn } from './ai';
@@ -98,7 +99,7 @@ describe('컴퓨터 항공사', () => {
     let s = createGame(setup(['ai-normal', 'human'], {}, [null, 'london']), seededRandom(7));
     s = aiManage(s, 0, 'ai-normal', seededRandom(7));
     const c = s.companies[0];
-    c.planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.q, legs: [] });
+    c.planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.q, legs: [], cabin: defaultCabin(MODEL['a320']), meal: 3 });
     c.cash = -30;
     c.crisis = 1;
     c.ads.eastasia = 50;

@@ -1,10 +1,23 @@
 import { MODEL, commonalityMult, launchDiscount } from './aircraft';
+import {
+  BIZ_ECON_YIELD,
+  MEAL_COST,
+  PITCH_COMFORT,
+  cabinStats,
+  defaultCabin,
+  mealComfort,
+  premYield,
+  premiumAttraction,
+  premiumCostMult,
+  type CabinStats,
+} from './cabin';
 import { AIRPORT_INFO, CITY, FEE_INFO, REGIONS, SEASON_INFO, airportClass, citySize, dist, pairIndex, pairKey } from './cities';
 import { effectMults, fixedEventMult, priceMult } from './events';
 import { quarterOf, yearOf } from './time';
 import type {
   AirlineState,
   Business,
+  Cabin,
   Company,
   CompanyReport,
   Mod,
@@ -65,9 +78,6 @@ export const MAX_DETOUR = 1.6;
 export const XFER_FARE = 0.85;
 /** 갈아타는 데 걸리는 시간 */
 export const XFER_HOURS = 2;
-/** 서비스 수준별 손님 1명 서비스비 배수 (1~5) */
-export const SERVICE_COST = [0, 0.5, 0.75, 1, 1.4, 1.9];
-export const SERVICE_NAMES = ['', '아주 간단', '간단', '보통', '좋음', '최고급'];
 
 /** 연도별 값표에서 사이 값을 셈한다 */
 function interp(table: readonly (readonly [number, number])[], t: number): number {
@@ -409,7 +419,16 @@ interface OfferPlane {
   model: ModelDef;
   freq: number;
   age: number;
+  /** 좌석 배치·기내식 요약 (없으면 표준 배치·기내식 3단계) */
+  cab?: CabinStats;
 }
+
+/** 비행기 한 대의 좌석 요약 */
+export function planeCabin(p: Plane): CabinStats {
+  return cabinStats(MODEL[p.model], p.cabin, p.meal);
+}
+
+const stdCabin = (m: ModelDef, meal = 3) => cabinStats(m, defaultCabin(m), meal);
 
 /** 한 회사가 두 도시 사이에 내놓은 운항 */
 export interface Offer {
@@ -431,6 +450,9 @@ export interface OfferResult {
   revenue: number;
   /** 평균 한 번 나는 시간 (갈아타기 계산용) */
   hours: number;
+  /** 고급 좌석(일등·비즈니스) 주간 좌석과 손님 (한 방향) */
+  premSeats: number;
+  premPax: number;
 }
 
 const A0_BIZ = 1.2;
@@ -452,33 +474,52 @@ function partnerBonus(state: AirlineState, c: Company, a: string, b: string): nu
   return joint(a) || joint(b) ? 1.05 : 1;
 }
 
+interface Attraction {
+  biz: number;
+  leisure: number;
+  seats: number;
+  /** 고급 좌석 · 일반석 (한 방향 주간) */
+  prem: number;
+  econ: number;
+  /** 사업 손님이 고급 좌석에 앉을 때 운임 배수 */
+  premYield: number;
+  hours: number;
+  premium: number;
+}
+
 /** 회사의 매력 (사업·관광) */
-function attraction(
-  state: AirlineState,
-  a: string,
-  b: string,
-  offer: Offer,
-  bestHours: number,
-): { biz: number; leisure: number; seats: number; hours: number; premium: number } {
+function attraction(state: AirlineState, a: string, b: string, offer: Offer, bestHours: number): Attraction {
   const c = state.companies[offer.company];
   const d = dist(a, b);
   let freq = 0;
   let seats = 0;
+  let prem = 0;
+  let econ = 0;
+  let premAttr = 0;
+  let firstSeats = 0;
+  let yieldSum = 0;
   let comfortSum = 0;
   let hoursSum = 0;
   let premiumSum = 0;
   for (const p of offer.planes) {
     if (p.freq <= 0) continue;
-    const cap = p.model.seats * p.freq;
+    const cab = p.cab ?? stdCabin(p.model);
+    const cap = cab.seats * p.freq;
     freq += p.freq;
     seats += cap;
-    const comfort = 0.775 + 0.075 * p.model.comfort - Math.min(0.15, 0.008 * p.age);
+    prem += cab.prem * p.freq;
+    econ += cab.econ * p.freq;
+    firstSeats += cab.first * p.freq;
+    // 초음속기는 한 등급뿐이라 고급 좌석 비율을 표준으로 본다
+    premAttr += cab.fixed ? cap * 0.1 : (cab.prem - cab.first + 1.5 * cab.first) * p.freq;
+    yieldSum += premYield(cab, d, BIZ_PREMIUM) * cab.prem * p.freq;
+    const comfort = (0.775 + 0.075 * p.model.comfort - Math.min(0.15, 0.008 * p.age)) * PITCH_COMFORT[cab.pitch] * mealComfort(cab.meal);
     comfortSum += comfort * cap;
     hoursSum += legHours(p.model, d) * cap;
     premiumSum += (p.model.body === 'sst' ? SST_PREMIUM : 1) * cap;
   }
-  if (freq === 0) return { biz: 0, leisure: 0, seats: 0, hours: 0, premium: 1 };
-  const comfort = (comfortSum / seats) * (0.9 + 0.05 * (c.service - 1));
+  if (freq === 0) return { biz: 0, leisure: 0, seats: 0, prem: 0, econ: 0, premYield: 0, hours: 0, premium: 1 };
+  const comfort = comfortSum / seats;
   const hours = hoursSum / seats;
   const premium = premiumSum / seats;
   const speed = bestHours > 0 ? bestHours / hours : 1;
@@ -493,12 +534,16 @@ function attraction(
       bizBonus *= 1.05;
     }
   }
+  const cabinBiz = premiumAttraction(premAttr / seats, d, firstSeats > 0);
   const p = (1 + offer.fare / 100) * premium;
   const common = quality(c, a, b) * hub * partnerBonus(state, c, a, b);
   return {
-    biz: freq ** 0.6 * p ** -0.8 * common * comfort ** 1.5 * speed * bizBonus * demandMult(c, a, b, state.q, 'biz'),
+    biz: freq ** 0.6 * p ** -0.8 * common * comfort ** 1.5 * speed * bizBonus * cabinBiz * demandMult(c, a, b, state.q, 'biz'),
     leisure: freq ** 0.5 * p ** -1.8 * common * comfort ** 0.5 * speed ** 0.3 * leisureBonus * demandMult(c, a, b, state.q, 'leisure'),
     seats,
+    prem,
+    econ,
+    premYield: prem > 0 ? yieldSum / prem : 0,
     hours,
     premium,
   };
@@ -510,7 +555,11 @@ export interface SplitResult {
   unserved: { biz: number; leisure: number };
 }
 
-/** 두 도시 사이 손님을 회사들이 나눈다 (좌석이 모자라면 남은 손님 절반은 다른 회사로) */
+/**
+ * 두 도시 사이 손님을 회사들이 나눈다.
+ * 사업 손님은 고급 좌석부터 앉고 모자라면 일반석으로, 관광 손님은 일반석에 앉고 남은 고급 좌석에는 같은 값에 앉는다.
+ * 좌석이 모자라면 못 탄 손님 절반은 자리가 남은 다른 회사로 간다.
+ */
 export function splitMarketFull(state: AirlineState, a: string, b: string, offers: Offer[], demand = pairDemand(state, a, b)): SplitResult {
   const d = dist(a, b);
   let bestHours = Infinity;
@@ -521,9 +570,15 @@ export function splitMarketFull(state: AirlineState, a: string, b: string, offer
   const sumL = attrs.reduce((s, x) => s + x.leisure, 0);
   const wantB = attrs.map((x) => (demand.biz * x.biz) / (sumB + A0_BIZ));
   const wantL = attrs.map((x) => (demand.leisure * x.leisure) / (sumL + A0_LEISURE));
-  // 사업 손님부터 태운다 (운임이 비싸니까)
-  const gotB = attrs.map((x, i) => Math.min(wantB[i], x.seats));
-  const gotL = attrs.map((x, i) => Math.min(wantL[i], x.seats - gotB[i]));
+  // 사업 손님: 고급 좌석 → 일반석
+  const bizPrem = attrs.map((x, i) => Math.min(wantB[i], x.prem));
+  const bizEcon = attrs.map((x, i) => Math.min(wantB[i] - bizPrem[i], x.econ));
+  // 관광 손님: 일반석 → 남은 고급 좌석
+  const leiEcon = attrs.map((x, i) => Math.min(wantL[i], x.econ - bizEcon[i]));
+  const leiPrem = attrs.map((x, i) => Math.min(wantL[i] - leiEcon[i], x.prem - bizPrem[i]));
+  const gotB = attrs.map((_, i) => bizPrem[i] + bizEcon[i]);
+  const gotL = attrs.map((_, i) => leiEcon[i] + leiPrem[i]);
+  const spilledB = attrs.map(() => 0);
   // 못 탄 손님의 절반은 자리가 남은 다른 회사로
   const spillB = wantB.reduce((s, w, i) => s + (w - gotB[i]), 0) * 0.5;
   const spillL = wantL.reduce((s, w, i) => s + (w - gotL[i]), 0) * 0.5;
@@ -537,6 +592,7 @@ export function splitMarketFull(state: AirlineState, a: string, b: string, offer
       if (free[i] <= 0.5) continue;
       const addB = sB > 0 ? Math.min(free[i], (spillB * wB[i]) / sB) : 0;
       gotB[i] += addB;
+      spilledB[i] += addB;
       const addL = sL > 0 ? Math.min(free[i] - addB, (spillL * wL[i]) / sL) : 0;
       gotL[i] += addL;
     }
@@ -544,16 +600,22 @@ export function splitMarketFull(state: AirlineState, a: string, b: string, offer
   const total = gotB.reduce((s, x) => s + x, 0) + gotL.reduce((s, x) => s + x, 0);
   const fare = baseFare(d, state.q);
   const results = offers.map((o, i) => {
-    const p = (1 + o.fare / 100) * attrs[i].premium;
+    const x = attrs[i];
+    const p = (1 + o.fare / 100) * x.premium;
     const pax = gotB[i] + gotL[i];
+    // 초음속기처럼 일반석이 없는 회사로 넘어온 사업 손님도 고급 좌석 값을 낸다
+    const spillYield = x.econ > 0 ? BIZ_ECON_YIELD : x.premYield || BIZ_ECON_YIELD;
+    const units = bizPrem[i] * x.premYield + bizEcon[i] * BIZ_ECON_YIELD + spilledB[i] * spillYield + gotL[i];
     return {
       company: o.company,
       biz: gotB[i],
       leisure: gotL[i],
-      seats: attrs[i].seats,
+      seats: x.seats,
       share: total > 0 ? pax / total : 0,
-      revenue: ((gotB[i] * BIZ_PREMIUM + gotL[i]) * fare * p * 2) / 10000,
-      hours: attrs[i].hours,
+      revenue: (units * fare * p * 2) / 10000,
+      hours: x.hours,
+      premSeats: x.prem,
+      premPax: x.econ > 0 ? bizPrem[i] + leiPrem[i] : pax,
     };
   });
   return { results, unserved: { biz: A0_BIZ / (sumB + A0_BIZ), leisure: A0_LEISURE / (sumL + A0_LEISURE) } };
@@ -584,6 +646,8 @@ export interface CostPlane {
   age: number;
   /** 이 노선 몫의 리스료·보험 (분기) */
   fixed: number;
+  /** 좌석 배치·기내식 (없으면 표준 배치·회사 기내식 기본값) */
+  cab?: CabinStats;
 }
 
 /** 회사마다 다른 비용 배수 */
@@ -626,9 +690,16 @@ export function routeCost(
   let crew = 0;
   let airport = 0;
   let lease = 0;
+  // 기내식·서비스비: 비행기마다 기내식 단계와 고급 좌석 비율이 다르다 (좌석 비율로 손님을 나눈다)
+  let svcSeats = 0;
+  let svcWeighted = 0;
   for (const p of planes) {
     lease += p.fixed;
     if (p.freq <= 0) continue;
+    const cab = p.cab ?? stdCabin(p.model, c.service);
+    const cap = cab.seats * p.freq;
+    svcSeats += cap;
+    svcWeighted += cap * MEAL_COST[cab.meal] * premiumCostMult(cab.fixed ? 0.1 : cab.prem / Math.max(1, cab.seats));
     const trips = p.freq * WEEKS;
     fuel += trips * 2 * d * p.model.burn * (1 + 0.006 * p.age) * FUEL_PRICE * ctx.oil * ctx.fuelMult;
     const common = commonalityMult(ctx.families.get(p.model.family) ?? 1);
@@ -637,7 +708,7 @@ export function routeCost(
   }
   const paxQ = paxWeek * 2 * WEEKS;
   airport += paxQ * HANDLING;
-  const service = paxQ * (0.3 + 0.00025 * d) * SERVICE_COST[c.service] * ctx.serviceMult;
+  const service = paxQ * (0.3 + 0.00025 * d) * (svcSeats > 0 ? svcWeighted / svcSeats : MEAL_COST[c.service]) * ctx.serviceMult;
   // 만 원 → 억 원
   fuel /= 10000;
   crew /= 10000;
@@ -653,6 +724,9 @@ export interface DraftPlane {
   model: string;
   freq: number;
   age?: number;
+  /** 좌석 배치·기내식 (없으면 표준 배치·회사 기내식 기본값) */
+  cabin?: Cabin;
+  meal?: number;
   /** 이 노선 몫의 리스료·보험 (분기). 없으면 새 리스기 한 대를 통째로 쓴다고 보고 셈한다 */
   fixed?: number;
 }
@@ -680,7 +754,7 @@ function offerFromRoute(state: Pick<AirlineState, 'q' | 'companies'>, ci: number
   const planes: OfferPlane[] = [];
   for (const p of c.planes) {
     const f = legFreq(p, route.id);
-    if (f > 0) planes.push({ model: MODEL[p.model], freq: f, age: planeAge(state, p) });
+    if (f > 0) planes.push({ model: MODEL[p.model], freq: f, age: planeAge(state, p), cab: planeCabin(p) });
   }
   return { company: ci, fare: route.fare, planes };
 }
@@ -731,7 +805,9 @@ export function estimateRoute(
 ): RouteEstimate {
   const offers = rivalOffers(state, ci, a, b);
   const models = planes.map((p) => MODEL[p.model]);
-  const mine: Offer = { company: ci, fare, planes: planes.map((p, i) => ({ model: models[i], freq: p.freq, age: p.age ?? 0 })) };
+  const meal = state.companies[ci].service;
+  const cabs = planes.map((p, i) => cabinStats(models[i], p.cabin ?? defaultCabin(models[i]), p.meal ?? meal));
+  const mine: Offer = { company: ci, fare, planes: planes.map((p, i) => ({ model: models[i], freq: p.freq, age: p.age ?? 0, cab: cabs[i] })) };
   const demand = pairDemand(state, a, b);
   const results = splitMarket(state, a, b, [...offers, mine], demand);
   const r = results[results.length - 1];
@@ -746,7 +822,7 @@ export function estimateRoute(
     ci,
     a,
     b,
-    planes.map((p, i) => ({ model: models[i], freq: p.freq, age: p.age ?? 0, fixed: p.fixed ?? newLeaseFixed(state, models[i]) })),
+    planes.map((p, i) => ({ model: models[i], freq: p.freq, age: p.age ?? 0, fixed: p.fixed ?? newLeaseFixed(state, models[i]), cab: cabs[i] })),
     paxWeek,
     revenue,
   );
@@ -770,7 +846,7 @@ export function draftsOf(state: Pick<AirlineState, 'q'>, c: Company, routeId: nu
   for (const p of c.planes) {
     const f = legFreq(p, routeId);
     if (f <= 0) continue;
-    out.push({ model: p.model, freq: f, age: planeAge(state, p), fixed: fixedShare(c, p, routeId) });
+    out.push({ model: p.model, freq: f, age: planeAge(state, p), fixed: fixedShare(c, p, routeId), cabin: p.cabin, meal: p.meal });
   }
   return out;
 }
@@ -791,6 +867,37 @@ export function estimateExisting(state: AirlineState, ci: number, route: Route, 
   return estimateRoute(state, ci, route.a, route.b, planes, override?.fare ?? route.fare, extra);
 }
 
+/**
+ * 비행기 한 대의 좌석 배치·기내식을 바꾸면 그 비행기가 나는 노선들의 분기 이익이 어떻게 될지 (지금 → 바꾼 뒤).
+ * 기내식 비용·편안함과 고급 좌석 운임이 모두 들어간다 (평판 변화는 빼고).
+ */
+export function cabinOutlook(state: AirlineState, ci: number, planeId: number, cabin: Cabin, meal: number): { now: number; next: number; seatsNow: number; seatsNext: number } {
+  const c = state.companies[ci];
+  const p0 = c.planes.find((p) => p.id === planeId);
+  if (!p0) return { now: 0, next: 0, seatsNow: 0, seatsNext: 0 };
+  const m = MODEL[p0.model];
+  let now = 0;
+  let next = 0;
+  for (const l of p0.legs) {
+    const route = c.routes.find((r) => r.id === l.route);
+    if (!route) continue;
+    const drafts = (change: boolean): DraftPlane[] =>
+      c.planes
+        .filter((q) => legFreq(q, route.id) > 0)
+        .map((q) => ({
+          model: q.model,
+          freq: legFreq(q, route.id),
+          age: planeAge(state, q),
+          fixed: fixedShare(c, q, route.id),
+          cabin: change && q.id === planeId ? cabin : q.cabin,
+          meal: change && q.id === planeId ? meal : q.meal,
+        }));
+    now += estimateExisting(state, ci, route, { planes: drafts(false) }).profit;
+    next += estimateExisting(state, ci, route, { planes: drafts(true) }).profit;
+  }
+  return { now, next, seatsNow: cabinStats(m, p0.cabin, p0.meal).seats, seatsNext: cabinStats(m, cabin, meal).seats };
+}
+
 // ------------------------------------------------------------------ 분기 계산
 
 export interface RouteRun {
@@ -806,13 +913,16 @@ export interface RouteRun {
   freq: number;
   xfer: number;
   xferRev: number;
+  /** 고급 좌석 (주간 한 방향) */
+  premSeats: number;
+  premPax: number;
 }
 
 export interface QuarterOutcome {
   reports: CompanyReport[];
   routes: RouteReport[];
   /** 회사마다 노선 결과 (노선 id → 결과) */
-  routeStats: Map<number, { lf: number; pax: number; revenue: number; profit: number; share: number; xfer: number; xferRev: number }>[];
+  routeStats: Map<number, { lf: number; pax: number; revenue: number; profit: number; share: number; xfer: number; xferRev: number; premLf?: number }>[];
   xfers: TransferReport[];
 }
 
@@ -976,7 +1086,7 @@ export function computeQuarter(state: AirlineState): QuarterOutcome {
     unserved.set(pairIndex(a, b), split.unserved);
     split.results.forEach((res, k) => {
       const freq = offers[k].planes.reduce((s, p) => s + p.freq, 0);
-      runs.push({ ci: res.company, route: routes[k], seats: res.seats, biz: res.biz, leisure: res.leisure, share: res.share, revenue: res.revenue, hours: res.hours, freq, xfer: 0, xferRev: 0 });
+      runs.push({ ci: res.company, route: routes[k], seats: res.seats, biz: res.biz, leisure: res.leisure, share: res.share, revenue: res.revenue, hours: res.hours, freq, xfer: 0, xferRev: 0, premSeats: res.premSeats, premPax: res.premPax });
     });
   }
   // 2) 갈아타는 손님
@@ -1027,7 +1137,7 @@ export function computeQuarter(state: AirlineState): QuarterOutcome {
     const planes: CostPlane[] = [];
     for (const p of c.planes) {
       const f = legFreq(p, run.route.id);
-      if (f > 0) planes.push({ model: MODEL[p.model], freq: f, age: planeAge(state, p), fixed: fixedShare(c, p, run.route.id) });
+      if (f > 0) planes.push({ model: MODEL[p.model], freq: f, age: planeAge(state, p), fixed: fixedShare(c, p, run.route.id), cab: planeCabin(p) });
     }
     const paxWeek = run.biz + run.leisure + run.xfer;
     const revenue = (run.revenue + run.xferRev) * WEEKS;
@@ -1063,6 +1173,7 @@ export function computeQuarter(state: AirlineState): QuarterOutcome {
       share: run.share,
       xfer: run.xfer,
       xferRev: run.xferRev,
+      premLf: run.premSeats > 0 ? Math.min(1, run.premPax / run.premSeats) : undefined,
     });
     routeReports.push({ company: ci, route: run.route.id, a, b, pax, seats: run.seats * 2 * WEEKS, revenue, cost: cost.total, profit });
   }
@@ -1114,20 +1225,24 @@ export function fleetAge(state: Pick<AirlineState, 'q'>, c: Company): number {
   return seats > 0 ? sum / seats : 0;
 }
 
-/** 평판이 향하는 값 (서비스·비행기 나이·편안함) */
+/** 평판이 향하는 값 (기내식·비행기 나이·편안함·좌석 간격) */
 export function reputationTarget(state: Pick<AirlineState, 'q'>, c: Company): number {
   if (c.planes.length === 0) return 50;
   const age = fleetAge(state, c);
   let comfort = 0;
+  let meal = 0;
   let seats = 0;
   for (const p of c.planes) {
     const m = MODEL[p.model];
-    comfort += m.comfort * m.seats;
+    // 일반석이 넓으면 편안함 +0.5, 촘촘하면 −0.5
+    comfort += (m.comfort + (p.cabin.pitch - 1) * 0.5) * m.seats;
+    meal += p.meal * m.seats;
     seats += m.seats;
   }
   comfort /= seats;
+  meal /= seats;
   const ageAdj = age < 5 ? 8 : age < 10 ? 2 : age < 16 ? -6 : -14;
-  return Math.max(0, Math.min(100, 25 + 9 * c.service + ageAdj + (comfort - 3) * 4));
+  return Math.max(0, Math.min(100, 25 + 9 * meal + ageAdj + (comfort - 3) * 4));
 }
 
 /** 광고가 알려진 정도로 바뀌는 크기 (억/분기) */

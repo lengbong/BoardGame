@@ -1774,7 +1774,7 @@ function mergeCompanies(state: AirlineState, j: number, i: number, deal: MergeDe
   const target = state.companies[i];
   let s = editMany(state, [j, i, ...holders], ([a, b, ...rest], s) => {
     a.cash -= cost;
-    if (!history) holders.forEach((k, idx) => (rest[idx].cash += stakeOf(state, i, k) * per));
+    holders.forEach((k, idx) => (rest[idx].cash += stakeOf(state, i, k) * per));
     a.cash += b.cash;
     a.debt += b.debt;
     a.baseCredit += Math.round(b.baseCredit * 0.5);

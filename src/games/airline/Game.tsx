@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { withJosa } from '../../lib/korean';
+import { playJingle } from '../../lib/music';
 import { sfx } from '../../lib/sound';
 import { soloOutcome, useRecordOutcome } from '../../lib/stats';
 import { useMusic } from '../../lib/useMusic';
@@ -22,7 +23,7 @@ import { RouteOpeningCard, type Opening } from './RouteOpening';
 import { RoutesView, type Planner } from './RoutesView';
 import { actor, applyAction, autoStopReason, idlePlanes, rankings } from './rules';
 import { companyValue, monthDemandMult, routeFreq } from './simulate';
-import { AIRLINE_SONG } from './song';
+import { AIRLINE_JINGLES, AIRLINE_MAIN, AIRLINE_TITLE } from './song';
 import { alSound } from './sounds';
 import { AIRLINE_DELAYS, clearSavedAirlineGame, saveAirlineGame } from './storage';
 import { mLabel, monthOf, qLabel } from './time';
@@ -104,7 +105,10 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   const lastHuman = useRef<number | null>(null);
   const later = useTimers();
   const delays = AIRLINE_DELAYS[settings.speed];
-  useMusic(AIRLINE_SONG, settings.music);
+  // 경영하는 동안은 '창공의 항로', 게임이 끝나면 팡파르 뒤에 '하늘길 서곡'
+  useMusic(game.phase === 'gameover' && !flying ? AIRLINE_TITLE : AIRLINE_MAIN, settings.music);
+  const musicOn = useRef(settings.music);
+  musicOn.current = settings.music;
 
   const kinds = game.companies.map((c) => c.kind);
   useRecordOutcome('airline', game.phase === 'gameover', () => soloOutcome(kinds, game.result && game.result.winners.length > 0 ? game.result.winners : [-1]));
@@ -204,11 +208,19 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
       later(() => {
         setFlying(false);
         if (game.phase === 'gameover') {
-          alSound.win();
+          const humanCos = game.companies.filter((c) => c.kind === 'human');
+          const won = humanCos.length === 0 || (game.result?.winners ?? []).some((w) => game.companies[w]?.kind === 'human');
+          if (musicOn.current) playJingle(won ? AIRLINE_JINGLES.victory : AIRLINE_JINGLES.finale);
+          else alSound.win();
           return;
         }
         if (qRep && humanLeft && !quietQuarter) {
-          alSound.report((qRep.companies[viewer]?.profit ?? 0) >= 0);
+          const good = (qRep.companies[viewer]?.profit ?? 0) >= 0;
+          // 음악을 켜 두면 서류 넘기는 소리와 함께 결산 팡파르 (배경음악은 잠깐 쉰다)
+          if (musicOn.current) {
+            alSound.paper();
+            playJingle(good ? AIRLINE_JINGLES.quarterGood : AIRLINE_JINGLES.quarterBad);
+          } else alSound.report(good);
           setToast(null);
           setReport(qRep);
           if (yearEnd) setAuto((a) => (a[viewer] ? Object.fromEntries(Object.entries(a).filter(([k]) => Number(k) !== viewer)) : a));

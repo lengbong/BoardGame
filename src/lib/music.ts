@@ -1,3 +1,4 @@
+import { closeBus, compile, createBus, scoreSeconds, ScorePlayer, type Bus, type Score } from './orchestra';
 import { getAudioContext, noiseBuffer } from './sound';
 
 /**
@@ -8,6 +9,8 @@ import { getAudioContext, noiseBuffer } from './sound';
  * WebAudio로 실시간 합성하므로 음원 파일이 필요 없다.
  *
  * 새 게임은 자기 폴더에 Song 객체를 만들어 startMusic(song)으로 틀 수 있다. (예: games/sudoku/song.ts)
+ * 금관·현악·팀파니가 있는 큰 곡은 orchestra.ts의 Score로 쓰고 같은 startMusic으로 튼다. (예: games/airline/song.ts)
+ * 짧은 팡파르는 playJingle(score): 배경음악이 잠깐 멈췄다가 팡파르가 끝나면 다음 마디부터 이어진다.
  */
 
 const STEPS_PER_BAR = 8;
@@ -123,10 +126,27 @@ function freq(midi: number): number {
 }
 
 let master: GainNode | null = null;
-let playing: SongId | Song | null = null;
+let playing: Playable | null = null;
 let timer: number | null = null;
 let step = 0;
 let nextTime = 0;
+/** 오케스트라 곡을 연주하는 중이면 */
+let player: ScorePlayer | null = null;
+let songBus: Bus | null = null;
+/** 옛 곡(8분음표 곡)이 팡파르 때문에 멈춰 있으면 */
+let heldOld = false;
+let currentVolume = 0.16;
+/** 팡파르가 끝나는 시각. 그때까지 배경음악은 쉰다. */
+let quietUntil = 0;
+let jingleBus: Bus | null = null;
+let unlockArmed = false;
+
+/** 배경음악으로 틀 수 있는 것: 기존 곡 이름, 8분음표 곡(Song), 오케스트라 악보(Score) */
+export type Playable = SongId | Song | Score;
+
+function isScore(x: Playable): x is Score {
+  return typeof x === 'object' && 'kind' in x && x.kind === 'orchestra';
+}
 
 function note(ac: AudioContext, out: AudioNode, midi: number, t: number, dur: number, type: OscillatorType, vol: number, attack = 0.01): void {
   const osc = ac.createOscillator();
@@ -201,25 +221,82 @@ function scheduleStep(ac: AudioContext, out: AudioNode, song: Song, s: number, t
   }
 }
 
-/** 곡 이름(기존 곡) 또는 게임 폴더에서 만든 Song 객체를 반복 재생한다. 같은 곡이 이미 나오고 있으면 그대로 둔다. */
-export function startMusic(songId: SongId | Song = 'travel', volume = 0.16): void {
+/** 브라우저가 소리를 막아 두었으면 첫 클릭·키 입력 때 풀어 준다 */
+function unlockOnGesture(ac: AudioContext): void {
+  if (ac.state === 'running' || unlockArmed) return;
+  unlockArmed = true;
+  const unlock = () => {
+    void ac.resume();
+    unlockArmed = false;
+    window.removeEventListener('pointerdown', unlock);
+    window.removeEventListener('keydown', unlock);
+  };
+  window.addEventListener('pointerdown', unlock);
+  window.addEventListener('keydown', unlock);
+}
+
+function fadeOut(g: AudioParam, now: number, seconds: number): void {
+  g.cancelScheduledValues(now);
+  g.setValueAtTime(Math.max(g.value, 0.0001), now);
+  g.exponentialRampToValueAtTime(0.0001, now + seconds);
+}
+
+function fadeIn(g: AudioParam, now: number, from: number, volume: number, seconds: number): void {
+  g.cancelScheduledValues(now);
+  g.setValueAtTime(0.0001, now);
+  g.setValueAtTime(0.0001, from);
+  g.exponentialRampToValueAtTime(volume, from + seconds);
+}
+
+/** 곡 이름(기존 곡), 게임 폴더에서 만든 Song 객체, 오케스트라 악보(Score)를 반복 재생한다. 같은 곡이 이미 나오고 있으면 그대로 둔다. */
+export function startMusic(songId: Playable = 'travel', volume = 0.16): void {
   const ac = getAudioContext();
   if (!ac) return;
+  unlockOnGesture(ac);
   if (timer !== null) {
     if (playing === songId) return;
-    stopMusic();
+    stopSong();
   }
   if (playing !== songId) step = 0;
   playing = songId;
+  currentVolume = isScore(songId) ? (songId.volume ?? volume) : volume;
+  // 팡파르가 나오는 중이면 끝난 뒤에 시작한다
+  const from = Math.max(ac.currentTime, quietUntil);
+  if (isScore(songId)) {
+    const bus = createBus(ac, 0.0001);
+    fadeIn(bus.master.gain, ac.currentTime, from, currentVolume, 1.2);
+    const p = new ScorePlayer(compile(songId), bus, from + 0.1);
+    master = bus.master;
+    player = p;
+    songBus = bus;
+    timer = window.setInterval(() => {
+      const now = ac.currentTime;
+      if (p.isHeld) {
+        if (now < quietUntil) return;
+        p.resume(now + 0.05);
+        fadeIn(bus.master.gain, now, now, currentVolume, 1.5);
+      }
+      // 화면이 바쁠 때 끊기지 않게 조금 넉넉히 앞당겨 예약한다
+      p.pump(now + 0.35, now - 0.03);
+    }, 40);
+    return;
+  }
   const song = typeof songId === 'string' ? SONGS[songId] : songId;
   const EIGHTH = 60 / song.bpm / 2;
   master = ac.createGain();
   master.gain.setValueAtTime(0.0001, ac.currentTime);
-  master.gain.exponentialRampToValueAtTime(volume, ac.currentTime + 1.2);
+  if (from > ac.currentTime) master.gain.setValueAtTime(0.0001, from);
+  master.gain.exponentialRampToValueAtTime(volume, from + 1.2);
   master.connect(ac.destination);
-  nextTime = ac.currentTime + 0.1;
+  nextTime = from + 0.1;
   const out = master;
   timer = window.setInterval(() => {
+    if (heldOld) {
+      if (ac.currentTime < quietUntil) return;
+      heldOld = false;
+      nextTime = ac.currentTime + 0.05;
+      fadeIn(out.gain, ac.currentTime, ac.currentTime, currentVolume, 1.5);
+    }
     // 탭이 백그라운드였다가 돌아오면 밀린 음을 한꺼번에 내지 않고 건너뛴다.
     if (nextTime < ac.currentTime - 0.05) nextTime = ac.currentTime + 0.05;
     while (nextTime < ac.currentTime + 0.2) {
@@ -230,7 +307,8 @@ export function startMusic(songId: SongId | Song = 'travel', volume = 0.16): voi
   }, 40);
 }
 
-export function stopMusic(): void {
+/** 배경음악만 끈다 (팡파르는 그대로) */
+function stopSong(): void {
   if (timer !== null) {
     window.clearInterval(timer);
     timer = null;
@@ -238,12 +316,64 @@ export function stopMusic(): void {
   const ac = getAudioContext();
   if (master && ac) {
     const g = master;
-    g.gain.cancelScheduledValues(ac.currentTime);
-    g.gain.setValueAtTime(Math.max(g.gain.value, 0.0001), ac.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.4);
-    window.setTimeout(() => g.disconnect(), 600);
+    const bus = songBus;
+    fadeOut(g.gain, ac.currentTime, 0.4);
+    window.setTimeout(() => (bus ? closeBus(bus) : g.disconnect()), 600);
   }
   master = null;
+  player = null;
+  songBus = null;
+  heldOld = false;
+}
+
+/** 배경음악과 나오고 있는 팡파르를 모두 끈다 */
+export function stopMusic(): void {
+  stopSong();
+  const ac = getAudioContext();
+  if (jingleBus && ac) {
+    const bus = jingleBus;
+    fadeOut(bus.master.gain, ac.currentTime, 0.3);
+    window.setTimeout(() => closeBus(bus), 500);
+  }
+  jingleBus = null;
+  quietUntil = 0;
+}
+
+/**
+ * 짧은 팡파르를 한 번 연주한다 (분기 결산, 게임 끝).
+ * 나오던 배경음악은 잠깐 소리를 줄여 멈추고, 팡파르가 끝나면 다음 마디부터 다시 커진다.
+ */
+export function playJingle(score: Score, volume = 0.2): void {
+  const ac = getAudioContext();
+  if (!ac) return;
+  unlockOnGesture(ac);
+  const now = ac.currentTime;
+  if (master && timer !== null) {
+    fadeOut(master.gain, now, 0.25);
+    if (player) player.hold(now);
+    else if (!heldOld) {
+      heldOld = true;
+      step = Math.ceil(step / STEPS_PER_BAR) * STEPS_PER_BAR;
+    }
+  }
+  if (jingleBus) {
+    const old = jingleBus;
+    fadeOut(old.master.gain, now, 0.2);
+    window.setTimeout(() => closeBus(old), 400);
+  }
+  const start = now + 0.12;
+  const bus = createBus(ac, score.volume ?? volume);
+  new ScorePlayer(compile(score), bus, start).pump(Infinity);
+  const seconds = scoreSeconds(score);
+  quietUntil = start + seconds + 0.3;
+  jingleBus = bus;
+  window.setTimeout(
+    () => {
+      closeBus(bus);
+      if (jingleBus === bus) jingleBus = null;
+    },
+    (seconds + 4) * 1000,
+  );
 }
 
 export function isMusicPlaying(): boolean {

@@ -131,10 +131,10 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   // 2. 쉬는 비행기 (이번 달 전세기로 나가는 비행기는 쉬는 게 아니라 팔거나 노선에 넣을 수 없다)
   const chartered = charterPlaneIds(state, ci);
   const idle = idlePlanes(c).filter((p) => !chartered.has(p.id));
-  // 쉬는 비행기마다 띄울 만한 노선은 한 번만 따진다
+  // 쉬는 비행기마다 이미 있는 노선 가운데 띄울 만한 곳은 한 번만 따진다 (리스료·보험료를 뺀, 쉴 때보다 더 버는 돈)
   const bestLegs = new Map<number, BestLeg>();
   const legOf = (id: number): BestLeg => {
-    if (!bestLegs.has(id)) bestLegs.set(id, planner(state, ci).bestExistingLeg(id, false));
+    if (!bestLegs.has(id)) bestLegs.set(id, planner(state, ci).bestExistingLeg(id, true));
     return bestLegs.get(id)!;
   };
   // 비행기가 많으면 띄울 곳 없는 쉬는 내 비행기 몇 대는 예비기로 둔다 (팔거나 리스기와 바꾸지 않는다)
@@ -163,7 +163,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
       looked++;
       const m = MODEL[p.model];
       // 둘 다 리스료·보험료를 뺀, 쉴 때보다 더 버는 돈으로 견준다
-      const ex = planner(state, ci).bestExistingLeg(p.id, true);
+      const ex = legOf(p.id);
       const nr = wide.idleCandidates(p.id, 4).find((x) => !idlePairs.has(pairKey(x.a, x.b)));
       const exTaken = ex !== null && idleRoutes.has(ex.route);
       const exGain = ex && !exTaken ? ex.gain : -Infinity;
@@ -871,7 +871,8 @@ const SPARE_FLEET = 12;
 
 /**
  * 예비기로 둘 쉬는 내 비행기. 날고 있는 비행기가 많으면 8%쯤(적어도 한 대)을 둔다 (spareCover가 그만큼에서 다 찬다).
- * 띄울 만한 노선이 있는 비행기는 띄우는 게 나으니 빼고, 젊은 비행기부터 고른다. 점검 중인 비행기는 예비기가 못 된다.
+ * 이미 있는 노선에 띄워 달 IDLE_MIN_GAIN 넘게 더 버는 비행기는 띄우는 게 나으니 빼고, 젊은 비행기부터 고른다.
+ * 새 노선을 열 수 있어도 예비기가 먼저다 (컴퓨터 항공사도 예비기를 먼저 남겨 둔다). 점검 중인 비행기는 예비기가 못 된다.
  */
 function spareKeep(state: AirlineState, c: Company, idle: Plane[], legOf: (id: number) => BestLeg): Plane[] {
   const flying = c.planes.filter((p) => p.legs.length > 0).length;
@@ -884,8 +885,9 @@ function spareKeep(state: AirlineState, c: Company, idle: Plane[], legOf: (id: n
   const out: Plane[] = [];
   for (const p of cands) {
     if (out.length >= need) break;
+    // 아래에서 ‘띄우기’를 권할 비행기는 예비기로 두지 않는다 (같은 기준이라 예비기 몫인데 팔라고 하는 일이 없다)
     const best = legOf(p.id);
-    if (best && best.gain > 0) continue;
+    if (best && best.gain >= IDLE_MIN_GAIN) continue;
     out.push(p);
   }
   return out;

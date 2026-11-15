@@ -27,6 +27,7 @@ import { bandCaps, bandCounts, bandUsed, defaultTimes, routeCurfew } from './tim
 import { rightsAssignBlocker, rightsMonth, rightsRoom, rightsRouteBlocker } from './rights';
 import { applyRightsAction, isRightsAction, rightsAfterMerge } from './rightsRules';
 import { applyLoyaltyAction, isLoyaltyAction, loyaltyMonth } from './loyaltyRules';
+import { applyRivalAction, isRivalAction, rivalsMonth, truceBlocks } from './relations';
 import {
   LEASE_RATE,
   MAX_DELIVERIES,
@@ -900,6 +901,9 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
   if (isRightsAction(action)) return applyRightsAction(state, action, ci);
   // 단골 프로그램·브랜드 자리 (loyaltyRules.ts)
   if (isLoyaltyAction(action)) return applyLoyaltyAction(state, action, ci);
+  // 라이벌 외교, 휴전 중 운임 바닥 (relations.ts)
+  if (isRivalAction(action)) return applyRivalAction(state, action, ci);
+  if (truceBlocks(state, ci, action)) return state;
 
   switch (action.type) {
     case 'openBranch': {
@@ -1959,6 +1963,8 @@ export function runMonth(state: AirlineState, rng: Rng = Math.random): AirlineSt
     s = addLog(s, null, `📊 ${qLabel(q)} 결산 — 1등 ${lead.name} ${fmtMoney(companyValue(s, ranked[0]))}`);
   }
 
+  // 라이벌 관계·휴전 (relations.ts)
+  s = rivalsMonth(s, t);
   // 도전 과제와 승리 조건
   s = checkEnd(s, qReport?.companies ?? null, t);
   const ids = newsIds(s, newsBefore);

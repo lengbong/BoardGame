@@ -1,0 +1,318 @@
+/* 하늘길 항공사: 라이벌 경영진 성격과 관계 (RivalsCard.tsx) */
+
+.al-rv-news {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+.al-rv-news > .al-rv {
+  flex: none;
+}
+.al-rv-icon,
+.al-rv-avatar {
+  flex: none;
+}
+.al-rv-icon {
+  vertical-align: -5px;
+}
+.al-rv-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+.al-rv-title small {
+  font-weight: 400;
+  font-size: 12.5px;
+}
+.al-rv-fold {
+  margin-left: auto;
+}
+.al-rv-folded .al-rv-title {
+  margin-bottom: 6px;
+}
+/* 접었을 때: 그림·이름·사이 말만 한 줄로 */
+.al-rv-mini {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.al-rv-mini li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+}
+.al-rv-mini-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.al-rv-mini-rel {
+  white-space: nowrap;
+  font-weight: 600;
+}
+.al-rv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+/* ------------------------------------------------------------ 라이벌 한 곳 */
+.al-rv-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--rv-co, var(--accent));
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.al-rv-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.al-rv-who {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.al-rv-who .al-coname {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.al-rv-persona {
+  font-size: 13.5px;
+}
+.al-rv-motto {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+/* 말풍선: 방금 한 외교에 대한 한마디 */
+.al-rv-bubble {
+  position: relative;
+  margin: 2px 0 0;
+  padding: 6px 10px;
+  border: 1px solid var(--rv-co, var(--accent));
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 12.5px;
+  line-height: 1.4;
+  animation: al-rv-pop 0.25s ease-out;
+}
+.al-rv-bubble::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 22px;
+  width: 10px;
+  height: 10px;
+  background: var(--surface);
+  border-left: 1px solid var(--rv-co, var(--accent));
+  border-top: 1px solid var(--rv-co, var(--accent));
+  transform: rotate(45deg);
+}
+@keyframes al-rv-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 사이 막대 (−100 … +100) */
+.al-rv-rel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.al-rv-tone-good {
+  color: var(--al-good);
+}
+.al-rv-tone-info {
+  color: var(--al-blue);
+}
+.al-rv-tone-warn {
+  color: var(--al-warn);
+}
+.al-rv-tone-bad {
+  color: var(--al-bad);
+}
+.al-rv-bar {
+  position: relative;
+  flex: 1;
+  min-width: 60px;
+  height: 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--al-bad) 22%, var(--surface)), var(--surface) 50%, color-mix(in srgb, var(--al-good) 22%, var(--surface)));
+}
+.al-rv-fill {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.75;
+}
+.al-rv-mid {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  left: 50%;
+  width: 2px;
+  background: var(--text-muted);
+  transform: translateX(-1px);
+}
+.al-rv-dot {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border: 2.5px solid currentColor;
+  border-radius: 50%;
+  background: var(--surface);
+  transform: translate(-50%, -50%);
+  transition: left 0.4s ease;
+}
+.al-rv-word {
+  font-size: 13px;
+  white-space: nowrap;
+  color: var(--text);
+}
+.al-rv-word small {
+  color: var(--text-muted);
+}
+
+.al-rv-traits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.al-rv-traits li {
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 11.5px;
+}
+.al-rv-notes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.al-rv-notes li b {
+  display: inline-block;
+  min-width: 2.2em;
+}
+
+/* 휴전·제안 */
+.al-rv-offer,
+.al-rv-truce,
+.al-rv-truce-note {
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  font-size: 12.5px;
+}
+.al-rv-offer,
+.al-rv-truce {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px;
+}
+.al-rv-offer-btns {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.al-rv-truce-note {
+  margin: 4px 0 8px;
+  padding: 6px 10px;
+  line-height: 1.45;
+}
+
+/* 외교 버튼 */
+.al-rv-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px 8px;
+  margin-top: auto;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.al-rv-truce-ask,
+.al-rv-ally {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+}
+.al-rv-select {
+  max-width: 100%;
+  padding: 3px 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+}
+/* 설정 화면 */
+.al-rv-setup {
+  display: contents;
+}
+.al-rv-setup > .choice-field {
+  margin-top: 12px;
+}
+
+.al-rv-help {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+@media (max-width: 480px) {
+  .al-rv-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .al-rv-avatar {
+    width: 48px;
+    height: 48px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .al-rv-bubble {
+    animation: none;
+  }
+  .al-rv-dot {
+    transition: none;
+  }
+}

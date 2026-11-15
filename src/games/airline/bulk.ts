@@ -4,6 +4,7 @@ import { bestTimes } from './ai';
 import { applyFares, recommendFares } from './fares';
 import { applyAction } from './rules';
 import { planeAge } from './simulate';
+import { truceFloorFor } from './relations';
 import type { Fares } from './simulate';
 import type { AirlineState } from './types';
 
@@ -24,6 +25,8 @@ export function farePlan(state: AirlineState, ci: number): BulkPlan<{ route: num
   const items: { route: number; fares: Partial<Fares>; gain: number }[] = [];
   for (const r of c.routes) {
     if (!c.planes.some((p) => p.legs.some((l) => l.route === r.id && l.freq > 0))) continue;
+    // 라이벌과 휴전 중인 노선은 건드리지 않는다 (일반석 운임을 내릴 수 없다: relations.ts)
+    if (truceFloorFor(state, ci, r) !== null) continue;
     const adv = recommendFares(state, ci, r);
     const gain = adv.profit - adv.now;
     if (gain > 0.1) items.push({ route: r.id, fares: adv.fares, gain });

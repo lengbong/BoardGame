@@ -48,6 +48,7 @@ import { ActButton, CoName, LoadMeter, Meter, Stepper } from './ui';
 import { FinIcon, ProgressRing } from './FinanceArt';
 import { MoreInfo, StaffIcon } from './StaffArt';
 import { FareProfitBars, FareScale, RouteArc, RouteGlyph, RouteIcon, RouteMoney, RoutesEmptyArt, SplitBar, type FareMark } from './RoutesArt';
+import { TruceNote } from './RivalsCard';
 
 /** 탑승률 고리 색: 많이 비면 빨강, 알맞으면 초록, 꽉 차면 주황 */
 const lfTone = (lf: number) => (lf < 0.55 ? 'bad' : lf > 0.97 ? 'warn' : 'good');
@@ -581,6 +582,7 @@ function FareCard({
       <h4 className="al-fin-title">
         <FinIcon kind="tag" /> 운임 <small>{fareText(r.fare)}</small>
       </h4>
+      <TruceNote state={state} viewer={viewer} route={r} />
       {rivals.length > 0 && (
         <>
           <FareScale mine={r.fare} min={FARE_MIN} max={FARE_MAX} rivals={rivals} />

@@ -13,6 +13,7 @@ import { FACILITY_KINDS } from './facilities';
 import { isValidV4Company, migrateV3, parseModels } from './migrate4';
 import { isValidRightsState, parseRightsOption } from './rightsSave';
 import { isValidLoyaltyState } from './loyaltySave';
+import { isValidRivalsState, parseRivalsOption } from './relations';
 import { CITY, REGIONS } from './cities';
 import { REAL_AIRLINE } from './realAirlines';
 import { STAFF_GROUPS, emptyStaff, staffNeed } from './staff';
@@ -65,6 +66,8 @@ export function parseOptions(v: unknown): AirlineOptions {
     history: o.history !== false,
     // 운수권 (없으면 키를 두지 않는다: rightsSave.ts)
     ...parseRightsOption(o as Record<string, unknown>),
+    // 라이벌 성격 (없으면 키를 두지 않는다: 켜짐)
+    ...parseRivalsOption(o as Record<string, unknown>),
   };
 }
 
@@ -206,6 +209,8 @@ export function isValidState(v: unknown): v is AirlineState {
   if (!isValidRightsState(s)) return false;
   // 단골 프로그램·브랜드 자리 (예전 저장에는 없다: loyaltySave.ts)
   if (!isValidLoyaltyState(s)) return false;
+  // 라이벌 장부 (예전 저장에는 없다: relations.ts)
+  if (!isValidRivalsState(s)) return false;
   return true;
 }
 

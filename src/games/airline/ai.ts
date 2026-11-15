@@ -69,6 +69,7 @@ import {
 import { monthOf, yearOf } from './time';
 import { aiRights } from './aiRights';
 import { aiLoyalty } from './aiLoyalty';
+import { aiRivals, allyRate, fareBounds, investMult, mealFor, modelTaste, newRoutesFor, pairPull, renewAgeFor, reserveMult, rivalWeights, usedAgeFor } from './aiPersonality';
 import { rightsLeftFor } from './rights';
 import type { AdMedia, AirlineAction, AirlineState, BusinessKind, Cabin, CampaignKind, Company, FacilityKind, ModelDef, RegionId, Rng } from './types';
 
@@ -104,6 +105,7 @@ export function planTurn(state: AirlineState, ci: number, level: AiLevel, rng: R
   ai.run();
   aiRights(ai);
   aiLoyalty(ai);
+  aiRivals(ai);
   return ai.actions;
 }
 
@@ -113,6 +115,7 @@ export function aiManage(state: AirlineState, ci: number, level: AiLevel, rng: R
   ai.run();
   aiRights(ai);
   aiLoyalty(ai);
+  aiRivals(ai);
   return ai.s;
 }
 
@@ -190,7 +193,7 @@ export class Planner {
   /** 남겨 둘 현금 (석 달 치 비용의 일부) */
   reserve(): number {
     const styleMult = this.style === 'relaxed' ? 1.6 : this.style === 'fierce' ? 0.8 : 1;
-    return Math.max(60, this.lastCosts() * Q * (this.normal ? 0.25 : 0.4) * styleMult);
+    return Math.max(60, this.lastCosts() * Q * (this.normal ? 0.25 : 0.4) * styleMult * reserveMult(this.s, this.ci));
   }
 
   /** 이 회사가 크게 계획을 세우는 달 (석 달에 한 번, 회사마다 다른 달) */
@@ -237,7 +240,7 @@ export class Planner {
     if (this.normal) {
       this.useSpareHours();
       this.manageLoans(true);
-      this.expand(this.maxNewRoutes() - this.openedThisQuarter());
+      this.expand(newRoutesFor(this.s, this.ci, this.maxNewRoutes(), this.reserve()) - this.openedThisQuarter());
       this.addCapacity();
       this.addSharedPlane();
       this.renewFleet();
@@ -314,8 +317,7 @@ export class Planner {
   /** 아주 꽉 차거나 많이 빈 노선만 운임을 한 칸 고친다 */
   private quickFares(): void {
     const lcc = bizModelOf(this.c) === 'lcc';
-    const cap = lcc ? 10 : this.style === 'relaxed' ? 10 : this.normal ? 25 : 15;
-    const floor = lcc ? -30 : -25;
+    const [floor, cap] = fareBounds(this.s, this.ci, lcc ? -30 : -25, lcc ? 10 : this.style === 'relaxed' ? 10 : this.normal ? 25 : 15);
     for (const r of this.c.routes) {
       const st = r.stats;
       if (!st || st.pax <= 0) continue;
@@ -394,7 +396,7 @@ export class Planner {
     // 3) 배당을 노린 투자
     const best = this.s.companies
       .map((x, i) => ({ x, i, y: dividendYield(this.s, i) }))
-      .filter(({ x, i, y }) => i !== this.ci && !x.out && y > 0.04 && stakeOf(this.s, i, this.ci) < 20)
+      .filter(({ x, i, y }) => i !== this.ci && !x.out && y > 0.04 * investMult(this.s, this.ci) && stakeOf(this.s, i, this.ci) < 20)
       .sort((p, q) => q.y - p.y)[0];
     if (best && !buyStakeBlocker(this.s, this.ci, best.i, 5) && buyCost(this.s, best.i, 5) < spare() * 0.5) this.act({ type: 'buyStake', company: best.i, pct: 5 });
   }
@@ -410,7 +412,7 @@ export class Planner {
 
   private maybePropose(): void {
     const al = allianceOf(this.s, this.ci);
-    if ((al && al.members.length >= MAX_MEMBERS) || this.s.q - this.s.startQ < 8 || this.rng() > 0.12) return;
+    if ((al && al.members.length >= MAX_MEMBERS) || this.s.q - this.s.startQ < 8 || this.rng() > 0.12 * allyRate(this.s, this.ci)) return;
     let best = -1;
     let score = 1;
     this.s.companies.forEach((t, ti) => {
@@ -469,8 +471,7 @@ export class Planner {
 
   private tuneRoutes(): void {
     const lcc = bizModelOf(this.c) === 'lcc';
-    const fareCap = lcc ? 10 : this.style === 'relaxed' ? 10 : 25;
-    const fareFloor = lcc ? -30 : -25;
+    const [fareFloor, fareCap] = fareBounds(this.s, this.ci, lcc ? -30 : -25, lcc ? 10 : this.style === 'relaxed' ? 10 : 25);
     for (const r0 of [...this.c.routes]) {
       const r = routeById(this.c, r0.id);
       if (!r) continue;
@@ -721,10 +722,12 @@ export class Planner {
       ? [from]
       : [...c.branches].sort((x, y) => (x === c.hub ? -1 : y === c.hub ? 1 : citySize(CITY[y], year) - citySize(CITY[x], year))).slice(0, 8);
     const models = only ? [only] : this.models();
-    const quick: { a: string; b: string; v: number; d: number }[] = [];
+    const quick: { a: string; b: string; v: number; d: number; pull: number }[] = [];
     const seen = new Set<string>();
     const hubRoutes = c.routes.filter((r) => r.a === c.hub || r.b === c.hub).length;
     const history = historyOn(this.s);
+    // 라이벌마다 꺼리는 정도 (성격·사이: aiPersonality.ts, 성격이 없으면 모두 0.6)
+    const rivalW = rivalWeights(this.s, this.ci);
     for (const a of origins) {
       if (this.slotsLeft(a) < 2) continue;
       // 이 공항 활주로에 내릴 수 있는 기종만 본다 (작은 공항에서 못 띄우는 장거리 기종의 거리로 후보 자리를 채우지 않게)
@@ -746,16 +749,23 @@ export class Planner {
         if (this.slotsLeft(b) < 2) continue;
         let v = quickValue(this.s, c, a, b, d);
         let rivals = 0;
+        let wary = 0;
         for (let i = 0; i < this.s.companies.length; i++) {
           const x = this.s.companies[i];
-          if (i !== this.ci && !x.out && routeIndex(x).has(key)) rivals++;
+          if (i !== this.ci && !x.out && routeIndex(x).has(key)) {
+            rivals++;
+            wary += rivalW[i];
+          }
         }
         v /= 1 + rivals * 0.6;
+        // 성격이 좋아하는 노선 (성격이 없으면 1)
+        const pull = pairPull(this.s, this.ci, a, b, d, rivals, wary);
+        v *= pull;
         if (!c.branches.includes(b)) v *= 0.85;
         // 본사에서 나가는 노선은 갈아타는 손님이 더해진다
         if (this.normal && (a === c.hub || b === c.hub)) v *= 1 + Math.min(0.25, hubRoutes * 0.03);
         if (goalMode && (!served.has(CITY[a].region) || !served.has(CITY[b].region))) v *= 1.8;
-        quick.push({ a, b, v, d });
+        quick.push({ a, b, v, d, pull });
       }
     }
     quick.sort((x, y) => y.v - x.v);
@@ -772,7 +782,7 @@ export class Planner {
     const out: Candidate[] = [];
     for (const q of pick) {
       const cand = this.evaluatePair(q.a, q.b, models, goalMode && (!served.has(CITY[q.a].region) || !served.has(CITY[q.b].region)));
-      if (cand) out.push(cand);
+      if (cand) out.push(q.pull === 1 ? cand : { ...cand, score: cand.score * q.pull });
     }
     out.sort((x, y) => y.score - x.score);
     return out.slice(0, limit);
@@ -798,6 +808,7 @@ export class Planner {
       const capital = branchMoney + (spare ? 0 : depositFor(this.s, this.ci, m.id));
       let score = profit * (0.7 + 0.3 * Math.min(1, e.lf / 0.8));
       if (newRegion) score += Math.max(30 / Q, e.revenue * 0.25);
+      score *= modelTaste(this.s, this.ci, m);
       if (!this.normal) score = profit;
       if (!best || score > best.score) best = { a, b, model: m, freq, fare: 0, profit, capital, needBranch, score, plane: spare?.id };
       return score;
@@ -869,7 +880,7 @@ export class Planner {
     let planeId = plane ?? (how === 'auto' ? cand.plane : undefined);
     if (planeId === undefined) {
       // 같은 기종 중고가 싸게 나와 있고 돈이 넉넉하면 중고로, 아니면 리스로
-      const used = this.s.market.find((u) => u.model === cand.model.id && u.age <= 14);
+      const used = this.s.market.find((u) => u.model === cand.model.id && u.age <= usedAgeFor(this.s, this.ci));
       const canUsed = used && !usedBlocker(this.s, this.ci, used.id) && (how === 'used' || (how === 'auto' && this.normal && this.c.cash - used.price > this.reserve() * 2));
       const ok = canUsed ? this.act({ type: 'buyUsed', listing: used!.id }) : this.act({ type: 'lease', model: cand.model.id });
       if (!ok) return undo();
@@ -1045,7 +1056,7 @@ export class Planner {
   private renewFleet(): void {
     let done = 0;
     const old = [...this.c.planes]
-      .filter((p) => p.legs.length > 0 && (planeAge(this.s, p) >= 20 || (MODEL[p.model].end < this.year && planeAge(this.s, p) >= 12)))
+      .filter((p) => p.legs.length > 0 && (planeAge(this.s, p) >= renewAgeFor(this.s, this.ci) || (MODEL[p.model].end < this.year && planeAge(this.s, p) >= 12)))
       .sort((x, y) => planeAge(this.s, y) - planeAge(this.s, x));
     for (const p of old) {
       if (done >= 2) break;
@@ -1239,7 +1250,7 @@ export class Planner {
     for (const p0 of this.c.planes) {
       const mix = isFreighter(MODEL[p0.model]) ? null : this.planeMix(p0.id);
       if (!mix) continue;
-      const want = bizModelOf(this.c) === 'lcc' ? 1 : Math.min(5, (mix.d < 1200 ? 2 : mix.d < 4500 ? 3 : 4) + boost);
+      const want = bizModelOf(this.c) === 'lcc' ? 1 : mealFor(this.s, this.ci, Math.min(5, (mix.d < 1200 ? 2 : mix.d < 4500 ? 3 : 4) + boost));
       if (want !== p0.meal) this.act({ type: 'setMeal', plane: p0.id, level: want });
     }
   }

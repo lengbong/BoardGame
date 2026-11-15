@@ -5,6 +5,7 @@ import { CITIES, CITY, REGION_INFO, airportClass, citySize, dist, pairKey } from
 import { FIXED_EVENTS } from './events';
 import { companyValue, isIdle, orderPrice, slotCapacity, slotsUsed } from './simulate';
 import { mOf, yearOf } from './time';
+import { allianceMood } from './relations';
 import type { AirlineState, Choice, ChoiceOption, Company, Rng } from './types';
 
 /**
@@ -424,8 +425,8 @@ export function allianceScore(state: AirlineState, from: number, to: number): nu
   const sideB = at ? live(at.members) : [to];
   let sum = 0;
   for (const x of sideA) for (const y of sideB) sum += pairScore(state, x, y);
-  // 회사가 많을수록 새 회원을 까다롭게 고른다
-  return sum / (sideA.length * sideB.length) - (sideA.length + sideB.length - 2) * 0.5;
+  // 회사가 많을수록 새 회원을 까다롭게 고른다. 컴퓨터 회사가 사람 회사를 보는 사이도 본다 (relations.ts, 성격을 끈 판·컴퓨터끼리는 0)
+  return sum / (sideA.length * sideB.length) - (sideA.length + sideB.length - 2) * 0.5 + allianceMood(state, from, to);
 }
 
 /** 동맹 제안 사건 (사람 회사가 받는다) */

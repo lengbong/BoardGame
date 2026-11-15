@@ -21,10 +21,11 @@ import { MapIcon } from './MapArt';
 import { MapView, type Pulse, type Selection } from './MapView';
 import { Panel } from './Panel';
 import { RIcon } from './ReportArt';
-import { NewsView, ReportView } from './ReportView';
+import { ReportView } from './ReportView';
 import { GameOver, QuarterReport } from './Results';
 import { RouteOpeningCard, type Opening } from './RouteOpening';
 import { RoutesView, type Planner } from './RoutesView';
+import { NewsWithRivals } from './RivalsCard';
 import { actor, applyAction, autoStopReason, idlePlanes, rankings } from './rules';
 import { companyValue, monthDemandMult, routeFreq } from './simulate';
 import { AIRLINE_JINGLES, AIRLINE_MAIN, AIRLINE_TITLE, routeFanfare } from './song';
@@ -534,7 +535,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   else if (tab === 'finance') content = <FinanceView state={game} viewer={viewer} canAct={canAct} perform={perform} />;
   else if (tab === 'staff') content = <StaffView state={game} viewer={viewer} canAct={canAct} perform={perform} />;
   else if (tab === 'report') content = <ReportView state={game} viewer={viewer} />;
-  else content = <NewsView state={game} onCity={showCity} viewer={viewer} />;
+  else content = <NewsWithRivals state={game} onCity={showCity} viewer={viewer} canAct={canAct} perform={perform} />;
 
   return (
     <div className="al-game">

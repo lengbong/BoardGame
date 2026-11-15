@@ -1,6 +1,7 @@
 import type { SeatIndex, SeatKind, Seats } from '../common/players';
 import type { RightsAction, RightsBook, RightsEvent, RightsMode } from './rightsTypes';
 import type { BrandPosState, LoyaltyAction, LoyaltyEvent, LoyaltyState } from './loyaltyTypes';
+import type { RivalAction, RivalBook } from './rivalTypes';
 
 export type { SeatIndex, SeatKind } from '../common/players';
 export type { Rng } from '../../lib/random';
@@ -553,6 +554,8 @@ export interface AirlineOptions {
   history?: boolean;
   /** 운수권·항공 협정 (rights.ts). 없으면 끄기 (예전 저장) */
   rights?: RightsMode;
+  /** 라이벌 경영진 성격과 관계 (relations.ts). 없으면 켜짐 */
+  personas?: boolean;
 }
 
 export interface AirlineSetup {
@@ -921,6 +924,8 @@ export type AirlineAction =
   | RightsAction
   /** 단골 프로그램·브랜드 자리 (loyaltyTypes.ts) */
   | LoyaltyAction
+  /** 라이벌 외교 (rivalTypes.ts) */
+  | RivalAction
   | { type: 'endTurn' };
 
 /** 화면 연출용: 마지막 행동에서 일어난 일 */
@@ -1014,6 +1019,8 @@ export interface AirlineState {
   stakes?: number[][];
   /** 운수권 장부 (예전 저장에는 없다: rights.ts) */
   rights?: RightsBook;
+  /** 라이벌 성격과 관계 장부 (예전 저장에는 없다: relations.ts) */
+  rivals?: RivalBook;
   nextId: number;
   result: GameResult | null;
   challenge: ChallengeProgress | null;

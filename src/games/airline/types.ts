@@ -343,6 +343,18 @@ export interface Route {
   times: [number, number, number, number];
 }
 
+/** 연료 탱크 (fuel.ts) */
+export interface FuelTank {
+  /** 탱크 단계 0~5 (0: 탱크 없음) */
+  level: number;
+  /** 사 둔 연료 (톤) */
+  stock: number;
+  /** 사 둔 연료의 평균 단가 (유가 지수) */
+  avg: number;
+  /** 자동으로 사기: 유가가 '보통 값' × 이 비율 아래면 채운다 (null: 끄기) */
+  auto: number | null;
+}
+
 /** 부대사업 (business.ts) */
 export type BusinessKind = 'hotel' | 'agency' | 'bus' | 'restaurant' | 'store' | 'resort' | 'ski' | 'park';
 
@@ -434,6 +446,8 @@ export interface Company {
   airline: string | null;
   /** 회사 색 (실제 항공사의 칠 색에서 고른 것). null이면 자리 색 */
   color: string | null;
+  /** 연료 탱크 (없으면 탱크 없음) */
+  fuel?: FuelTank;
 }
 
 /** 광고 매체 (ads.ts) */
@@ -579,6 +593,12 @@ export interface CompanyReport {
   staffCancelled: number;
   /** 이번 달 파업이 있었는지 */
   strike: boolean;
+  /** 쓴 연료 (톤) */
+  fuelTons?: number;
+  /** 그 가운데 탱크에서 꺼내 쓴 연료 (톤) */
+  tankUsed?: number;
+  /** 탱크 연료 덕분에 아낀 돈 (그달 값에 견주어, 억. 비싸게 사 두었으면 음수) */
+  tankSaved?: number;
   /** 정시 운항률 (결항은 빼고 뜬 편 가운데 제때 뜬 비율) */
   onTime: number;
   /** 경영 평가 (4분기 결산에만) */
@@ -743,6 +763,14 @@ export type AirlineAction =
   | { type: 'borrow'; amount: number }
   | { type: 'repay'; amount: number }
   | { type: 'build'; city: string; kind: BusinessKind }
+  /** 연료 탱크를 한 단계 키운다 */
+  | { type: 'buildTank' }
+  /** 연료를 지금 값으로 사서 탱크에 담는다 (톤) */
+  | { type: 'buyFuel'; tons: number }
+  /** 사 둔 연료를 그달 값의 90%에 판다 (톤) */
+  | { type: 'sellFuel'; tons: number }
+  /** 자동으로 사기 (보통 값에 견준 비율, null이면 끄기) */
+  | { type: 'setFuelAuto'; ratio: number | null }
   | { type: 'sellBusiness'; city: string; kind: BusinessKind }
   | { type: 'endTurn' };
 
@@ -762,6 +790,7 @@ export type GameEvent =
   | { id: number; type: 'campaign'; company: number; kind: CampaignKind }
   | { id: number; type: 'money'; company: number; amount: number; what: 'borrow' | 'repay' }
   | { id: number; type: 'build'; company: number; city: string; kind: BusinessKind }
+  | { id: number; type: 'fuel'; company: number; tons: number; what: 'buy' | 'sell' | 'tank' }
   | { id: number; type: 'turn'; company: number }
   | { id: number; type: 'month'; t: number }
   | { id: number; type: 'quarter'; q: number }

@@ -16,6 +16,7 @@ import { BUSINESS_INFO, businessMonthSeason } from './business';
 import { bizMonthMult, leisureMonthMult, weather } from './calendar';
 import { AIRPORT_INFO, CITY, FEE_INFO, REGIONS, airportClass, citySize, dist, pairIndex, pairKey } from './cities';
 import { effectMults, fixedEventMult, priceMult, worldMult } from './events';
+import { FUEL_TON, burnFuel, tankWorth } from './fuel';
 import { STAFF_SHARE, overtime, payroll, staffCap, staffNeed, strikeChance } from './staff';
 import { bandCaps, bandCounts, bandUsed, defaultTimes, legalTimes, timeFit } from './timetable';
 import { monthOf, quarterOf, yearOf } from './time';
@@ -225,7 +226,7 @@ export function businessValue(b: Business): number {
   return b.cost * 0.8;
 }
 
-/** 회사 가치 = 현금 + 내 비행기·주문한 비행기·리스 보증금·부대사업 가치 − 빚 */
+/** 회사 가치 = 현금 + 내 비행기·주문한 비행기·리스 보증금·부대사업·사 둔 연료·탱크 가치 − 빚 */
 export function companyValue(state: Pick<AirlineState, 'q' | 't' | 'companies'>, ci: number): number {
   const c = state.companies[ci];
   if (c.out) return 0;
@@ -233,6 +234,7 @@ export function companyValue(state: Pick<AirlineState, 'q' | 't' | 'companies'>,
   for (const p of c.planes) v += planeValue(state, p) + p.deposit;
   for (const o of c.orders) v += o.price;
   for (const b of c.businesses) v += businessValue(b);
+  if (c.fuel) v += tankWorth(c);
   return v;
 }
 
@@ -1471,6 +1473,18 @@ export function computeMonth(state: AirlineState, rng?: Rng): QuarterOutcome {
       if (m.kind !== 'subsidy' || !active(m, state.t) || !m.city) continue;
       if (c.routes.some((r) => (r.a === m.city || r.b === m.city) && routeFreq(c, r.id) > 0)) rep.side += m.value;
     }
+    // 연료: 탱크에 사 둔 연료를 (산 값으로) 먼저 쓰고, 모자라면 그달 값(헤지했으면 고정 값)으로 산다
+    const oilNow = ctxs[ci].oil;
+    if (rep.fuel > 0 && oilNow > 0) {
+      const tons = rep.fuel / (FUEL_TON * oilNow);
+      rep.fuelTons = tons;
+      if (c.fuel && c.fuel.stock > 0) {
+        const burn = burnFuel(c.fuel, tons, oilNow);
+        rep.fuel = burn.cost;
+        rep.tankUsed = burn.used;
+        rep.tankSaved = burn.saved;
+      }
+    }
     rep.onTime = rep.flights - rep.cancelled > 0 ? 1 - (rep.late + rep.diverted) / (rep.flights - rep.cancelled) : c.onTime;
     rep.staff = payroll(state, c, needs[ci]);
     rep.strike = strikes[ci];
@@ -1531,6 +1545,9 @@ export function emptyReport(): CompanyReport {
     staffCancelled: 0,
     strike: false,
     onTime: 0,
+    fuelTons: 0,
+    tankUsed: 0,
+    tankSaved: 0,
   };
 }
 
@@ -1545,6 +1562,10 @@ export function sumReports(list: readonly CompanyReport[]): CompanyReport {
   for (const r of list) {
     for (const k of add) (out[k] as number) += r[k] as number;
     for (const reg of REGIONS) out.regionPax[reg] += r.regionPax[reg];
+    // 나중에 생긴 값 (예전 저장의 결산에는 없을 수 있다)
+    out.fuelTons = (out.fuelTons ?? 0) + (r.fuelTons ?? 0);
+    out.tankUsed = (out.tankUsed ?? 0) + (r.tankUsed ?? 0);
+    out.tankSaved = (out.tankSaved ?? 0) + (r.tankSaved ?? 0);
     out.bankrupt = out.bankrupt || r.bankrupt;
     out.strike = out.strike || r.strike;
   }

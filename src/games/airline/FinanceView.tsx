@@ -5,6 +5,8 @@ import { BUSINESS_INFO } from './business';
 import { MEAL_ICONS, MEAL_NAMES } from './cabin';
 import { CITY, REGIONS, REGION_INFO } from './cities';
 import { fmtMoney, signedMoney } from './format';
+import { FuelCard } from './FuelCard';
+import { tankWorth } from './fuel';
 import { GRADE_INFO, goalProgress } from './goals';
 import { ADS_MAX, allianceOutlook, borrowBlocker, campaignBlocker, campaignCost, proposeBlocker, repayBlocker } from './rules';
 import {
@@ -78,6 +80,7 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
   const limit = creditLimit(state, viewer);
   const planesValue = me.planes.reduce((s, p) => s + planeValue(state, p), 0);
   const bizValue = me.businesses.reduce((s, b) => s + businessValue(b), 0);
+  const fuelValue = me.fuel ? tankWorth(me) : 0;
   const value = companyValue(state, viewer);
   const left = Math.max(0, limit - me.debt);
   const block = (b: string | null) => (canAct ? b : notMine);
@@ -222,7 +225,7 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
             { name: '내 비행기', v: planesValue, slot: 2 },
             { name: '리스 보증금', v: deposits, slot: 3 },
             { name: '주문한 비행기', v: ordered, slot: 4 },
-            { name: '부대사업', v: bizValue, slot: 5 },
+            { name: fuelValue > 0 ? '부대사업·그 밖의 자산' : '부대사업', v: bizValue + fuelValue, slot: 5 },
           ]}
           debt={me.debt + shortCash}
         />
@@ -246,6 +249,11 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
           {bizValue > 0 && (
             <li>
               <i className="al-sw al-cat-5" /> 부대사업 <b>{fmtMoney(bizValue)}</b>
+            </li>
+          )}
+          {fuelValue > 0 && (
+            <li title="사 둔 연료(산 값)와 탱크(지은 값의 60%)">
+              <i className="al-sw al-cat-5" /> 연료·탱크 <b>{fmtMoney(fuelValue)}</b>
             </li>
           )}
           <li>
@@ -567,6 +575,8 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
         </div>
         <MoreInfo>정비를 꼼꼼히 하면 승무원·정비비가 늘지만 지연·결항·기체 점검이 줄어요. 비행기가 낡을수록 더 중요해요. 예비 승무원은 아픈 사람·늦은 비행 때문에 생기는 지연을 줄여요.</MoreInfo>
       </section>
+
+      <FuelCard state={state} viewer={viewer} canAct={canAct} perform={perform} next={next} />
 
       <section className="al-card al-service">
         <h4 className="al-fin-title">

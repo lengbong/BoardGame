@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChoiceIcon, ICON_DUO, ICON_LINE, IconPicker, type IconChoice } from '../../components/IconPicker';
 import { SeatPicker } from '../../components/SeatPicker';
 import { SpeedPicker } from '../../components/SpeedPicker';
+import { useMusic } from '../../lib/useMusic';
 import { SEAT_COLORS, activeSeatCount } from '../common/players';
 import type { GameSettings } from '../common/settings';
 import { HeroArt, LandmarkIcon } from './Art';
@@ -18,6 +19,7 @@ import { AirlinePicker, AirlinePhoto, airlineYears } from './AirlinePicker';
 import { gameHub } from './brand';
 import { CreditsModal } from './CreditsModal';
 import { REAL_AIRLINE, airlinesAt } from './realAirlines';
+import { AIRLINE_TITLE } from './song';
 import type { AiStyle, AirlineOptions, AirlineSetup, MoneyLevel, NameMode, StartEra } from './types';
 import { IataBadge } from './ui';
 import { Meter } from './ui';
@@ -167,6 +169,7 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
   const [choosing, setChoosing] = useState<number | null>(null);
   const [pickingAirline, setPickingAirline] = useState<number | null>(null);
   const [credits, setCredits] = useState(false);
+  useMusic(AIRLINE_TITLE, settings.music);
   const opt = setup.options;
   const real = opt.names === 'real';
   const setOpt = (patch: Partial<AirlineOptions>) => setSetup((s) => ({ ...s, options: { ...s.options, ...patch } }));
@@ -452,7 +455,12 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
       )}
 
       <section className="setup-section setup-footer">
-        <SpeedPicker caption="컴퓨터·애니메이션 속도" value={settings.speed} onChange={(speed) => onSettings({ ...settings, speed })} inline />
+        <div className="al-footer-options">
+          <SpeedPicker caption="컴퓨터·애니메이션 속도" value={settings.speed} onChange={(speed) => onSettings({ ...settings, speed })} inline />
+          <button type="button" className="btn" onClick={() => onSettings({ ...settings, music: !settings.music })} data-testid="al-music">
+            {settings.music ? '🎵 음악 켜짐' : '🎵 음악 꺼짐'}
+          </button>
+        </div>
         <button type="button" className="btn btn-primary btn-large" disabled={!canStart} onClick={start} data-testid="al-start">
           {challenge ? '도전 시작' : '게임 시작'}
         </button>

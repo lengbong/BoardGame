@@ -30,9 +30,13 @@ export const alSound = {
   pay() {
     sfx.pay();
   },
-  /** 분기 결산: 서류 넘기는 소리 + 화음 */
-  report(good: boolean) {
+  /** 서류 넘기는 소리 */
+  paper() {
     burst(0, 0.16, 1200, 1.2, 0.18, 3200);
+  },
+  /** 분기 결산: 서류 넘기는 소리 + 화음 (음악을 끈 때. 켜 두면 결산 팡파르가 대신 나온다) */
+  report(good: boolean) {
+    this.paper();
     const notes = good ? [523, 659, 784] : [523, 622, 740];
     notes.forEach((f, i) => tone(f, 0.18 + i * 0.08, 0.3, 'triangle', 0.07));
   },

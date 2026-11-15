@@ -4677,3 +4677,11 @@ text.al-neg {
     gap: 3px;
   }
 }
+
+/* 설정 화면 아래쪽: 속도 고르기와 음악 켜기 */
+.al-footer-options {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}

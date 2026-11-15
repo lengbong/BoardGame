@@ -670,46 +670,62 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                 {AIRPORT_INFO[airportClass(CITY[to], year)].name}
                 {needBranch.length > 0 && ` · 지점 새로 열기: ${needBranch.map((c) => `${CITY[c].name} ${fmtMoney(branchCost(c, state.q))} (유지비 달 ${fmtMoney(branchUpkeep(c, state.q))})`).join(', ')}`}
               </p>
+              {/* 노선 자체를 못 여는 이유는 여기 한 번만 (버튼마다 되풀이하지 않는다) */}
+              {why && (
+                <p className="al-why al-route-block" role="note" data-testid="al-route-block">
+                  🚫 {why}
+                </p>
+              )}
               {options.length === 0 ? (
                 <p className="al-why">지금 이 노선에 띄울 수 있는 비행기가 없어요. (거리·공항 크기·슬롯을 확인하세요)</p>
               ) : (
                 <ul className="al-options">
-                  {options.map((o) => (
-                    <li key={o.m.id}>
-                      <PlaneImage model={o.m.id} paint={{ main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] }} className="al-plane-chip al-plane-chip-big" />
-                      <span className="al-opt-text">
-                        <b>{o.m.name}</b>
-                        <small>
-                          주 {o.freq}회 · {o.m.seats}석 · 탑승률 {pct(o.e.lf)}
-                        </small>
-                        <small>
-                          이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/달
-                        </small>
-                      </span>
-                      <span className="al-two">
-                        <ActButton
-                          small
-                          primary
-                          blocker={why ?? buyBlocker(state, viewer, o.m.id, true)}
-                          onClick={() => openWith(o, 'lease')}
-                          title={(() => {
-                            const dep = depositFor(state, viewer, o.m.id);
-                            return `달 리스료 ${fmtMoney(leaseRent(state, o.m))}${dep > 0 ? `, 보증금 ${fmtMoney(dep)} (돌려줄 때 돌려받아요)` : ', 첫해 보증금 없음'}`;
-                          })()}
-                        >
-                          리스로 열기
-                        </ActButton>
-                        {(() => {
-                          const used = state.market.find((u) => u.model === o.m.id);
-                          return used ? (
-                            <ActButton small blocker={why ?? usedBlocker(state, viewer, used.id)} onClick={() => openWith(o, 'used')} title={`${used.age}년 된 중고`}>
-                              중고 {fmtMoney(used.price)}
-                            </ActButton>
-                          ) : null;
-                        })()}
-                      </span>
-                    </li>
-                  ))}
+                  {options.map((o) => {
+                    const used = state.market.find((u) => u.model === o.m.id);
+                    const leaseWhy = why ?? buyBlocker(state, viewer, o.m.id, true);
+                    const usedWhy = used ? (why ?? usedBlocker(state, viewer, used.id)) : null;
+                    // 리스·중고가 같은 이유로 막히면 그 이유는 두 버튼 밑에 한 번만
+                    const sameWhy = !why && !!leaseWhy && leaseWhy === usedWhy ? leaseWhy : null;
+                    return (
+                      <li key={o.m.id}>
+                        <PlaneImage model={o.m.id} paint={{ main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] }} className="al-plane-chip al-plane-chip-big" />
+                        <div className="al-opt-body">
+                          <span className="al-opt-text">
+                            <b>{o.m.name}</b>
+                            <small>
+                              주 {o.freq}회 · {o.m.seats}석 · 탑승률 {pct(o.e.lf)}
+                            </small>
+                            <small>
+                              이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/달
+                            </small>
+                          </span>
+                          <span className="al-act">
+                            <span className="al-two">
+                              <ActButton
+                                small
+                                primary
+                                blocker={leaseWhy}
+                                quiet={!!why || !!sameWhy}
+                                onClick={() => openWith(o, 'lease')}
+                                title={(() => {
+                                  const dep = depositFor(state, viewer, o.m.id);
+                                  return `달 리스료 ${fmtMoney(leaseRent(state, o.m))}${dep > 0 ? `, 보증금 ${fmtMoney(dep)} (돌려줄 때 돌려받아요)` : ', 첫해 보증금 없음'}`;
+                                })()}
+                              >
+                                리스로 열기
+                              </ActButton>
+                              {used && (
+                                <ActButton small blocker={usedWhy} quiet={!!why || !!sameWhy} onClick={() => openWith(o, 'used')} title={`${used.age}년 된 중고`}>
+                                  중고 {fmtMoney(used.price)}
+                                </ActButton>
+                              )}
+                            </span>
+                            {sameWhy && <small className="al-why">{sameWhy}</small>}
+                          </span>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               {mine.length > 0 && (
@@ -719,25 +735,27 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                     {mine.map((o) => (
                       <li key={o.p.id}>
                         <PlaneImage model={o.m.id} paint={{ main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] }} className="al-plane-chip al-plane-chip-big" />
-                        <span className="al-opt-text">
-                          <b>{o.m.name}</b>
-                          <small>
-                            {o.p.legs.length === 0 ? '쉬는 중' : `남는 시간으로`} 주 {o.freq}회 · 탑승률 {pct(o.e.lf)}
-                          </small>
-                          <small>
-                            이 노선 이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/달 <span className="al-muted">(리스료는 이미 내는 중)</span>
-                          </small>
-                        </span>
-                        <ActButton small blocker={why} onClick={() => openWith(o, o.p.id)}>
-                          이 비행기로 열기
-                        </ActButton>
+                        <div className="al-opt-body">
+                          <span className="al-opt-text">
+                            <b>{o.m.name}</b>
+                            <small>
+                              {o.p.legs.length === 0 ? '쉬는 중' : `남는 시간으로`} 주 {o.freq}회 · 탑승률 {pct(o.e.lf)}
+                            </small>
+                            <small>
+                              이 노선 이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/달 <span className="al-muted">(리스료는 이미 내는 중)</span>
+                            </small>
+                          </span>
+                          <ActButton small blocker={why} quiet onClick={() => openWith(o, o.p.id)}>
+                            이 비행기로 열기
+                          </ActButton>
+                        </div>
                       </li>
                     ))}
                   </ul>
                 </>
               )}
               <div className="al-nr-foot">
-                <ActButton blocker={why} onClick={openRouteOnly} testId="al-open-route-only">
+                <ActButton blocker={why} quiet onClick={openRouteOnly} testId="al-open-route-only">
                   노선만 열기 (비행기는 나중에)
                 </ActButton>
                 <p className="al-muted al-tip">이익은 라이벌이 지금 그대로일 때의 어림이에요. 계절과 사건에 따라 달라져요.</p>

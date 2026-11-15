@@ -14,6 +14,7 @@ export function ActButton({
   small,
   testId,
   title,
+  quiet,
 }: {
   children: ReactNode;
   /** 못 하는 이유 (null이면 할 수 있음) */
@@ -23,6 +24,8 @@ export function ActButton({
   small?: boolean;
   testId?: string;
   title?: string;
+  /** 이유를 버튼 밑에 쓰지 않는다 (같은 이유를 화면 다른 곳에 한 번만 보여 줄 때). 마우스를 올리면 보인다 */
+  quiet?: boolean;
 }) {
   return (
     <span className="al-act">
@@ -36,7 +39,7 @@ export function ActButton({
       >
         {children}
       </button>
-      {blocker && <small className="al-why">{blocker}</small>}
+      {blocker && !quiet && <small className="al-why">{blocker}</small>}
     </span>
   );
 }

@@ -1,9 +1,10 @@
 import { useState } from 'react';
+import './fleet.css';
 import { coColors } from './brand';
 import { BODY_INFO, MODEL, MODELS, availableModels, commonalityMult, isFictional, launchDiscount, leadTime, sizeClass, type SizeClass } from './aircraft';
 import { EAST_MAKERS } from './politics';
 import { SEAT_SHAPES } from './Art';
-import { AIRPORT_INFO, CITY } from './cities';
+import { AIRPORT_INFO, CITY, dist } from './cities';
 import { fmtMoney, km } from './format';
 import { CANCEL_REFUND, buyBlocker, deliveriesThisQuarter, depositFor, firstYearHelp, sellAmount, sellBlocker, usedBlocker } from './rules';
 import {
@@ -11,18 +12,23 @@ import {
   WEEK_HOURS,
   familyCounts,
   leaseRent,
+  legHours,
   orderPrice,
   planeAge,
   planeHours,
   planeValue,
   routeOf,
 } from './simulate';
-import { mLabel, yearOf } from './time';
+import { MEAL_NAMES } from './cabin';
+import { mLabel, mShort, yearOf } from './time';
 import type { AirlineAction, AirlineState, ModelDef } from './types';
-import { CabinEditor, cabinSummary } from './CabinEditor';
+import { CabinEditor, cabinSeatText } from './CabinEditor';
 import { DaySchedule } from './DaySchedule';
+import { ArrivalTimeline, FleetIcon, HoursBar, SpecBars, toneOfUse, type FleetIconKind } from './FleetArt';
+import { FinIcon, ProgressRing } from './FinanceArt';
 import { PlaneImage } from './PlaneImage';
-import { ActButton, Meter, Stars } from './ui';
+import { MoreInfo } from './StaffArt';
+import { ActButton } from './ui';
 
 interface FleetViewProps {
   state: AirlineState;
@@ -57,60 +63,134 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
   const flying = me.planes.filter((p) => p.legs.length > 0);
   const avgUse = flying.length ? flying.reduce((s, p) => s + planeHours(me, p), 0) / (flying.length * WEEK_HOURS) : 0;
   const help = firstYearHelp(state, viewer);
+  const owned = me.planes.filter((p) => !p.leased).length;
+  const idle = me.planes.length - flying.length;
+  const avgAge = me.planes.length ? me.planes.reduce((s, p) => s + planeAge(state, p), 0) / me.planes.length : 0;
+  // 성능 막대는 지금 살 수 있는 모든 기종 가운데 가장 큰 값에 견준다
+  const all = availableModels(year);
+  const top = {
+    seats: Math.max(1, ...all.map((m) => m.seats)),
+    range: Math.max(1, ...all.map((m) => m.range)),
+    speed: Math.max(1, ...all.map((m) => m.speed)),
+  };
+  /** 비행기 한 대의 노선별 한 주 비행시간 */
+  const hourParts = (p: (typeof me.planes)[number]) => {
+    const pm = MODEL[p.model];
+    return p.legs
+      .filter((l) => l.freq > 0)
+      .map((l) => {
+        const r = routeOf(me, l.route);
+        return r ? { label: `${CITY[r.a].name} ⇄ ${CITY[r.b].name} 주 ${l.freq}회`, hours: 2 * legHours(pm, dist(r.a, r.b)) * l.freq } : null;
+      })
+      .filter((x): x is { label: string; hours: number } => x !== null);
+  };
+  const specRows = (m: ModelDef, extra: { icon: FleetIconKind; label: string; v: number; text: string; tone?: 'good' | 'warn' | 'bad' }[] = []) => [
+    { icon: 'seat' as const, label: '좌석', v: m.seats / top.seats, text: `${m.seats}석` },
+    { icon: 'range' as const, label: '거리', v: m.range / top.range, text: km(m.range) },
+    ...extra,
+  ];
 
   return (
     <div className="al-fleet">
       <div className="al-subtabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === 'hangar'} className={`al-subtab${tab === 'hangar' ? ' al-on' : ''}`} onClick={() => setTab('hangar')}>
-          🛩️ 내 비행기 {me.planes.length}대{me.orders.length > 0 && ` · 주문 ${me.orders.length}`}
+          <FleetIcon kind="plane" size={16} /> 내 비행기 {me.planes.length}대{me.orders.length > 0 && ` · 주문 ${me.orders.length}`}
         </button>
         <button type="button" role="tab" aria-selected={tab === 'shop'} className={`al-subtab${tab === 'shop' ? ' al-on' : ''}`} onClick={() => setTab('shop')} data-testid="al-shop-tab">
-          🛒 새 비행기 (주문·리스)
+          <FleetIcon kind="box" size={16} /> 새 비행기 (주문·리스)
         </button>
         <button type="button" role="tab" aria-selected={tab === 'used'} className={`al-subtab${tab === 'used' ? ' al-on' : ''}`} onClick={() => setTab('used')} data-testid="al-used-tab">
-          🏷️ 중고 시장 {state.market.length}
+          <FleetIcon kind="tag" size={16} /> 중고 시장 {state.market.length}
         </button>
         <button type="button" role="tab" aria-selected={tab === 'day'} className={`al-subtab${tab === 'day' ? ' al-on' : ''}`} onClick={() => setTab('day')} data-testid="al-day-tab">
-          🕑 하루 운항표
+          <FleetIcon kind="clock" size={16} /> 하루 운항표
         </button>
-        <span className="al-subtab-note">
-          이번 달에 바로 받은 비행기 (리스·중고) {delivered}/{MAX_DELIVERIES}대
+        <span className="al-subtab-note al-fl-deliv" title="리스·중고 비행기는 한 달에 이만큼까지 바로 받을 수 있어요">
+          이번 달 바로 받기 (리스·중고)
+          <span className="al-fl-deliv-pips" aria-hidden="true">
+            {Array.from({ length: MAX_DELIVERIES }, (_, i) => (
+              <FleetIcon key={i} kind="plane" size={15} className={i < delivered ? 'al-on' : ''} />
+            ))}
+          </span>
+          <b>
+            {delivered}/{MAX_DELIVERIES}대
+          </b>
         </span>
       </div>
 
       {tab === 'day' && (
         <section className="al-card al-day-card">
-          <h4>
-            🕑 하루 운항표 <small>노선을 나는 비행기 {flying.length}대</small>
+          <h4 className="al-fin-title">
+            <FleetIcon kind="clock" /> 하루 운항표 <small>노선을 나는 비행기 {flying.length}대</small>
           </h4>
           <DaySchedule state={state} ci={viewer} planes={[...flying].sort((a, b) => planeHours(me, b) - planeHours(me, a))} limit={40} />
-          <p className="al-muted al-tip">노선마다 시간대(아침·낮·저녁·밤) 나누기는 ‘노선’ 화면의 운항 시간표에서 바꿔요.</p>
+          <MoreInfo label="시간대는 어디서 바꿔요?">노선마다 시간대(아침·낮·저녁·밤) 나누기는 ‘노선’ 화면의 운항 시간표에서 바꿔요.</MoreInfo>
         </section>
       )}
 
       {tab === 'hangar' && (
         <div className="al-hangar">
           {me.planes.length > 0 && (
-            <div className="al-fleet-sum">
-              <span>
-                평균 가동률 <b>{Math.round(avgUse * 100)}%</b>
-                <Meter value={avgUse} tone={avgUse > 0.75 ? 'good' : avgUse > 0.45 ? 'warn' : 'bad'} label={`평균 가동률 ${Math.round(avgUse * 100)}%`} />
-              </span>
-              <span className="al-muted">한 대가 한 주에 {WEEK_HOURS}시간까지 날아요. 남는 시간은 다른 노선에 쓰세요.</span>
-              <span className="al-families">
-                {[...families.entries()]
-                  .filter(([, n]) => n >= 2)
-                  .map(([f, n]) => (
-                    <span key={f} className="al-chip al-chip-static" title="같은 계열이 많으면 조종사·부품을 함께 써서 정비·승무원비가 줄어요">
-                      {f} 계열 {n}대 · 정비 −{Math.round((1 - commonalityMult(n)) * 100)}%
-                    </span>
-                  ))}
-              </span>
-            </div>
+            <section className="al-card al-fl-sum">
+              <ul className="al-staff-kpi al-fl-kpi">
+                <li className="al-kpi-ok">
+                  <FleetIcon kind="plane" size={26} />
+                  <span>
+                    <small>비행기</small>
+                    <b>{me.planes.length}대</b>
+                    <small>
+                      내 것 {owned} · 리스 {me.planes.length - owned}
+                    </small>
+                  </span>
+                </li>
+                <li className={toneOfUse(avgUse) === 'bad' ? 'al-kpi-bad' : 'al-kpi-ok'}>
+                  <ProgressRing value={avgUse} tone={toneOfUse(avgUse) === 'good' ? 'good' : toneOfUse(avgUse) === 'warn' ? 'warn' : 'bad'} size={42} label={`평균 가동률 ${Math.round(avgUse * 100)}%`} />
+                  <span>
+                    <small>평균 가동률</small>
+                    <b>{Math.round(avgUse * 100)}%</b>
+                    <small>한 대 주 {WEEK_HOURS}시간까지</small>
+                  </span>
+                </li>
+                <li className={idle > 0 ? 'al-kpi-warn' : 'al-kpi-ok'}>
+                  <FleetIcon kind="parked" size={26} />
+                  <span>
+                    <small>쉬는 비행기</small>
+                    <b>{idle}대</b>
+                    <small>{idle > 0 ? '예비기로 대신 날아요' : '모두 날아요'}</small>
+                  </span>
+                </li>
+                <li className="al-kpi-ok">
+                  <FleetIcon kind="age" size={26} />
+                  <span>
+                    <small>평균 나이</small>
+                    <b>{avgAge.toFixed(1)}년</b>
+                    <small>낡을수록 연료·정비비 ↑</small>
+                  </span>
+                </li>
+              </ul>
+              {[...families.entries()].some(([, n]) => n >= 2) && (
+                <div className="al-families al-fl-families">
+                  {[...families.entries()]
+                    .filter(([, n]) => n >= 2)
+                    .map(([f, n]) => (
+                      <span key={f} className="al-chip al-chip-static" title="같은 계열이 많으면 조종사·부품을 함께 써서 정비·승무원비가 줄어요">
+                        <FleetIcon kind="stack" size={14} /> {f} 계열 {n}대 · 정비 −{Math.round((1 - commonalityMult(n)) * 100)}%
+                      </span>
+                    ))}
+                </div>
+              )}
+              <MoreInfo>
+                한 대가 한 주에 {WEEK_HOURS}시간까지 날아요. 가동률이 낮은 비행기는 남는 시간을 다른 노선에 쓰면 리스료·정비비를 더 잘 벌어요. 같은 계열(예: 727, 737) 비행기가 여러 대면 조종사·부품을 함께 써서 정비·승무원비가 줄어요.
+                쉬는 비행기는 기체 점검·결항 때 대신 나는 예비기가 돼요.
+              </MoreInfo>
+            </section>
           )}
           {me.orders.length > 0 && (
             <section className="al-orders" aria-label="주문 대기">
-              <h4>📦 주문 대기</h4>
+              <h4 className="al-fin-title">
+                <FleetIcon kind="box" /> 주문 대기 <small>{me.orders.length}대</small>
+              </h4>
+              <ArrivalTimeline now={state.t} items={me.orders.map((o) => ({ due: o.due, label: MODEL[o.model].name }))} />
               <ul>
                 {[...me.orders]
                   .sort((a, b) => a.due - b.due)
@@ -120,10 +200,12 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                       <li key={o.id}>
                         <PlaneImage model={m.id} paint={paint} className="al-thumb" />
                         <b>{m.name}</b>
-                        <span>
-                          {mLabel(o.due)} 도착 <small className="al-muted">({o.due - state.t}달 뒤)</small>
+                        <span className="al-fl-meta">
+                          <FleetIcon kind="calendar" size={14} /> {mLabel(o.due)} 도착 <small className="al-muted">({o.due - state.t}달 뒤)</small>
                         </span>
-                        <span className="al-muted">낸 값 {fmtMoney(o.price)}</span>
+                        <span className="al-fl-meta al-muted">
+                          <FinIcon kind="coin" size={14} /> 낸 값 {fmtMoney(o.price)}
+                        </span>
                         <ActButton
                           small
                           blocker={canAct ? null : notMine}
@@ -168,21 +250,32 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                     <small>
                       {m.maker} · {km(m.range)}
                     </small>
-                    <button type="button" className="al-link al-small al-cabin-link" onClick={() => setCabinFor(cabinFor === p.id ? null : p.id)} aria-expanded={cabinFor === p.id} data-testid={`al-cabin-open-${p.id}`}>
-                      🪑 {cabinSummary(p)}
+                    <button type="button" className="al-link al-small al-cabin-link al-fl-cabin" onClick={() => setCabinFor(cabinFor === p.id ? null : p.id)} aria-expanded={cabinFor === p.id} data-testid={`al-cabin-open-${p.id}`}>
+                      <FleetIcon kind="seat" size={14} /> {cabinSeatText(p)} <FinIcon kind="meal" size={14} /> {MEAL_NAMES[p.meal]}
                     </button>
-                    <small>
-                      {Math.floor(age)}년째 · {p.leased ? `리스 (달 ${fmtMoney(p.rent)}${p.deposit > 0 ? ` · 보증금 ${fmtMoney(p.deposit)}` : ''})` : `내 것 (가치 ${fmtMoney(planeValue(state, p))})`}
-                      {old && ' · 단종'}
+                    <small className="al-fl-meta">
+                      <FleetIcon kind="age" size={13} /> {Math.floor(age)}년째
+                      {p.leased ? (
+                        <>
+                          <FleetIcon kind="doc" size={13} /> 리스 · 달 {fmtMoney(p.rent)}
+                          {p.deposit > 0 ? ` · 보증금 ${fmtMoney(p.deposit)}` : ''}
+                        </>
+                      ) : (
+                        <>
+                          <FleetIcon kind="key" size={13} /> 내 것 · 가치 {fmtMoney(planeValue(state, p))}
+                        </>
+                      )}
+                      {old && <span className="al-flag al-flag-warn">단종</span>}
                     </small>
                   </div>
                   <div className="al-pl-route">
                     {p.legs.length > 0 ? (
                       <>
-                        <span className="al-pl-use">
-                          가동률 {Math.round(use * 100)}%
-                          <Meter value={use} tone={use > 0.75 ? 'good' : use > 0.45 ? 'warn' : 'bad'} label={`가동률 ${Math.round(use * 100)}%`} />
-                          <small className="al-muted">주 {Math.round(hours)} / {WEEK_HOURS}시간</small>
+                        <span className="al-fl-use">
+                          <span className="al-fl-use-label">
+                            가동률 <b>{Math.round(use * 100)}%</b>
+                          </span>
+                          <HoursBar parts={hourParts(p)} max={WEEK_HOURS} tone={toneOfUse(use)} />
                         </span>
                         {p.legs.map((l) => {
                           const r = routeOf(me, l.route);
@@ -201,7 +294,9 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                       </>
                     ) : (
                       <>
-                        <span className="al-flag">쉬는 중</span>
+                        <span className="al-flag al-fl-idle-flag">
+                          <FleetIcon kind="parked" size={14} /> 쉬는 중 · 예비기
+                        </span>
                         <button type="button" className="btn btn-small" onClick={onGoRoutes} disabled={!canAct}>
                           노선에 넣기
                         </button>
@@ -239,10 +334,18 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
               </button>
             ))}
             <span className="al-muted al-shop-note">
-              {year}년에 살 수 있는 기종 · 값은 어림한 오늘 돈 · 주문은 값을 먼저 내고 3~12달 뒤에 받아요. 리스는 바로 받지만 달마다 값의 1.2% 남짓을 내요.
-              {help && ' 첫해에는 리스 보증금이 없어요.'}
+              {year}년에 살 수 있는 기종{help && ' · 첫해에는 리스 보증금이 없어요'}
             </span>
           </div>
+          <div className="al-fl-howto">
+            <span>
+              <FleetIcon kind="box" size={18} /> <b>주문</b> 값을 먼저 내고 3~12달 뒤에 받아요 (더 싸요)
+            </span>
+            <span>
+              <FleetIcon kind="doc" size={18} /> <b>리스</b> 바로 받고 달마다 값의 1.2% 남짓을 내요
+            </span>
+          </div>
+          <MoreInfo>값은 그 해 값을 오늘 돈으로 어림한 것이에요. 주문하면 값을 먼저 내고 몇 달 기다려야 하지만 내 것이 되어 나중에 팔 수 있어요. 리스는 바로 받아 쓸 수 있고, 돌려줄 때 보증금을 돌려받지만 위약금으로 한 달 치를 내요.</MoreInfo>
           <ul className="al-cards">
             {models.map((m) => {
               const eff = BEST_FUEL / fuelPerSeat(m);
@@ -279,48 +382,24 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                     )}
                     {ending && <span className="al-flag al-flag-warn">곧 단종</span>}
                   </div>
-                  <dl className="al-mc-specs">
-                    <div>
-                      <dt>좌석</dt>
-                      <dd>{m.seats}석</dd>
-                    </div>
-                    <div>
-                      <dt>거리</dt>
-                      <dd>{km(m.range)}</dd>
-                    </div>
-                    <div>
-                      <dt>속도</dt>
-                      <dd>{m.speed.toLocaleString()}km/h</dd>
-                    </div>
-                    <div>
-                      <dt>공항</dt>
-                      <dd>{AIRPORT_INFO[m.runway].name} 이상</dd>
-                    </div>
-                    <div>
-                      <dt>연료 아끼기</dt>
-                      <dd>
-                        <Meter value={eff} tone={eff > 0.7 ? 'good' : eff > 0.45 ? 'warn' : 'bad'} label={`연료 효율 ${Math.round(eff * 100)}`} />
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>편안함</dt>
-                      <dd>
-                        <Stars n={m.comfort} />
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>만든 해</dt>
-                      <dd>
-                        {m.intro}~{m.end >= 2040 ? '지금' : m.end}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>주문하면</dt>
-                      <dd>
-                        {lead}달 뒤 <small className="al-muted">({mLabel(state.t + lead)})</small>
-                      </dd>
-                    </div>
-                  </dl>
+                  <SpecBars
+                    rows={specRows(m, [
+                      { icon: 'speed', label: '속도', v: m.speed / top.speed, text: `${m.speed.toLocaleString()}km/h` },
+                      { icon: 'fuel', label: '연료 아끼기', v: eff, text: `${Math.round(eff * 100)}점`, tone: eff > 0.7 ? 'good' : eff > 0.45 ? 'warn' : 'bad' },
+                      { icon: 'comfort', label: '편안함', v: m.comfort / 5, text: `${m.comfort} / 5` },
+                    ])}
+                  />
+                  <ul className="al-fl-facts">
+                    <li title="이 비행기가 내릴 수 있는 가장 작은 공항">
+                      <FleetIcon kind="runway" size={14} /> {AIRPORT_INFO[m.runway].name} 이상
+                    </li>
+                    <li title="만든 해">
+                      <FleetIcon kind="calendar" size={14} /> {m.intro}~{m.end >= 2040 ? '지금' : m.end}
+                    </li>
+                    <li title={`주문하면 ${mLabel(state.t + lead)}에 받아요`}>
+                      <FleetIcon kind="box" size={14} /> 주문하면 {lead}달 뒤 <small className="al-muted">({mShort(state.t + lead)})</small>
+                    </li>
+                  </ul>
                   <div className="al-mc-buy">
                     <ActButton
                       small
@@ -347,18 +426,44 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
             })}
           </ul>
           {soon.length > 0 && (
-            <p className="al-muted al-soon">
-              곧 나와요: {soon.map((m) => `${m.name}(${m.intro})`).join(', ')} — 나오자마자 주문하면 첫 손님 할인을 받지만 오래 기다려요.
-            </p>
+            <section className="al-fl-soon" aria-label="곧 나오는 기종">
+              <h5 className="al-fin-sub">
+                <FleetIcon kind="calendar" size={16} /> 곧 나와요 <small>나오자마자 주문하면 첫 손님 할인을 받지만 오래 기다려요</small>
+              </h5>
+              <ol className="al-fl-soon-years">
+                {[...new Set(soon.map((m) => m.intro))]
+                  .sort((x, y) => x - y)
+                  .map((yr) => (
+                    <li key={yr}>
+                      <b>{yr}</b>
+                      <span>
+                        {soon
+                          .filter((m) => m.intro === yr)
+                          .map((m) => (
+                            <span key={m.id} className="al-chip al-chip-static">
+                              <FleetIcon kind="plane" size={13} /> {m.name}
+                            </span>
+                          ))}
+                      </span>
+                    </li>
+                  ))}
+              </ol>
+            </section>
           )}
         </div>
       )}
 
       {tab === 'used' && (
         <div className="al-used">
-          <p className="al-muted">
-            다른 회사가 쓰던 비행기예요. 바로 받고 새것보다 싸지만, 낡을수록 연료·정비비가 더 들고 손님도 덜 좋아해요. 매물은 달마다 조금씩 바뀌어요. 노선에 넣지 않은 비행기는 기체 점검이나 결항 때 대신 나는 예비기가 돼요.
-          </p>
+          <div className="al-fl-howto">
+            <span>
+              <FleetIcon kind="tag" size={18} /> 다른 회사가 쓰던 비행기예요. <b>바로 받고 새것보다 싸요</b>
+            </span>
+            <span>
+              <FleetIcon kind="age" size={18} /> 낡을수록 연료·정비비가 더 들고 손님도 덜 좋아해요
+            </span>
+          </div>
+          <MoreInfo>매물은 달마다 조금씩 바뀌어요. 노선에 넣지 않은 비행기는 기체 점검이나 결항 때 대신 나는 예비기가 돼요.</MoreInfo>
           {state.market.length === 0 && <p className="al-muted al-empty-main">지금은 나온 비행기가 없어요.</p>}
           <ul className="al-cards">
             {state.market.map((u) => {
@@ -377,20 +482,15 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                     {u.from && <span className="al-flag al-flag-warn">{u.from}에서 나옴</span>}
                     {year > m.end && <span className="al-flag">단종 기종</span>}
                   </div>
-                  <dl className="al-mc-specs">
-                    <div>
-                      <dt>좌석</dt>
-                      <dd>{m.seats}석</dd>
-                    </div>
-                    <div>
-                      <dt>거리</dt>
-                      <dd>{km(m.range)}</dd>
-                    </div>
-                    <div>
-                      <dt>새것 값</dt>
-                      <dd>{year <= m.end ? fmtMoney(newPrice) : '—'}</dd>
-                    </div>
-                  </dl>
+                  <SpecBars
+                    rows={specRows(m, [
+                      { icon: 'age', label: '나이', v: Math.min(1, u.age / 30), text: `${u.age}년`, tone: u.age < 10 ? 'good' : u.age < 20 ? 'warn' : 'bad' },
+                      ...(year <= m.end && newPrice > 0
+                        ? [{ icon: 'tag' as const, label: '값', v: Math.min(1, u.price / newPrice), text: `새것의 ${Math.round((u.price / newPrice) * 100)}%` }]
+                        : []),
+                    ])}
+                  />
+                  {year <= m.end && <small className="al-muted al-fl-newprice">새것 값 {fmtMoney(newPrice)}</small>}
                   <div className="al-mc-buy">
                     <ActButton small primary blocker={canAct ? usedBlocker(state, viewer, u.id) : notMine} onClick={() => perform({ type: 'buyUsed', listing: u.id })} testId={`al-buyused-${u.id}`}>
                       사기 {fmtMoney(u.price)}

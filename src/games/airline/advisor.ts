@@ -112,11 +112,20 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   // 2. 쉬는 비행기 (이번 달 전세기로 나가는 비행기는 쉬는 게 아니라 팔거나 노선에 넣을 수 없다)
   const chartered = charterPlaneIds(state, ci);
   const idle = idlePlanes(c).filter((p) => !chartered.has(p.id));
+  // 쉬는 비행기마다 띄울 만한 노선은 한 번만 따진다
+  const bestLegs = new Map<number, BestLeg>();
+  const legOf = (id: number): BestLeg => {
+    if (!bestLegs.has(id)) bestLegs.set(id, planner(state, ci).bestExistingLeg(id, false));
+    return bestLegs.get(id)!;
+  };
+  // 비행기가 많으면 띄울 곳 없는 쉬는 내 비행기 몇 대는 예비기로 둔다 (팔거나 리스기와 바꾸지 않는다)
+  const keep = spareKeep(state, c, idle, legOf);
+  const keepIds = new Set(keep.map((p) => p.id));
+  const free = idle.filter((p) => !keepIds.has(p.id));
   // 쉬는 내 비행기가 노선을 넘겨받을 수 있는 리스기가 있으면, 팔지 말고 리스기를 돌려주는 게 낫다
-  const swaps = swapPairs(state, ci, idle);
-  for (const p of idle.slice(0, 2)) {
-    const pl = planner(state, ci);
-    const best = pl.bestExistingLeg(p.id, false);
+  const swaps = swapPairs(state, ci, free);
+  for (const p of free.slice(0, 2)) {
+    const best = legOf(p.id);
     const m = MODEL[p.model];
     if (best && best.gain > 0) {
       out.push({
@@ -140,6 +149,17 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
         weight: 300,
       });
     }
+  }
+  if (keep.length > 0) {
+    const flyingNow = c.planes.filter((p) => p.legs.length > 0).length;
+    const one = MODEL[keep[0].model].name;
+    out.push({
+      key: 'keepspare',
+      icon: '🛟',
+      title: keep.length === 1 ? `쉬는 ${withJosa(one, '은/는')} 예비기로 두기` : `쉬는 비행기 ${keep.length}대는 예비기로 두기`,
+      detail: `비행기가 ${flyingNow}대 날고 있어요. 띄울 노선이 마땅치 않은 ${withJosa(keep.map((p) => MODEL[p.model].name).join('·'), '은/는')} 팔거나 리스기와 바꾸지 말고 예비기로 두세요. 기체 점검이나 고장으로 빠진 비행기 대신 날고, 결항이 줄어요.`,
+      weight: 200,
+    });
   }
 
   // 3. 비행시간이 많이 남는 비행기
@@ -286,12 +306,12 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     const price = orderPrice(state, m, c);
     const lead = leadTime(m, yearOf(state.q));
     const waiting = c.orders.length;
-    if (!idleOwnOf(c, m.id) && lead <= 12 && waiting < 2 + Math.floor(c.planes.length / 8) && c.cash - price > costs * 2 + 150 && !buyBlocker(state, ci, m.id, false)) {
+    if (!idleOwnOf(c, m.id, keepIds) && lead <= 12 && waiting < 2 + Math.floor(c.planes.length / 8) && c.cash - price > costs * 2 + 150 && !buyBlocker(state, ci, m.id, false)) {
       out.push({
         key: `orderfull-${m.id}`,
         icon: '🛒',
         title: `${m.name} 주문해서 ${routeName(c, f.route)}에 보태기`,
-        detail: `좌석이 꽉 찬 노선이 ${fullRoutes.length}개예요. 리스로는 남는 게 적지만, ${fmtMoney(price)}에 주문하면 ${lead}달 뒤에 와서 리스료 없이 손님을 더 태워요.`,
+        detail: `좌석이 꽉 찬 노선이 ${fullRoutes.length}개예요. 리스로는 남는 게 적지만, ${fmtMoney(price)}에 주문하면 ${lead}달 뒤에 와서 리스료 없이 손님을 더 태워요.${spareNote(keep, m.id)}`,
         label: '주문하기',
         apply: (s2) => afterAct(s2, ci, { type: 'buy', model: m.id }),
         weight: 180 + f.gain * 4,
@@ -503,7 +523,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   }
 
   // 6¾. 돈이 넉넉하면 많이 리스한 기종을 주문해 두기 (도착하면 리스기를 돌려줘 리스료를 아낀다)
-  //      같은 계열의 쉬는 내 비행기가 있으면 주문보다 그 비행기로 리스기를 바꾸는 게 먼저다
+  //      같은 계열의 쉬는 내 비행기가 있으면 주문보다 그 비행기로 리스기를 바꾸는 게 먼저다 (예비기로 둔 비행기는 빼고)
   {
     const leased = c.planes.filter((p) => p.leased);
     const rep2 = state.report?.companies[ci];
@@ -511,7 +531,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     if (leased.length >= 2 && c.orders.length < 3) {
       const count = new Map<string, number>();
       for (const p of leased) count.set(p.model, (count.get(p.model) ?? 0) + 1);
-      const top = [...count.entries()].filter(([model]) => !idleOwnOf(c, model)).sort((x, y) => y[1] - x[1])[0];
+      const top = [...count.entries()].filter(([model]) => !idleOwnOf(c, model, keepIds)).sort((x, y) => y[1] - x[1])[0];
       const model = top?.[0];
       const m = model ? MODEL[model] : undefined;
       const price = m ? orderPrice(state, m, c) : 0;
@@ -521,7 +541,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
           key: `order-${model}`,
           icon: '🛒',
           title: `${m.name} 한 대 주문해 두기`,
-          detail: `리스기 ${count.get(model)}대가 달마다 리스료를 내고 있어요. ${fmtMoney(price)}에 주문하면 ${lead}달 뒤에 와요. 오면 리스기 하나를 돌려주면 리스료(달 ${fmtMoney(leased.find((p) => p.model === model)!.rent)})를 아껴요.`,
+          detail: `리스기 ${count.get(model)}대가 달마다 리스료를 내고 있어요. ${fmtMoney(price)}에 주문하면 ${lead}달 뒤에 와요. 오면 리스기 하나를 돌려주면 리스료(달 ${fmtMoney(leased.find((p) => p.model === model)!.rent)})를 아껴요.${spareNote(keep, model)}`,
           label: '주문하기',
           apply: (s2) => afterAct(s2, ci, { type: 'buy', model }),
           weight: 170,
@@ -745,10 +765,43 @@ function afterAct(s: AirlineState, ci: number, action: Parameters<Planner['act']
   return pl.s;
 }
 
-/** 이 기종과 같은 계열의 쉬는 내 비행기가 있는지 (전세기로 나간 비행기도: 다음 달엔 쉰다) */
-function idleOwnOf(c: Company, model: string): boolean {
+type BestLeg = ReturnType<Planner['bestExistingLeg']>;
+
+/** 이만큼 날고 있으면 쉬는 비행기를 예비기로 둘 만하다 (예비기 권유와 같은 기준) */
+const SPARE_FLEET = 12;
+
+/**
+ * 예비기로 둘 쉬는 내 비행기. 날고 있는 비행기가 많으면 8%쯤(적어도 한 대)을 둔다 (spareCover가 그만큼에서 다 찬다).
+ * 띄울 만한 노선이 있는 비행기는 띄우는 게 나으니 빼고, 젊은 비행기부터 고른다. 점검 중인 비행기는 예비기가 못 된다.
+ */
+function spareKeep(state: AirlineState, c: Company, idle: Plane[], legOf: (id: number) => BestLeg): Plane[] {
+  const flying = c.planes.filter((p) => p.legs.length > 0).length;
+  if (flying < SPARE_FLEET) return [];
+  const need = Math.max(1, Math.round(flying * 0.08));
+  const cands = idle
+    .filter((p) => !p.leased && !inCheck(p, state.t))
+    .sort((x, y) => planeAge(state, x) - planeAge(state, y))
+    .slice(0, need + 3);
+  const out: Plane[] = [];
+  for (const p of cands) {
+    if (out.length >= need) break;
+    const best = legOf(p.id);
+    if (best && best.gain > 0) continue;
+    out.push(p);
+  }
+  return out;
+}
+
+/** 주문 권유에 붙이는 말: 같은 계열 예비기는 그대로 둔다 */
+function spareNote(keep: Plane[], model: string): string {
+  const sp = keep.find((p) => MODEL[p.model].family === MODEL[model].family);
+  return sp ? ` 쉬는 ${withJosa(MODEL[sp.model].name, '은/는')} 예비기로 그대로 둬요.` : '';
+}
+
+/** 이 기종과 같은 계열의 쉬는 내 비행기가 있는지 (전세기로 나간 비행기도: 다음 달엔 쉰다). skip: 예비기로 둔 비행기 */
+function idleOwnOf(c: Company, model: string, skip: ReadonlySet<number>): boolean {
   const fam = MODEL[model]?.family;
-  return idlePlanes(c).some((p) => !p.leased && MODEL[p.model].family === fam);
+  return idlePlanes(c).some((p) => !p.leased && !skip.has(p.id) && MODEL[p.model].family === fam);
 }
 
 /**

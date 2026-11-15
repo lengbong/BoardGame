@@ -167,6 +167,8 @@ export function adviceIcon(key: string): AnyIcon | null {
       return f('wrench');
     case 'swap':
       return m('swap');
+    case 'keepspare':
+      return f('shield');
     case 'hire':
       return f('people');
     case 'pay':

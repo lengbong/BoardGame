@@ -346,6 +346,49 @@ describe('경영 비서: 쉬는 비행기', () => {
     expect(tips.some((a) => a.key === `idle-${chartered}` || a.key === `idle-sell-${chartered}` || a.key === `swap-${chartered}`)).toBe(false);
     expect(tips.some((a) => a.detail.includes('남는 시간이 있는 737-200'))).toBe(false);
   });
+
+  /** 노선을 나는 리스 F27을 더 붙여 날고 있는 비행기를 n대로 만든다 */
+  function grow(s: AirlineState, n: number): void {
+    const c = s.companies[0];
+    const base = c.planes.find((p) => p.leased && p.legs.length > 0)!;
+    while (c.planes.filter((p) => p.legs.length > 0).length < n) c.planes.push({ ...structuredClone(base), id: s.nextId++ });
+  }
+
+  it('비행기가 많으면 띄울 곳 없는 쉬는 내 비행기는 팔거나 리스기와 바꾸지 말고 예비기로 두라고 한다', () => {
+    const { s, own } = fleet();
+    grow(s, 13);
+    const tips = advise(s, 0, 20);
+    const keys = tips.map((a) => a.key);
+    expect(keys).not.toContain(`idle-sell-${own}`);
+    expect(keys).not.toContain(`swap-${own}`);
+    const keep = tips.find((a) => a.key === 'keepspare');
+    expect(keep?.title).toBe('쉬는 F27 프렌드십은 예비기로 두기');
+    expect(keep?.detail).toContain('13대');
+    expect(keep?.apply).toBeUndefined();
+    // 리스기를 줄이려는 주문은 예비기를 그대로 두는 것이라 권해도 되고, 그렇다고 말해 준다
+    const order = tips.find((a) => a.key === 'order-f27');
+    expect(order?.detail).toContain('쉬는 F27 프렌드십은 예비기로 그대로 둬요');
+  });
+
+  it('예비기 몫을 넘는 쉬는 내 비행기는 리스기와 바꾸라고 한다 (젊은 비행기를 예비기로 둔다)', () => {
+    const { s, own } = fleet();
+    grow(s, 13);
+    const old = s.nextId++;
+    const c = s.companies[0];
+    c.planes.push({ ...structuredClone(c.planes.find((p) => p.id === own)!), id: old, since: s.t - 12 * 15 });
+    const tips = advise(s, 0, 20);
+    expect(tips.find((a) => a.key === 'keepspare')?.title).toBe('쉬는 F27 프렌드십은 예비기로 두기');
+    const swap = tips.find((a) => a.key === `swap-${old}`);
+    expect(swap).toBeTruthy();
+    const next = applyAdvice(swap!, s).state.companies[0];
+    expect(next.planes.find((p) => p.id === old)!.legs.length).toBeGreaterThan(0);
+    expect(next.planes.find((p) => p.id === own)!.legs).toHaveLength(0);
+  });
+
+  it('비행기가 적으면 예비기로 두라고 하지 않는다', () => {
+    const { s } = fleet();
+    expect(advise(s, 0, 20).some((a) => a.key === 'keepspare')).toBe(false);
+  });
 });
 
 describe('경영 비서: 안 되는 까닭', () => {

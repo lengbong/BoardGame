@@ -21,6 +21,7 @@ import { STAFF_GROUPS, emptyStaff, staffNeed } from './staff';
 import { defaultTimes } from './timetable';
 import { DEFAULT_OPTIONS, GOAL_VALUES } from './rules';
 import { emptyReport } from './simulate';
+import { saveBackend } from './saveDb';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { AirlineOptions, AirlineSetup, AirlineState, Choice, Company, CompanyReport, GoalKind, ModKind, YearAcc } from './types';
 
@@ -394,7 +395,7 @@ export function parseSaved(v: unknown): SavedAirlineGame | null {
   };
 }
 
-/** 저장된 게임을 읽는다. 옛 형식이거나 망가진 저장은 지우고 null */
+/** 예전 방식(localStorage)의 저장을 읽는다. 옛 형식이거나 망가진 저장은 지우고 null */
 export function loadSavedAirlineGame(): SavedAirlineGame | null {
   const raw = loadJson<unknown>(SAVE_KEY);
   if (raw === null || raw === undefined) return null;
@@ -403,22 +404,118 @@ export function loadSavedAirlineGame(): SavedAirlineGame | null {
   return saved;
 }
 
-export function saveAirlineGame(setup: AirlineSetup, state: AirlineState): void {
+/**
+ * 큰 저장소(IndexedDB, saveDb.ts)에 저장했다는 표시. 처음 화면의 '하던 게임 이어하기'가
+ * localStorage의 이 열쇠를 보고 저장이 있는지 알아서, 본문 대신 이 짧은 표시를 남겨 둔다.
+ */
+const IDB_MARK = '{"idb":true}';
+
+function setLocal(value: string): boolean {
   try {
-    window.localStorage.setItem(SAVE_KEY, serializeSave(setup, state));
+    window.localStorage.setItem(SAVE_KEY, value);
+    return true;
   } catch {
-    // 세계 항공사 모드의 아주 긴 판: 한도를 넘으면 기록을 더 줄여 다시 저장해 본다. 그래도 안 되면 게임만 계속한다.
-    if (!state.options.world) return;
+    return false;
+  }
+}
+
+/** 저장·지우기를 순서대로 하게 잇는 줄 (읽기는 이 줄이 끝난 뒤에) */
+let chain: Promise<void> = Promise.resolve();
+
+/**
+ * 하던 게임을 저장한다. 큰 저장소(IndexedDB)가 있으면 거기에 (크기 걱정 없이),
+ * 없으면 예전처럼 localStorage에 (약 5MB까지: 넘으면 기록을 줄여 다시 해 본다).
+ */
+export function saveAirlineGame(setup: AirlineSetup, state: AirlineState): void {
+  const db = saveBackend();
+  let text: string;
+  try {
+    text = serializeSave(setup, state);
+  } catch {
+    return;
+  }
+  const local = () => {
+    if (setLocal(text) || !state.options.world) return;
     try {
-      window.localStorage.setItem(SAVE_KEY, serializeSave(setup, state, Date.now(), true));
+      setLocal(serializeSave(setup, state, Date.now(), true));
     } catch {
       /* 저장 없이 계속 */
     }
+  };
+  if (!db) {
+    local();
+    return;
   }
+  chain = chain
+    .then(() => db.set(SAVE_KEY, text))
+    .then(
+      () => void setLocal(IDB_MARK),
+      () => local(),
+    );
 }
 
 export function clearSavedAirlineGame(): void {
   removeKey(SAVE_KEY);
+  const db = saveBackend();
+  if (db) chain = chain.then(() => db.del(SAVE_KEY)).then(() => removeKey(SAVE_KEY), () => undefined);
+}
+
+/** 저장이 모두 끝나기를 기다린다 */
+export function savesSettled(): Promise<void> {
+  return chain;
+}
+
+/**
+ * 하던 게임을 읽는다: 큰 저장소 먼저, 없으면 예전 localStorage 저장 (읽었으면 큰 저장소로 옮긴다).
+ * 망가진 저장은 지우고 null.
+ */
+export async function loadSavedAirlineGameAsync(): Promise<SavedAirlineGame | null> {
+  await chain;
+  const db = saveBackend();
+  if (db) {
+    try {
+      const text = await db.get(SAVE_KEY);
+      if (text) {
+        const saved = importSaveText(text);
+        if (saved) return saved;
+        await db.del(SAVE_KEY);
+      }
+    } catch {
+      /* 큰 저장소를 못 읽으면 예전 저장을 본다 */
+    }
+  }
+  const legacy = loadSavedAirlineGame();
+  if (legacy && db) {
+    // 예전 저장을 큰 저장소로 옮긴다 (원래 글 그대로)
+    try {
+      const raw = window.localStorage.getItem(SAVE_KEY);
+      if (raw) chain = chain.then(() => db.set(SAVE_KEY, raw)).then(() => void setLocal(IDB_MARK), () => undefined);
+    } catch {
+      /* 그대로 둔다 */
+    }
+  }
+  return legacy;
+}
+
+// ------------------------------------------------------------------ 저장 파일 (내려받기·불러오기)
+
+/** 저장 파일에 담을 글 */
+export function exportSaveText(setup: AirlineSetup, state: AirlineState): string {
+  return serializeSave(setup, state);
+}
+
+/** 저장 파일(또는 저장소)의 글을 읽는다. 하늘길 항공사 저장이 아니거나 망가졌으면 null */
+export function importSaveText(text: string): SavedAirlineGame | null {
+  try {
+    return parseSaved(JSON.parse(text));
+  } catch {
+    return null;
+  }
+}
+
+/** 저장 파일 이름: 'haneulgil-airline-1995-03.json' (한글 이름은 브라우저에 따라 깨질 수 있어 영문·숫자만 쓴다) */
+export function saveFileName(state: AirlineState): string {
+  return `haneulgil-airline-${Math.floor(state.t / 12)}-${String((state.t % 12) + 1).padStart(2, '0')}.json`;
 }
 
 export function loadAirlineSetup(): AirlineSetup {

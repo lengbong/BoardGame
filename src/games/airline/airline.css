@@ -4782,3 +4782,15 @@ text.al-neg {
 .al-world-roster small {
   opacity: 0.8;
 }
+
+/* 저장 파일 내려받기·불러오기 */
+.al-save-actions {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.al-save-import {
+  margin: 6px 0 14px;
+  font-size: 0.85rem;
+}

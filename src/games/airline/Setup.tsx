@@ -11,7 +11,8 @@ import { CITY, REGIONS, REGION_INFO, airportClass, citySize } from './cities';
 import { fmtMoney } from './format';
 import { DEFAULT_NAMES, GOAL_VALUES, START_MONEY, hubCandidates } from './rules';
 import { companyValue } from './simulate';
-import type { SavedAirlineGame } from './storage';
+import { exportSaveText, importSaveText, saveFileName, type SavedAirlineGame } from './storage';
+import { downloadText } from './saveFile';
 import { mLabel } from './time';
 import { AirlinePicker, AirlinePhoto, airlineYears } from './AirlinePicker';
 import { gameHub } from './brand';
@@ -38,6 +39,8 @@ interface SetupProps {
   onSettings: (s: GameSettings) => void;
   onStart: (setup: AirlineSetup) => void;
   onResume: () => void;
+  /** 저장 파일을 불러왔을 때 */
+  onImport: (saved: SavedAirlineGame) => void;
   onBack: () => void;
 }
 
@@ -183,7 +186,19 @@ const NAME_CHOICES: IconChoice<NameMode>[] = [
   { value: 'fictional', short: '새 항공사 만들기', label: '내가 이름을 지은 새 항공사로 실제 항공사들과 겨뤄요', icon: <NameIcon real={false} /> },
 ];
 
-export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, onStart, onResume, onBack }: SetupProps) {
+export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, onStart, onResume, onImport, onBack }: SetupProps) {
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+  const importFile = (file: File | undefined) => {
+    if (!file) return;
+    file.text().then(
+      (text) => {
+        const loaded = importSaveText(text);
+        if (loaded) onImport(loaded);
+        else setImportMsg('하늘길 항공사 저장 파일이 아니거나 읽을 수 없는 파일이에요.');
+      },
+      () => setImportMsg('파일을 읽지 못했어요.'),
+    );
+  };
   const [setup, setSetup] = useState<AirlineSetup>(initialSetup);
   const [choosing, setChoosing] = useState<number | null>(null);
   const [pickingAirline, setPickingAirline] = useState<number | null>(null);
@@ -264,11 +279,38 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
               — {new Date(saved.savedAt).toLocaleString('ko-KR')}
             </span>
           </div>
-          <button type="button" className="btn btn-primary" onClick={onResume} data-testid="al-resume">
-            이어하기
-          </button>
+          <span className="al-save-actions">
+            <button type="button" className="btn btn-small" onClick={() => downloadText(saveFileName(saved.state), exportSaveText(saved.setup, saved.state))} title="하던 게임을 내 컴퓨터에 파일로 보관해요" data-testid="al-save-export">
+              💾 파일로 내려받기
+            </button>
+            <button type="button" className="btn btn-primary" onClick={onResume} data-testid="al-resume">
+              이어하기
+            </button>
+          </span>
         </section>
       )}
+      <p className="al-save-import">
+        <label className="btn btn-small btn-ghost">
+          📂 저장 파일 불러오기
+          <input
+            type="file"
+            accept=".json,application/json"
+            hidden
+            onChange={(e) => {
+              importFile(e.target.files?.[0]);
+              e.target.value = '';
+            }}
+            data-testid="al-save-import"
+          />
+        </label>
+        <small className="al-muted"> 하던 게임은 이 브라우저에 저절로 저장돼요 (크기 제한 없이). 파일로 내려받아 두면 다른 컴퓨터에서도 이어 할 수 있어요.</small>
+        {importMsg && (
+          <small className="al-neg" role="alert">
+            {' '}
+            {importMsg}
+          </small>
+        )}
+      </p>
 
       <FameCard />
 

@@ -32,13 +32,15 @@ interface PanelProps {
   onSettings: (s: GameSettings) => void;
   onNewGame: () => void;
   onExit: () => void;
+  /** 하던 게임을 파일로 내려받기 */
+  onExport?: () => void;
   /** 지도에서 이 회사 노선만 보는 중 */
   focusCo?: number | null;
   /** 있으면 줄을 눌러 지도에서 그 회사 노선만 본다 (같은 회사를 다시 누르면 null) */
   onFocusCo?: (company: number | null) => void;
 }
 
-export function Panel({ state, viewer, hint, canEnd, busy, onEndTurn, auto, onAuto, onStopAuto, settings, onSettings, onNewGame, onExit, focusCo = null, onFocusCo }: PanelProps) {
+export function Panel({ state, viewer, hint, canEnd, busy, onEndTurn, auto, onAuto, onStopAuto, settings, onSettings, onNewGame, onExit, onExport, focusCo = null, onFocusCo }: PanelProps) {
   const act = actor(state);
   const shown = state.phase === 'gameover' ? state.companies[state.result?.winners[0] ?? viewer] : state.companies[act];
   const color = coColors(shown);
@@ -209,6 +211,11 @@ export function Panel({ state, viewer, hint, canEnd, busy, onEndTurn, auto, onAu
       </section>
 
       <GameControls settings={settings} onSettings={onSettings} onNewGame={onNewGame} onExit={onExit} />
+      {onExport && state.phase !== 'gameover' && (
+        <button type="button" className="btn btn-small btn-ghost al-credits-btn" onClick={onExport} title="하던 게임을 내 컴퓨터에 파일로 보관해요 (설정 화면의 ‘저장 파일 불러오기’로 이어 해요)" data-testid="al-save-export">
+          💾 저장 파일 내려받기
+        </button>
+      )}
       <button type="button" className="btn btn-small btn-ghost al-credits-btn" onClick={() => setCredits(true)} data-testid="al-credits-open">
         📷 사진 출처
       </button>

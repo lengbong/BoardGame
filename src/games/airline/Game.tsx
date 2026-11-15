@@ -31,7 +31,8 @@ import { actionBlocker, actor, applyAction, autoStopReason, idlePlanes, rankings
 import { companyValue, monthDemandMult, routeFreq } from './simulate';
 import { AIRLINE_JINGLES, AIRLINE_MAIN, AIRLINE_TITLE, routeFanfare } from './song';
 import { alSound } from './sounds';
-import { AIRLINE_DELAYS, clearSavedAirlineGame, saveAirlineGame } from './storage';
+import { AIRLINE_DELAYS, clearSavedAirlineGame, exportSaveText, saveAirlineGame, saveFileName } from './storage';
+import { downloadText } from './saveFile';
 import { mLabel, monthOf, qLabel } from './time';
 import { MonthToast } from './MonthToast';
 import { StaffIcon } from './StaffArt';
@@ -677,6 +678,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
         canEnd={canAct}
         busy={flying ? '✈️ 운항 중…' : !canAct && game.phase === 'manage' && actorCo?.kind !== 'human' ? `${actorCo?.name} 경영 중…` : null}
         onEndTurn={endTurn}
+        onExport={() => downloadText(saveFileName(game), exportSaveText(setup, game))}
         auto={myAuto?.mode ?? null}
         onAuto={startAuto}
         onStopAuto={stopAuto}

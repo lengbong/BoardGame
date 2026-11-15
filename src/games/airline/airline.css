@@ -1246,9 +1246,12 @@
   gap: 6px 12px;
   min-width: 0;
 }
-.al-opt-body > .al-act,
-.al-opt-body > .al-two {
+.al-opt-body > .al-act {
   min-width: 0;
+}
+/* 리스·중고 버튼의 이유가 서로 달라 둘 다 보일 때 한 문장처럼 붙어 보이지 않게 */
+.al-opt-body .al-two {
+  column-gap: 12px;
 }
 .al-opt-text {
   display: flex;

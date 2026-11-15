@@ -680,45 +680,52 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                 <p className="al-why">지금 이 노선에 띄울 수 있는 비행기가 없어요. (거리·공항 크기·슬롯을 확인하세요)</p>
               ) : (
                 <ul className="al-options">
-                  {options.map((o) => (
-                    <li key={o.m.id}>
-                      <PlaneImage model={o.m.id} paint={{ main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] }} className="al-plane-chip al-plane-chip-big" />
-                      <div className="al-opt-body">
-                        <span className="al-opt-text">
-                          <b>{o.m.name}</b>
-                          <small>
-                            주 {o.freq}회 · {o.m.seats}석 · 탑승률 {pct(o.e.lf)}
-                          </small>
-                          <small>
-                            이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/달
-                          </small>
-                        </span>
-                        <span className="al-two">
-                          <ActButton
-                            small
-                            primary
-                            blocker={why ?? buyBlocker(state, viewer, o.m.id, true)}
-                            quiet={!!why}
-                            onClick={() => openWith(o, 'lease')}
-                            title={(() => {
-                              const dep = depositFor(state, viewer, o.m.id);
-                              return `달 리스료 ${fmtMoney(leaseRent(state, o.m))}${dep > 0 ? `, 보증금 ${fmtMoney(dep)} (돌려줄 때 돌려받아요)` : ', 첫해 보증금 없음'}`;
-                            })()}
-                          >
-                            리스로 열기
-                          </ActButton>
-                          {(() => {
-                            const used = state.market.find((u) => u.model === o.m.id);
-                            return used ? (
-                              <ActButton small blocker={why ?? usedBlocker(state, viewer, used.id)} quiet={!!why} onClick={() => openWith(o, 'used')} title={`${used.age}년 된 중고`}>
-                                중고 {fmtMoney(used.price)}
+                  {options.map((o) => {
+                    const used = state.market.find((u) => u.model === o.m.id);
+                    const leaseWhy = why ?? buyBlocker(state, viewer, o.m.id, true);
+                    const usedWhy = used ? (why ?? usedBlocker(state, viewer, used.id)) : null;
+                    // 리스·중고가 같은 이유로 막히면 그 이유는 두 버튼 밑에 한 번만
+                    const sameWhy = !why && !!leaseWhy && leaseWhy === usedWhy ? leaseWhy : null;
+                    return (
+                      <li key={o.m.id}>
+                        <PlaneImage model={o.m.id} paint={{ main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] }} className="al-plane-chip al-plane-chip-big" />
+                        <div className="al-opt-body">
+                          <span className="al-opt-text">
+                            <b>{o.m.name}</b>
+                            <small>
+                              주 {o.freq}회 · {o.m.seats}석 · 탑승률 {pct(o.e.lf)}
+                            </small>
+                            <small>
+                              이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/달
+                            </small>
+                          </span>
+                          <span className="al-act">
+                            <span className="al-two">
+                              <ActButton
+                                small
+                                primary
+                                blocker={leaseWhy}
+                                quiet={!!why || !!sameWhy}
+                                onClick={() => openWith(o, 'lease')}
+                                title={(() => {
+                                  const dep = depositFor(state, viewer, o.m.id);
+                                  return `달 리스료 ${fmtMoney(leaseRent(state, o.m))}${dep > 0 ? `, 보증금 ${fmtMoney(dep)} (돌려줄 때 돌려받아요)` : ', 첫해 보증금 없음'}`;
+                                })()}
+                              >
+                                리스로 열기
                               </ActButton>
-                            ) : null;
-                          })()}
-                        </span>
-                      </div>
-                    </li>
-                  ))}
+                              {used && (
+                                <ActButton small blocker={usedWhy} quiet={!!why || !!sameWhy} onClick={() => openWith(o, 'used')} title={`${used.age}년 된 중고`}>
+                                  중고 {fmtMoney(used.price)}
+                                </ActButton>
+                              )}
+                            </span>
+                            {sameWhy && <small className="al-why">{sameWhy}</small>}
+                          </span>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               {mine.length > 0 && (

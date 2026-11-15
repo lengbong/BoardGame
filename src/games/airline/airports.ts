@@ -90,6 +90,25 @@ const ROWS: Row[] = [
   ['SBGR', 'GRU', '과룰류스 국제공항', 'São Paulo Guarulhos', 1985],
   ['SBGL', 'GIG', '갈레앙 국제공항', 'Rio de Janeiro Galeão'],
   ['SAEZ', 'EZE', '에세이사 국제공항', 'Buenos Aires Ezeiza', 1949],
+  // 대표 공항 말고 함께 쓰는 공항 (탭)
+  ['ZBAD', 'PKX', '베이징 다싱 국제공항', 'Beijing Daxing International', 2019],
+  ['OMDW', 'DWC', '알막툼 국제공항', 'Dubai Al Maktoum International', 2010],
+  ['VANM', 'NMI', '나비 뭄바이 국제공항', 'Navi Mumbai International', 2025],
+  ['EGKK', 'LGW', '런던 개트윅 공항', 'London Gatwick', 1958],
+  ['EGSS', 'STN', '런던 스탠스테드 공항', 'London Stansted'],
+  ['EGGW', 'LTN', '런던 루턴 공항', 'London Luton', 1938],
+  ['EGLC', 'LCY', '런던 시티 공항', 'London City', 1987],
+  ['LIRA', 'CIA', '로마 참피노 공항', 'Rome Ciampino', 1916],
+  ['LIME', 'BGY', '밀라노 베르가모 공항', 'Milan Bergamo (Orio al Serio)'],
+  ['LTFJ', 'SAW', '사비하 괵첸 국제공항', 'Istanbul Sabiha Gökçen', 2001],
+  ['UUDD', 'DME', '도모데도보 국제공항', 'Moscow Domodedovo', 1964],
+  ['UUWW', 'VKO', '브누코보 국제공항', 'Moscow Vnukovo', 1941],
+  ['KLGA', 'LGA', '라과디아 공항', 'New York LaGuardia', 1939],
+  ['KEWR', 'EWR', '뉴어크 리버티 국제공항', 'Newark Liberty International', 1928],
+  ['KMDW', 'MDW', '시카고 미드웨이 국제공항', 'Chicago Midway', 1927],
+  ['MMSM', 'NLU', '펠리페 앙헬레스 국제공항', 'Felipe Ángeles International', 2022],
+  ['SBRJ', 'SDU', '산투스 두몽 공항', 'Rio de Janeiro Santos Dumont', 1936],
+  ['SABE', 'AEP', '호르헤 뉴베리 공항 (아에로파르케)', 'Buenos Aires Aeroparque Jorge Newbery', 1947],
 ];
 
 export const AIRPORT_INFO_BY_ICAO: Record<string, AirportInfo & { now?: string }> = Object.fromEntries(
@@ -171,7 +190,63 @@ export const CITY_AIRPORTS: Record<string, CityAirportEra[]> = {
   buenosaires: [{ icao: 'SAEZ' }],
 };
 
+/**
+ * 그 해 대표 공항 말고도 손님을 받던 공항 (탭으로 골라 본다).
+ * 게임에서는 도시를 공항 하나로 셈하므로 그림만 보여 주고, 회사 비행기는 대표 공항에 선다.
+ * 대표 공항이던 곳이 새 공항이 생긴 뒤에도 국내선 등으로 남은 경우도 여기 적는다.
+ */
+export const CITY_SIDE_AIRPORTS: Record<string, CityAirportEra[]> = {
+  seoul: [{ icao: 'RKSS', from: 2001, note: '국내선과 가까운 나라(도쿄 하네다·상하이 훙차오 등)를 오가는 노선을 맡아요.' }],
+  tokyo: [
+    { icao: 'RJTT', from: 1978, to: 2009, note: '국내선과 가까운 나라 노선을 맡아요.' },
+    { icao: 'RJAA', from: 2010, note: '저가항공과 먼 나라로 가는 비행기가 많이 떠요.' },
+  ],
+  osaka: [{ icao: 'RJOO', from: 1994, note: '간사이 공항이 생긴 뒤로는 국내선만 다녀요.' }],
+  beijing: [{ icao: 'ZBAD', from: 2019, note: '불가사리 모양 터미널이 있는 새 공항이에요.' }],
+  shanghai: [{ icao: 'ZSSS', from: 1999, note: '국내선과 가까운 나라 노선을 맡아요.' }],
+  taipei: [{ icao: 'RCSS', from: 1979, note: '도시 한가운데 있어 국내선과 가까운 나라 노선을 맡아요.' }],
+  bangkok: [{ icao: 'VTBD', from: 2007, note: '다시 문을 열어 국내선과 저가항공이 많이 떠요.' }],
+  kualalumpur: [{ icao: 'WMSA', from: 1998, note: '프로펠러기가 다니는 가까운 노선을 맡아요.' }],
+  jakarta: [{ icao: 'WIHH', from: 2014, note: '2014년부터 다시 여객기가 다녀요.' }],
+  mumbai: [{ icao: 'VANM', from: 2025, note: '바다 건너 새로 지은 두 번째 공항이에요.' }],
+  colombo: [{ icao: 'VCCC', from: 1967, note: '국내선과 작은 비행기가 다녀요.' }],
+  dubai: [{ icao: 'OMDW', from: 2013, note: '사막 위에 아주 크게 넓힐 계획인 새 공항이에요.' }],
+  london: [
+    { icao: 'EGKK', from: 1958, note: '활주로 하나로 아주 많은 비행기가 뜨고 내리는 공항이에요.' },
+    { icao: 'EGSS', note: '저가항공이 많이 떠요.' },
+    { icao: 'EGGW', note: '1960년대부터 휴가 전세기로 붐볐어요.' },
+    { icao: 'EGLC', from: 1987, note: '시내 옛 부두 자리에 있는, 활주로가 짧은 공항이에요.' },
+  ],
+  paris: [{ icao: 'LFPO', from: 1974, note: '국내선과 가까운 나라 노선을 많이 맡아요.' }],
+  rome: [{ icao: 'LIRA', note: '1961년까지 로마의 대표 공항이었어요. 지금은 저가항공이 많이 떠요.' }],
+  milan: [
+    { icao: 'LIMC', to: 1997, note: '먼 나라로 가는 비행기는 이 무렵 말펜사에서 떠요.' },
+    { icao: 'LIML', from: 1998, note: '시내에서 가까워 국내선과 유럽 노선을 맡아요.' },
+    { icao: 'LIME', from: 2002, note: '2000년대부터 저가항공이 많이 떠요.' },
+  ],
+  istanbul: [{ icao: 'LTFJ', from: 2001, note: '바다 건너 아시아 쪽에 있는 공항이에요.' }],
+  moscow: [
+    { icao: 'UUWW', note: '지금 쓰는 모스크바 공항 가운데 가장 오래됐어요.' },
+    { icao: 'UUDD', from: 1964 },
+  ],
+  newyork: [
+    { icao: 'KLGA', note: '시내에서 가까워 국내선이 많이 떠요.' },
+    { icao: 'KEWR', note: '강 건너 뉴저지에 있어요.' },
+  ],
+  chicago: [{ icao: 'KMDW', note: '오헤어가 생기기 전에는 시카고의 대표 공항이었어요.' }],
+  montreal: [
+    { icao: 'CYUL', from: 1975, to: 1997, note: '국내선과 미국 가는 비행기는 그대로 도발 공항에서 떴어요.' },
+    { icao: 'CYMX', from: 1998, to: 2004, note: '2004년까지 전세기가 다녔어요.' },
+  ],
+  mexicocity: [{ icao: 'MMSM', from: 2022, note: '공군 기지를 넓혀 새로 연 공항이에요.' }],
+  saopaulo: [{ icao: 'SBSP', from: 1985, note: '국내선, 특히 리우를 오가는 셔틀 비행기가 많이 떠요.' }],
+  rio: [{ icao: 'SBRJ', note: '바닷가 시내에 있어 국내선이 많이 떠요.' }],
+  buenosaires: [{ icao: 'SABE', note: '강가 시내에 있어 국내선과 가까운 나라 노선이 떠요.' }],
+};
+
 export interface CityAirport {
+  /** 그 해 도시의 대표 공항인지 (아니면 탭으로 보는 다른 공항) */
+  main: boolean;
   era: CityAirportEra;
   info: AirportInfo & { now?: string };
   map: AirportMapData | undefined;
@@ -189,7 +264,31 @@ export function cityAirport(cityId: string, year: number): CityAirport | null {
   const era = eras[i];
   const info = AIRPORT_INFO_BY_ICAO[era.icao];
   const side = (e: CityAirportEra | undefined) => (e && e.icao !== era.icao ? { era: e, info: AIRPORT_INFO_BY_ICAO[e.icao] } : undefined);
-  return { era, info, map: AIRPORT_MAPS[era.icao], prev: side(eras[i - 1]), next: side(eras[i + 1]) };
+  return { main: true, era, info, map: AIRPORT_MAPS[era.icao], prev: side(eras[i - 1]), next: side(eras[i + 1]) };
+}
+
+const operating = (e: CityAirportEra, year: number) => (e.from === undefined || year >= e.from) && (e.to === undefined || year <= e.to);
+
+/** 그 해 그 도시에서 손님을 받던 공항들 (대표 공항이 먼저, 도면이 있는 것만) */
+export function cityAirports(cityId: string, year: number): CityAirport[] {
+  const main = cityAirport(cityId, year);
+  if (!main) return [];
+  const out: CityAirport[] = [main];
+  for (const e of CITY_SIDE_AIRPORTS[cityId] ?? []) {
+    if (!operating(e, year) || out.some((a) => a.info.icao === e.icao) || !AIRPORT_MAPS[e.icao]) continue;
+    out.push({ main: false, era: e, info: AIRPORT_INFO_BY_ICAO[e.icao], map: AIRPORT_MAPS[e.icao] });
+  }
+  return out;
+}
+
+/** 탭에 쓰는 짧은 이름: '런던 히스로 공항' → '히스로', '하네다 공항 (도쿄국제공항)' → '하네다', '이스탄불 공항' → '이스탄불' */
+export function airportShortName(info: AirportInfo, cityName: string): string {
+  const base = info.name
+    .replace(/\s*\(.*\)$/, '')
+    .replace(/^옛\s+/, '')
+    .replace(/\s*(국제)?공항$/, '')
+    .trim();
+  return base.startsWith(`${cityName} `) ? base.slice(cityName.length + 1) : base || info.name;
 }
 
 /** 활주로 길이 (m) */

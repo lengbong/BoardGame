@@ -114,6 +114,25 @@ AIRPORTS = {
     "SBGR": (-23.431274, -46.469954),
     "SBGL": (-22.809999, -43.250557),
     "SAEZ": (-34.8222, -58.5358),
+    # 대표 공항 말고 함께 쓰는 공항 (탭으로 골라 본다)
+    "ZBAD": (39.501289, 116.413967),
+    "OMDW": (24.896171, 55.16235),
+    "VANM": (18.984597, 73.065253),
+    "EGKK": (51.148744, -0.185739),
+    "EGSS": (51.884998, 0.235),
+    "EGGW": (51.874699, -0.368333),
+    "EGLC": (51.505299, 0.055278),
+    "LIRA": (41.798769, 12.595331),
+    "LIME": (45.669362, 9.708851),
+    "LTFJ": (40.898602, 29.3092),
+    "UUDD": (55.408798, 37.9063),
+    "UUWW": (55.591499, 37.261501),
+    "KLGA": (40.777199, -73.872597),
+    "KEWR": (40.6894, -74.170545),
+    "KMDW": (41.785999, -87.752403),
+    "MMSM": (19.743824, -99.01507),
+    "SBRJ": (-22.910397, -43.16282),
+    "SABE": (-34.559419, -58.415536),
 }
 
 # 문 닫은 옛 공항: OSM에 활주로가 없어서 직접 적는다 (위도, 경도).
@@ -950,14 +969,48 @@ def build_airport(http: Http, icao: str) -> dict:
         pts = way_pts(w_["id"])
         if not pts or not near_field(centroid(pts), 300):
             continue
-        if t.get("runway") in ("displaced_threshold", "blast_pad"):
+        if t.get("runway") == "blast_pad":
             continue
         ref = (t.get("ref") or "").replace(" ", "")
         if manual:
             ref = manual.get("refs", {}).get(w_["id"], ref)
+        # '29L/11R' → '11L/29R'처럼 작은 번호를 앞으로
+        if "/" in ref:
+            ends = sorted(ref.split("/"), key=lambda e: int(re.match(r"\d+", e).group(0)) if re.match(r"\d+", e) else 99)
+            ref = "/".join(ends)
         width = parse_width(t.get("width"), 45)
+        # 이름 없는 토막(밀린 문턱 등)은 따로 두었다가 이어지는 활주로에 붙인다
         key = ref or f"w{w_['id']}"
         runways.setdefault(key, []).append((pts, width, ref))
+
+    def far_pair(points):
+        best = (0.0, points[0], points[-1])
+        for i in range(len(points)):
+            for j in range(i + 1, len(points)):
+                d = math.hypot(points[i][0] - points[j][0], points[i][1] - points[j][1])
+                if d > best[0]:
+                    best = (d, points[i], points[j])
+        return best
+
+    # 이름 있는 활주로 끝에 맞닿고 같은 방향으로 놓인 이름 없는 토막을 붙인다
+    named = [k for k, items in runways.items() if items[0][2]]
+    loose = [k for k in runways if not runways[k][0][2]]
+    changed = True
+    while changed and loose:
+        changed = False
+        for k in named:
+            _, a, b = far_pair([q for pts, _, _ in runways[k] for q in pts])
+            ang = math.atan2(b[1] - a[1], b[0] - a[0])
+            for lk in list(loose):
+                pts = [q for seg, _, _ in runways[lk] for q in seg]
+                _, c, d = far_pair(pts)
+                ang2 = math.atan2(d[1] - c[1], d[0] - c[0])
+                parallel = abs(math.sin(ang - ang2)) < 0.06
+                touch = min(math.hypot(e[0] - f[0], e[1] - f[1]) for e in (a, b) for f in (c, d)) < 40
+                if parallel and touch:
+                    runways[k].extend(runways.pop(lk))
+                    loose.remove(lk)
+                    changed = True
     rwy = []
     for key, items in runways.items():
         allpts = [p for pts, _, _ in items for p in pts]

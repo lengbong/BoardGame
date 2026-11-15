@@ -70,7 +70,7 @@ function mainHeading(map: AirportMapData): number {
  * 이 공항을 드나드는 회사 비행기는 터미널 가까운 자리부터 회사끼리 모아 세우고,
  * 남은 자리 일부에는 공항 크기에 맞게 다른 항공사(회색) 비행기를 세운다.
  */
-export function parkPlanes(map: AirportMapData, icao: string, cityId: string, year: number, visiting: VisitingPlane[]): ParkedPlane[] {
+export function parkPlanes(map: AirportMapData, icao: string, cityId: string, year: number, visiting: VisitingPlane[], main = true): ParkedPlane[] {
   const st = map.stands ?? [];
   const stands: { x: number; y: number; hdg: number }[] = [];
   for (let i = 0; i + 2 < st.length; i += 3) stands.push({ x: st[i], y: st[i + 1], hdg: st[i + 2] < 0 ? mainHeading(map) : st[i + 2] });
@@ -95,7 +95,8 @@ export function parkPlanes(map: AirportMapData, icao: string, cityId: string, ye
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
   pool.length = Math.min(pool.length, 10);
-  const frac = 0.14 + 0.1 * cls;
+  // 함께 쓰는 공항(대표 공항이 아닌 곳)은 조금 한산하게
+  const frac = (0.14 + 0.1 * cls) * (main ? 1 : 0.75);
   for (const s of rest) {
     if (rnd() > frac) continue;
     out.push({ ...s, model: pool[Math.floor(rnd() * pool.length)], company: null });

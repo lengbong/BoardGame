@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import { createPortal } from 'react-dom';
 import { SEAT_SHAPES } from './Art';
 import { AirportScene } from './AirportArt';
-import { cityAirport, runwayLength, type CityAirport } from './airports';
+import { airportShortName, cityAirports, runwayLength, type CityAirport } from './airports';
 import { parkPlanes, trafficQueue, visitingPlanes } from './airportScene';
 import { coColors } from './brand';
 import { AIRPORT_INFO, CITY, FEE_INFO, airportClass } from './cities';
@@ -18,13 +18,19 @@ import './airport.css';
 
 const OSM_COPYRIGHT = 'https://www.openstreetmap.org/copyright';
 
-/** 공항 그림에 쓰는 것들을 한 번에 */
-function useAirportScene(state: AirlineState, viewer: number, city: string) {
+/**
+ * 공항 그림에 쓰는 것들을 한 번에. icao로 탭에서 고른 공항 (없거나 그 해에 없는 공항이면 대표 공항).
+ * 게임에서는 도시를 공항 하나로 셈하므로 회사 비행기는 대표 공항에만 서고, 다른 공항엔 다른 항공사(회색) 비행기만.
+ */
+function useAirportScene(state: AirlineState, viewer: number, city: string, icao?: string) {
   const year = yearOf(state.q);
-  const ap = useMemo(() => cityAirport(city, year), [city, year]);
+  const aps = useMemo(() => cityAirports(city, year), [city, year]);
+  const ap = aps.find((a) => a.info.icao === icao) ?? aps[0] ?? null;
+  const main = aps[0] ?? null;
   const visiting = useMemo(() => visitingPlanes(state, city, viewer), [state, city, viewer]);
-  const planes = useMemo(() => (ap?.map ? parkPlanes(ap.map, ap.info.icao, city, year, visiting) : []), [ap, city, year, visiting]);
-  const traffic = useMemo(() => trafficQueue(visiting, year, city), [visiting, year, city]);
+  const here = useMemo(() => (ap?.main ? visiting : []), [ap, visiting]);
+  const planes = useMemo(() => (ap?.map ? parkPlanes(ap.map, ap.info.icao, city, year, here, ap.main) : []), [ap, city, year, here]);
+  const traffic = useMemo(() => trafficQueue(here, year, city), [here, year, city]);
   const paintOf = useCallback(
     (ci: number): Paint => {
       const co = state.companies[ci];
@@ -33,7 +39,40 @@ function useAirportScene(state: AirlineState, viewer: number, city: string) {
     },
     [state.companies],
   );
-  return { year, ap, visiting, planes, traffic, paintOf };
+  return { year, aps, ap, main, visiting, planes, traffic, paintOf };
+}
+
+/** 그 공항의 부호 (대표 공항에서 물러난 뒤 부호가 바뀐 곳은 지금 부호: 돈므앙 DMK 등) */
+function codeOf(ap: CityAirport): string {
+  return ap.main ? ap.info.iata : (ap.info.now ?? ap.info.iata);
+}
+
+/** 여러 공항이 있는 도시: 공항 고르기 탭 */
+function AirportTabs({ aps, current, city, onPick }: { aps: CityAirport[]; current: string; city: string; onPick: (icao: string) => void }) {
+  if (aps.length < 2) return null;
+  const cityName = CITY[city].name;
+  return (
+    <div className="al-apt-tabs" role="tablist" aria-label={`${cityName}의 공항`}>
+      {aps.map((a) => {
+        const on = a.info.icao === current;
+        return (
+          <button
+            key={a.info.icao}
+            type="button"
+            role="tab"
+            aria-selected={on}
+            className={`al-apt-tab${on ? ' al-on' : ''}`}
+            onClick={() => onPick(a.info.icao)}
+            title={a.info.name}
+            data-testid={`al-airport-tab-${a.info.icao}`}
+          >
+            {airportShortName(a.info, cityName)} <small>{codeOf(a)}</small>
+            {a.main && <span className="al-apt-tab-main">대표</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 /** '2001년부터 인천국제공항(ICN)으로 옮겨요' 같은 시대 이야기 */
@@ -51,8 +90,25 @@ function eraLines(ap: CityAirport): string[] {
 
 // ------------------------------------------------------------------ 도시 칸 안 카드
 
-export function AirportCard({ state, viewer, city, fx, onOpen }: { state: AirlineState; viewer: number; city: string; fx: boolean; onOpen: () => void }) {
-  const { ap, visiting, planes, traffic, paintOf } = useAirportScene(state, viewer, city);
+export function AirportCard({
+  state,
+  viewer,
+  city,
+  fx,
+  icao,
+  onPick,
+  onOpen,
+}: {
+  state: AirlineState;
+  viewer: number;
+  city: string;
+  fx: boolean;
+  /** 탭에서 고른 공항 */
+  icao?: string;
+  onPick: (icao: string) => void;
+  onOpen: () => void;
+}) {
+  const { aps, ap, main, visiting, planes, traffic, paintOf } = useAirportScene(state, viewer, city, icao);
   const boxRef = useRef<HTMLButtonElement>(null);
   const width = useElementWidth(boxRef);
   if (!ap?.map) return null;
@@ -65,15 +121,16 @@ export function AirportCard({ state, viewer, city, fx, onOpen }: { state: Airlin
   const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const mine = visiting.filter((v) => v.company === viewer).length;
   const longest = map.rwy[0] ? runwayLength(map.rwy[0]) : 0;
-  const era = eraLines(ap);
+  const era = ap.main ? eraLines(ap) : ap.era.note ? [ap.era.note] : [];
   return (
     <section className="al-apt-card" data-testid="al-airport-card">
       <h4 className="al-mp-h4">
-        <FinIcon kind="tower" size={15} /> 공항
+        <FinIcon kind="tower" size={15} /> 공항{aps.length > 1 && ` ${aps.length}곳`}
         <small>
-          {ap.info.name} · {ap.info.iata}
+          {ap.info.name} · {codeOf(ap)}
         </small>
       </h4>
+      <AirportTabs aps={aps} current={ap.info.icao} city={city} onPick={onPick} />
       <button ref={boxRef} type="button" className="al-apt-thumb" style={{ aspectRatio: `${ratio}` }} onClick={onOpen} aria-label={`${ap.info.name} 도면 크게 보기`} data-testid="al-airport-open">
         <svg viewBox={`0 0 ${map.w} ${map.h}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`${ap.info.name} 위에서 본 모습`}>
           <AirportScene map={map} planes={planes} paintOf={paintOf} traffic={traffic} animate={fx && !reduced} k={k} />
@@ -85,7 +142,13 @@ export function AirportCard({ state, viewer, city, fx, onOpen }: { state: Airlin
       </button>
       <p className="al-apt-sum">
         활주로 {map.rwy.length}개{longest > 0 && <> · 가장 긴 활주로 {longest.toLocaleString()} m</>}
-        {mine > 0 ? <> · 우리 비행기 {mine}대가 드나들어요</> : visiting.length > 0 ? <> · 회사 비행기 {visiting.length}대가 드나들어요</> : null}
+        {!ap.main && main ? (
+          visiting.length > 0 && <> · 회사 비행기는 대표 공항인 {airportShortName(main.info, CITY[city].name)}에 서 있어요</>
+        ) : mine > 0 ? (
+          <> · 우리 비행기 {mine}대가 드나들어요</>
+        ) : visiting.length > 0 ? (
+          <> · 회사 비행기 {visiting.length}대가 드나들어요</>
+        ) : null}
       </p>
       {era.map((t) => (
         <small key={t} className="al-muted al-apt-era">
@@ -100,8 +163,24 @@ export function AirportCard({ state, viewer, city, fx, onOpen }: { state: Airlin
 
 type View = { x: number; y: number; w: number; h: number };
 
-export function AirportModal({ state, viewer, city, fx, onClose }: { state: AirlineState; viewer: number; city: string; fx: boolean; onClose: () => void }) {
-  const { year, ap, visiting, planes, traffic, paintOf } = useAirportScene(state, viewer, city);
+export function AirportModal({
+  state,
+  viewer,
+  city,
+  fx,
+  icao,
+  onPick,
+  onClose,
+}: {
+  state: AirlineState;
+  viewer: number;
+  city: string;
+  fx: boolean;
+  icao?: string;
+  onPick: (icao: string) => void;
+  onClose: () => void;
+}) {
+  const { year, aps, ap, main, visiting, planes, traffic, paintOf } = useAirportScene(state, viewer, city, icao);
   const close = useRef<HTMLButtonElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -225,13 +304,14 @@ export function AirportModal({ state, viewer, city, fx, onClose }: { state: Airl
           <h2 id="al-apt-title">
             🛫 {ap.info.name}
             <small>
-              {ap.info.en} · {ap.info.iata} / {ap.info.icao}
+              {ap.info.en} · {codeOf(ap)} / {ap.info.icao}
             </small>
           </h2>
           <button ref={close} type="button" className="btn btn-ghost btn-small" onClick={onClose} aria-label="닫기 (Esc)" data-testid="al-airport-close">
             ✕
           </button>
         </header>
+        <AirportTabs aps={aps} current={ap.info.icao} city={city} onPick={onPick} />
         <div className="al-apt-modal-body">
           <div className="al-apt-stage" ref={stageRef}>
             <svg
@@ -287,20 +367,31 @@ export function AirportModal({ state, viewer, city, fx, onClose }: { state: Airl
                   </dd>
                 </>
               )}
-              {ap.info.now && (
+              {ap.main && ap.info.now && (
                 <>
                   <dt>지금 부호</dt>
                   <dd>{ap.info.now}</dd>
                 </>
               )}
-              <dt>게임 속 공항</dt>
-              <dd>
-                {AIRPORT_INFO[cls].name} <small className="al-muted">· 이용료 {FEE_INFO[c.fee].name}</small>
-              </dd>
-              <dt>내 슬롯</dt>
-              <dd>
-                주 {slotsUsed(me, city)} / {slotCapacity(state, viewer, city)}회
-              </dd>
+              {ap.main ? (
+                <>
+                  <dt>게임 속 공항</dt>
+                  <dd>
+                    {AIRPORT_INFO[cls].name} <small className="al-muted">· 이용료 {FEE_INFO[c.fee].name}</small>
+                  </dd>
+                  <dt>내 슬롯</dt>
+                  <dd>
+                    주 {slotsUsed(me, city)} / {slotCapacity(state, viewer, city)}회
+                  </dd>
+                </>
+              ) : (
+                <>
+                  <dt>게임 속 공항</dt>
+                  <dd>
+                    함께 쓰는 공항 <small className="al-muted">· 게임에서는 대표 공항과 한 공항으로 셈해요</small>
+                  </dd>
+                </>
+              )}
             </dl>
             <h3>
               <FinIcon kind="tower" size={15} /> 활주로 {map.rwy.length}개
@@ -323,7 +414,9 @@ export function AirportModal({ state, viewer, city, fx, onClose }: { state: Airl
             <h3>
               <FinIcon kind="people" size={15} /> 서 있는 비행기
             </h3>
-            {byCo.size === 0 ? (
+            {!ap.main && main ? (
+              <p className="al-muted">회사 비행기는 대표 공항인 {airportShortName(main.info, c.name)}({codeOf(main)})에 서 있어요.</p>
+            ) : byCo.size === 0 ? (
               <p className="al-muted">아직 이 공항을 드나드는 회사 비행기가 없어요.</p>
             ) : (
               <ul className="al-apt-cos">
@@ -343,7 +436,7 @@ export function AirportModal({ state, viewer, city, fx, onClose }: { state: Airl
             {(ap.era.note || ap.prev || ap.next) && (
               <div className="al-apt-story">
                 {ap.era.note && <p>{ap.era.note}</p>}
-                {eraLines(ap).map((t) => (
+                {(ap.main ? eraLines(ap) : []).map((t) => (
                   <p key={t} className="al-muted">
                     {t}
                   </p>

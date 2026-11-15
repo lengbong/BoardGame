@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { seededRandom } from '../../lib/random';
 import { AIRPORT_MAPS } from './airportMaps';
-import { AIRPORT_INFO_BY_ICAO, CITY_AIRPORTS, cityAirport, runwayLength } from './airports';
+import { AIRPORT_INFO_BY_ICAO, CITY_AIRPORTS, CITY_SIDE_AIRPORTS, airportShortName, cityAirport, cityAirports, runwayLength } from './airports';
 import { backgroundModels, parkPlanes, trafficQueue, visitingPlanes } from './airportScene';
-import { CITIES } from './cities';
+import { CITIES, CITY } from './cities';
 import { applyAction, createGame } from './rules';
 import type { AirlineAction, AirlineSetup, AirlineState } from './types';
 
@@ -44,6 +44,57 @@ describe('도시마다 그 해의 공항', () => {
     // 범위 밖의 해는 끝 공항
     expect(cityAirport('seoul', 1940)?.info.icao).toBe('RKSS');
     expect(cityAirport('seoul', 2100)?.info.icao).toBe('RKSI');
+  });
+});
+
+describe('여러 공항이 있는 도시 (탭)', () => {
+  const tabs = (city: string, year: number) => cityAirports(city, year).map((a) => a.info.icao);
+
+  it('함께 쓰는 공항마다 이름·부호와 도면이 있다', () => {
+    for (const [city, list] of Object.entries(CITY_SIDE_AIRPORTS)) {
+      expect(CITY[city], city).toBeDefined();
+      for (const e of list) {
+        expect(AIRPORT_INFO_BY_ICAO[e.icao], e.icao).toBeDefined();
+        expect(AIRPORT_MAPS[e.icao], `${e.icao} 도면`).toBeDefined();
+      }
+    }
+  });
+
+  it('그 해에 손님을 받던 공항만, 대표 공항이 먼저', () => {
+    expect(tabs('seoul', 1990)).toEqual(['RKSS']);
+    expect(tabs('seoul', 2005)).toEqual(['RKSI', 'RKSS']);
+    expect(tabs('tokyo', 1970)).toEqual(['RJTT']);
+    expect(tabs('tokyo', 1990)).toEqual(['RJAA', 'RJTT']);
+    expect(tabs('tokyo', 2015)).toEqual(['RJTT', 'RJAA']);
+    expect(tabs('hongkong', 1990)).toEqual(['VHHX']);
+    expect(tabs('hongkong', 2000)).toEqual(['VHHH']);
+    expect(tabs('montreal', 1980)).toEqual(['CYMX', 'CYUL']);
+    expect(tabs('montreal', 2000)).toEqual(['CYUL', 'CYMX']);
+    expect(tabs('montreal', 2010)).toEqual(['CYUL']);
+    expect(tabs('milan', 1990)).toEqual(['LIML', 'LIMC']);
+    expect(tabs('milan', 2010)).toEqual(['LIMC', 'LIML', 'LIME']);
+    expect(tabs('london', 1965)).toEqual(['EGLL', 'EGKK', 'EGSS', 'EGGW']);
+    expect(tabs('london', 1995)).toContain('EGLC');
+    expect(tabs('beijing', 2018)).toEqual(['ZBAA']);
+    expect(tabs('beijing', 2020)).toEqual(['ZBAA', 'ZBAD']);
+    expect(tabs('busan', 2000)).toEqual(['RKPK']);
+    const [main, ...side] = cityAirports('seoul', 2005);
+    expect(main.main).toBe(true);
+    expect(side.every((a) => !a.main)).toBe(true);
+    expect(side[0].era.note).toBeTruthy();
+  });
+
+  it('탭에 쓰는 짧은 이름', () => {
+    const short = (icao: string, city: string) => airportShortName(AIRPORT_INFO_BY_ICAO[icao], CITY[city].name);
+    expect(short('RKSI', 'seoul')).toBe('인천');
+    expect(short('RKSS', 'seoul')).toBe('김포');
+    expect(short('RJTT', 'tokyo')).toBe('하네다');
+    expect(short('EGLL', 'london')).toBe('히스로');
+    expect(short('EGLC', 'london')).toBe('시티');
+    expect(short('ZSSS', 'shanghai')).toBe('훙차오');
+    expect(short('LTFM', 'istanbul')).toBe('이스탄불');
+    expect(short('WMSA', 'kualalumpur')).toBe('수방');
+    expect(short('OTBD', 'doha')).toBe('도하');
   });
 });
 
@@ -150,6 +201,14 @@ describe('공항에 비행기 세우기', () => {
     // 다른 항공사 비행기도 그 해에 날던 기종
     const pool = new Set(backgroundModels(2003, 4));
     for (const p of a.filter((x) => x.company === null)) expect(pool.has(p.model)).toBe(true);
+  });
+
+  it('함께 쓰는 공항에는 회사 비행기 없이 다른 항공사 비행기만, 대표 공항보다 한산하게', () => {
+    const map = AIRPORT_MAPS.RKSS;
+    const asMain = parkPlanes(map, 'RKSS', 'seoul', 2005, [], true).length;
+    const asSide = parkPlanes(map, 'RKSS', 'seoul', 2005, [], false);
+    expect(asSide.every((p) => p.company === null)).toBe(true);
+    expect(asSide.length).toBeLessThan(asMain);
   });
 
   it('옛날에는 그 무렵 기종만', () => {

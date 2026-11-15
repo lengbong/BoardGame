@@ -55,6 +55,10 @@ export function InfoPanel(props: Common & { selected: Selection }) {
 function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city, fx = true }: Common & { city: string }) {
   const c = CITY[city];
   const [airportOpen, setAirportOpen] = useState(false);
+  // 여러 공항이 있는 도시에서 탭으로 고른 공항 (도시를 바꾸면 대표 공항부터)
+  const [aptPick, setAptPick] = useState<{ city: string; icao: string } | null>(null);
+  const aptIcao = aptPick?.city === city ? aptPick.icao : undefined;
+  const pickApt = (icao: string) => setAptPick({ city, icao });
   const year = yearOf(state.q);
   const me = state.companies[viewer];
   const size = citySize(c, year);
@@ -112,8 +116,8 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
             ✕
           </button>
         </header>
-        <AirportCard key={city} state={state} viewer={viewer} city={city} fx={fx} onOpen={() => setAirportOpen(true)} />
-        {airportOpen && <AirportModal state={state} viewer={viewer} city={city} fx={fx} onClose={() => setAirportOpen(false)} />}
+        <AirportCard key={city} state={state} viewer={viewer} city={city} fx={fx} icao={aptIcao} onPick={pickApt} onOpen={() => setAirportOpen(true)} />
+        {airportOpen && <AirportModal state={state} viewer={viewer} city={city} fx={fx} icao={aptIcao} onPick={pickApt} onClose={() => setAirportOpen(false)} />}
         <div className="al-mp-tiles">
           <div className="al-mp-tile">
             <StatRing value={size / 10} text={size.toFixed(1)} tone="blue" size={44} label={`도시 크기 ${size.toFixed(1)} / 10`} />

@@ -198,15 +198,26 @@ export function decadeValue(values: readonly number[], year: number): number {
   return values[i] * (1 - f) + values[i + 1] * f;
 }
 
-/** 그 해 도시 크기 (경제·인구) */
+/** 2030년 뒤 70년 동안 도시가 더 자라는 정도 (예측해서 어림한 값: 아프리카·남아시아가 가장 빠르게) */
+const FUTURE_GROWTH: Record<RegionId, number> = { africa: 0.9, southmid: 0.6, seaoc: 0.4, americas: 0.2, eastasia: 0.1, europe: 0.1 };
+const LAST_DECADE = 2030;
+
+/** 그 해 도시 크기 (경제·인구). 2030년 뒤는 지역마다 어림한 빠르기로 2100년까지 자란다 */
 export function citySize(city: CityDef, year: number): number {
-  return decadeValue(city.size, year);
+  if (year <= LAST_DECADE) return decadeValue(city.size, year);
+  const last = city.size[city.size.length - 1];
+  return last * (1 + (FUTURE_GROWTH[city.region] * Math.min(70, year - LAST_DECADE)) / 70);
 }
 
-/** 그 해 공항 등급 1~4 (10년 단위로 바뀐다) */
+/** 이 등급 공항이 한 단계 커지려면 도시가 이만큼은 커야 한다 (2030년 뒤) */
+const GROW_AT: Record<number, number> = { 1: 3, 2: 4.5, 3: 7 };
+
+/** 그 해 공항 등급 1~4 (10년 단위로 바뀐다). 2030년 뒤에는 도시가 충분히 크면 2050·2080년에 한 단계씩 커진다 */
 export function airportClass(city: CityDef, year: number): number {
   const i = Math.max(0, Math.min(city.airport.length - 1, Math.floor((year - 1960) / 10)));
-  return city.airport[i];
+  let cls = city.airport[i];
+  for (const y of [2050, 2080]) if (year >= y && cls < 4 && citySize(city, y) >= GROW_AT[cls]) cls += 1;
+  return cls;
 }
 
 export const AIRPORT_INFO: Record<number, { name: string; slots: number }> = {

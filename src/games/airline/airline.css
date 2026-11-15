@@ -4747,3 +4747,38 @@ text.al-neg {
   flex-wrap: wrap;
   gap: 12px;
 }
+
+/* 세계 항공사 모드: 설정 화면의 라이벌 명단 */
+.al-world-roster {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 190px;
+  overflow-y: auto;
+}
+.al-world-roster li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 6px;
+  border: 1px solid var(--line, rgba(128, 128, 128, 0.35));
+  border-radius: 999px;
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+.al-world-roster li i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+.al-world-roster .al-world-later {
+  opacity: 0.62;
+  border-style: dashed;
+}
+.al-world-roster small {
+  opacity: 0.8;
+}

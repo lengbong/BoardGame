@@ -1,3 +1,4 @@
+import { shownCompanies } from './rules';
 import type { CSSProperties } from 'react';
 import './extras.css';
 import { coColors } from './brand';
@@ -49,8 +50,10 @@ function OwnershipBar({ state, i }: { state: AirlineState; i: number }) {
 export function StockCard({ state, viewer, canAct, perform }: { state: AirlineState; viewer: number; canAct: boolean; perform: (a: AirlineAction) => void }) {
   const me = state.companies[viewer];
   const block = (b: string | null) => (canAct ? b : notMine);
-  const rows = state.companies.map((c, i) => ({ c, i })).filter(({ c, i }) => !c.out || i === viewer);
-  const merged = state.companies.filter((c) => c.mergedInto !== undefined);
+  // 세계 항공사 모드: 가치 순 위쪽 열두 곳과 내가 주식을 가진 회사만 보인다
+  const pool = state.options.world ? [...new Set([...shownCompanies(state, viewer, 12), ...state.companies.map((_, i) => i).filter((i) => stakeOf(state, i, viewer) > 0)])] : state.companies.map((_, i) => i);
+  const rows = pool.map((i) => ({ c: state.companies[i], i })).filter(({ c, i }) => !c.out || i === viewer);
+  const merged = state.companies.filter((c) => c.mergedInto !== undefined && (!state.options.world || c.mergedInto === viewer));
   return (
     <section className="al-card al-stock-card" data-testid="al-stocks">
       <h4 className="al-fin-title">

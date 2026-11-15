@@ -1,3 +1,4 @@
+import { shownCompanies } from './rules';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import './report.css';
 import { coColors, realOf } from './brand';
@@ -63,8 +64,8 @@ export function ReportView({ state, viewer }: { state: AirlineState; viewer: num
 const costOf = (r: CompanyReport) => r.fuel + r.crew + r.airport + r.service + r.sales + r.lease + r.fleet + r.branch + r.ads + r.interest + r.disrupt + r.staff + r.tax;
 
 /** 달 기록에서 회사마다 선 (운항을 멈춘 회사는 멈춘 뒤로 비운다) */
-function monthSeries(state: AirlineState, pick: (p: MonthPoint, i: number) => number): Series[] {
-  return state.companies.map((c, i) => ({
+function monthSeries(state: AirlineState, viewer: number, pick: (p: MonthPoint, i: number) => number): Series[] {
+  return shownCompanies(state, viewer).map((i) => [state.companies[i], i] as const).map(([c, i]) => ({
     name: c.name,
     color: coColors(c).main,
     shape: SEAT_SHAPES[c.seat],
@@ -89,11 +90,11 @@ function MonthView({ state, viewer }: { state: AirlineState; viewer: number }) {
   const ledger = state.ledger.slice(-24);
   const labels = state.months.map((p, k) => (k === 0 ? '시작' : mLabel(p.t)));
   const tickAt = monthTicks(state);
-  const valueSeries = monthSeries(state, (p, i) => p.value[i]);
-  const onTimeSeries = monthSeries(state, (p, i) => Math.round(p.onTime[i] * 1000) / 10);
+  const valueSeries = monthSeries(state, viewer, (p, i) => p.value[i]);
+  const onTimeSeries = monthSeries(state, viewer, (p, i) => Math.round(p.onTime[i] * 1000) / 10);
   const legend = valueSeries.map((s) => ({ name: s.name, color: s.color, shape: s.shape }));
   const oil: Series[] = [{ name: '유가 지수', color: 'var(--al-gain)', shape: 'circle', values: state.months.map((p) => p.oil) }];
-  const staffSeries = monthSeries(state, (p, i) => p.staff?.[i] ?? 0);
+  const staffSeries = monthSeries(state, viewer, (p, i) => p.staff?.[i] ?? 0);
   const routes = [...me.routes].sort((a, b) => (b.stats?.profit ?? -1e9) - (a.stats?.profit ?? -1e9));
   const [pick, setPick] = useState<number | null>(routes[0]?.id ?? null);
   const route = me.routes.find((r) => r.id === pick) ?? routes[0];
@@ -311,7 +312,8 @@ function YearView({ state, viewer }: { state: AirlineState; viewer: number }) {
     value: r.profit,
     detail: [r.now ? '지금까지' : '한 해', `수입 ${fmtMoney(r.revenue)}`, `비용 ${fmtMoney(r.cost)}`, `손님 ${fmtPax(r.pax)}`, `탑승률 ${pct(r.lf)}`],
   }));
-  const coLegend = state.companies.map((c) => ({ name: c.name, color: coColors(c).main, shape: SEAT_SHAPES[c.seat] }));
+  const ids = shownCompanies(state, viewer);
+  const coLegend = ids.map((i) => state.companies[i]).map((c) => ({ name: c.name, color: coColors(c).main, shape: SEAT_SHAPES[c.seat] }));
   return (
     <>
       <section className="al-card">
@@ -418,7 +420,7 @@ function YearView({ state, viewer }: { state: AirlineState; viewer: number }) {
             {coLegend.length > 1 && <Legend series={coLegend} />}
           </div>
           <GroupedBars
-            groups={years.map((y) => ({ label: `${y.year}`, values: state.companies.map((_, i) => (y.companies[i] ? y.companies[i]!.profit : null)) }))}
+            groups={years.map((y) => ({ label: `${y.year}`, values: ids.map((i) => (y.companies[i] ? y.companies[i]!.profit : null)) }))}
             colors={coLegend.map((c) => c.color)}
             names={coLegend.map((c) => c.name)}
             format={signedMoney}
@@ -431,9 +433,9 @@ function YearView({ state, viewer }: { state: AirlineState; viewer: number }) {
                 <thead>
                   <tr>
                     <th>해</th>
-                    {state.companies.map((c, i) => (
+                    {ids.map((i) => (
                       <th key={i}>
-                        <CoName c={c} />
+                        <CoName c={state.companies[i]} />
                       </th>
                     ))}
                   </tr>
@@ -442,7 +444,7 @@ function YearView({ state, viewer }: { state: AirlineState; viewer: number }) {
                   {[...years].reverse().map((y) => (
                     <tr key={y.year}>
                       <th>{y.year}년</th>
-                      {state.companies.map((_, i) => {
+                      {ids.map((i) => {
                         const r = y.companies[i];
                         return (
                           <td key={i} className={r && r.profit < 0 ? 'al-neg' : 'al-pos'}>
@@ -653,7 +655,8 @@ function OpsView({ state, viewer }: { state: AirlineState; viewer: number }) {
 function QuarterView({ state, viewer }: { state: AirlineState; viewer: number }) {
   const [table, setTable] = useState(false);
   const hist = state.history;
-  const series: Series[] = state.companies.map((c, i) => ({
+  const ids = shownCompanies(state, viewer);
+  const series: Series[] = ids.map((i) => [state.companies[i], i] as const).map(([c, i]) => ({
     name: c.name,
     color: coColors(c).main,
     shape: SEAT_SHAPES[c.seat],
@@ -670,13 +673,16 @@ function QuarterView({ state, viewer }: { state: AirlineState; viewer: number })
   };
   const rep = state.qReport ?? state.report;
   const shareRows: ShareRow[] = REGIONS.map((r) => {
-    const parts = state.companies.map((c, i) => ({ name: c.name, color: coColors(c).main, shape: SEAT_SHAPES[c.seat], value: rep?.companies[i]?.regionPax[r] ?? 0 }));
+    const parts = ids.map((i) => [state.companies[i], i] as const).map(([c, i]) => ({ name: c.name, color: coColors(c).main, shape: SEAT_SHAPES[c.seat], value: rep?.companies[i]?.regionPax[r] ?? 0 }));
+    // 세계 항공사 모드: 목록에 없는 회사들은 한데 묶는다
+    const rest = (rep?.companies ?? []).reduce((sum, cr, i) => (ids.includes(i) ? sum : sum + (cr?.regionPax[r] ?? 0)), 0);
+    if (rest > 0) parts.push({ name: '그 밖의 항공사', color: '#8a94a6', shape: 'circle', value: rest });
     return { label: `${REGION_INFO[r].emoji} ${REGION_INFO[r].short}`, total: parts.reduce((s, p) => s + p.value, 0), parts };
   });
   const routes = rep ? [...rep.routes].sort((a, b) => b.profit - a.profit) : [];
   const best = routes.slice(0, 5);
   const worst = routes.length > 5 ? routes.slice(-5).reverse() : [];
-  const order = rankings(state);
+  const order = state.options.world ? ids : rankings(state);
   // 허브마다 갈아탄 손님 (지난 분기)
   const hubs = new Map<string, { pax: number; companies: Set<number>; top: { a: string; b: string; pax: number }[] }>();
   for (const x of rep?.xfers ?? []) {
@@ -703,9 +709,9 @@ function QuarterView({ state, viewer }: { state: AirlineState; viewer: number })
               <thead>
                 <tr>
                   <th>시점</th>
-                  {state.companies.map((c, i) => (
+                  {ids.map((i) => (
                     <th key={i}>
-                      <CoName c={c} />
+                      <CoName c={state.companies[i]} />
                     </th>
                   ))}
                 </tr>
@@ -716,8 +722,8 @@ function QuarterView({ state, viewer }: { state: AirlineState; viewer: number })
                   .map((h) => (
                     <tr key={h.q}>
                       <th>{h.q === hist[0].q ? '시작' : qLabel(h.q)}</th>
-                      {h.value.map((v, i) => (
-                        <td key={i}>{fmtMoney(v)}</td>
+                      {ids.map((i) => (
+                        <td key={i}>{fmtMoney(h.value[i] ?? 0)}</td>
                       ))}
                     </tr>
                   ))}
@@ -812,7 +818,7 @@ function QuarterView({ state, viewer }: { state: AirlineState; viewer: number })
                   <small>{fmtPax(h.pax)}</small>
                 </span>
                 <span className="al-xh-cos">
-                  {[...h.companies].map((ci) => (
+                  {[...h.companies].slice(0, 5).map((ci) => (
                     <CoName key={ci} c={state.companies[ci]} />
                   ))}
                 </span>

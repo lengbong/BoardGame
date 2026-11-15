@@ -419,6 +419,13 @@ export interface CompanyStats {
 }
 
 export interface Company {
+  /** 세계 항공사 모드: 아직 생기지 않은 항공사 (out도 참). joinYear 해 1월에 날기 시작한다 */
+  dormant?: boolean;
+  joinYear?: number;
+  /** 세계 항공사 모드: 돈이 모자라 구조 조정을 한 달 (컴퓨터 회사는 한 번은 살아난다) */
+  rescuedAt?: number;
+  /** 세계 항공사 모드: 예측해서 지어낸 미래 항공사 */
+  predicted?: boolean;
   seat: SeatIndex;
   kind: Exclude<SeatKind, 'empty'>;
   name: string;
@@ -531,15 +538,20 @@ export type AiStyle = 'relaxed' | 'normal' | 'fierce';
 /** 항공사 이름: 실제 항공사 / 가상 항공사 */
 export type NameMode = 'real' | 'fictional';
 
-export type StartEra = 1963 | 1983 | 2003;
+export type StartEra = 1963 | 1983 | 2003 | 2026;
 export type WinMode = 'goal' | 'years' | 'challenge' | 'scenario';
 export type MoneyLevel = 'rich' | 'normal' | 'tight';
 
 export interface AirlineOptions {
   era: StartEra;
   mode: WinMode;
-  /** 정해진 해까지: 몇 년 뒤에 끝나는지 */
-  years: 10 | 20 | 30;
+  /** 정해진 해까지: 몇 년 뒤에 끝나는지 (0이면 2100년 12월까지) */
+  years: 10 | 20 | 30 | 50 | 0;
+  /**
+   * 세계 항공사 모드 (world.ts): 사람은 한 명, 그 해에 날던 실제 항공사가 모두 컴퓨터 라이벌로 나온다.
+   * 세월이 흐르면 새 항공사가 생기고 없어진다. 없으면 예전 방식 (자리 넷)
+   */
+  world?: boolean;
   /** 목표 먼저 이루기: 회사 가치 목표 (억) */
   goalValue: number;
   /** 목표 먼저 이루기: 취항해야 하는 지역 수 */

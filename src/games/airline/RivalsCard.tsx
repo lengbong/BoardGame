@@ -1,5 +1,5 @@
 import './rivals.css';
-import { useId, useState, type CSSProperties, type ReactNode } from 'react';
+import { useId, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { withJosa } from '../../lib/korean';
 import { loadJson, saveJson } from '../../lib/storage';
 import { ChoiceIcon, ICON_DUO, ICON_LINE, IconPicker, type IconChoice } from '../../components/IconPicker';
@@ -33,7 +33,7 @@ import {
   visitGain,
 } from './relations';
 import { NewsView } from './ReportView';
-import { allianceOutlook, proposeBlocker } from './rules';
+import { allianceOutlook, proposeBlocker, SHOWN_COMPANIES, rankings } from './rules';
 import { alSound } from './sounds';
 import { MoreInfo } from './StaffArt';
 import type { AiStyle, AirlineAction, AirlineOptions, AirlineState, Route } from './types';
@@ -404,7 +404,16 @@ export function RivalsCard({ state, viewer, canAct, perform }: { state: AirlineS
   // 접어 두기 (이 브라우저에만 기억한다)
   const [folded, setFolded] = useState(() => loadJson<boolean>(FOLD_KEY) === true);
   const bodyId = useId();
-  const list = rivalsFor(state, viewer);
+  const all = rivalsFor(state, viewer);
+  // 세계 항공사 모드: 라이벌이 수십 곳이라 나와 많이 부딪치는 곳(겹치는 노선 → 같은 본사 → 회사 가치)부터 여덟 곳만
+  const list = useMemo(() => {
+    if (!state.options.world) return all;
+    const rank = rankings(state);
+    const me = state.companies[viewer];
+    const score = (i: number) => sharedRoutes(state, viewer, i).length * 100 + (state.companies[i].hub === me?.hub ? 50 : 0) + (rank.length - rank.indexOf(i)) / rank.length;
+    return [...all].sort((a, b) => score(b) - score(a)).slice(0, SHOWN_COMPANIES);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, viewer]);
   if (state.companies[viewer]?.kind !== 'human' || list.length === 0) return null;
   const real = list.some((i) => state.companies[i].airline);
   const offers = offersFor(state, viewer).length;

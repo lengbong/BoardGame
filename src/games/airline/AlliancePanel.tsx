@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import { JOINT_BONUS, MAX_MEMBERS, MILES_PER_MEMBER, allianceOf, alliesOf } from './alliances';
 import { FinIcon, OutlookBars } from './FinanceArt';
-import { allianceOutlook, proposeBlocker } from './rules';
+import { allianceOutlook, proposeBlocker, shownCompanies } from './rules';
 import { MoreInfo } from './StaffArt';
 import { mLabel } from './time';
 import type { AirlineAction, AirlineState } from './types';
@@ -14,7 +14,9 @@ export function AlliancePanel({ state, viewer, canAct, perform }: { state: Airli
   const mine = allianceOf(state, viewer);
   const allies = alliesOf(state, viewer);
   const full = !!mine && mine.members.length >= MAX_MEMBERS;
-  const others = state.companies.map((c, i) => ({ c, i })).filter(({ c, i }) => i !== viewer && !c.out && !mine?.members.includes(i));
+  // 세계 항공사 모드: 가치 순 위쪽 열두 곳만 보인다
+  const pool = state.options.world ? shownCompanies(state, viewer, 13) : state.companies.map((_, i) => i);
+  const others = pool.map((i) => ({ c: state.companies[i], i })).filter(({ c, i }) => i !== viewer && !c.out && !mine?.members.includes(i));
 
   return (
     <>

@@ -120,7 +120,7 @@ export function makerPolitics(hub: string, m: ModelDef, year: number): string | 
   const home = polity(hub, year);
   const east = EAST_MAKERS.includes(m.maker);
   if (east && year < COLD_WAR_END && !EAST_BUYERS.includes(home)) return `냉전 중에는 소련 비행기를 살 수 없어요 (${COLD_WAR_END}년부터)`;
-  if (!east && m.maker !== '가상 설계') {
+  if (!east) {
     const ban = WEST_BANNED.find((x) => x.who === home && year < x.until);
     if (ban) return `냉전 중에는 서방 비행기를 살 수 없어요 (${ban.until}년부터)`;
   }

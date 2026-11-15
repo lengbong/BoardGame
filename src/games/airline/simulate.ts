@@ -120,6 +120,9 @@ const TRAVEL: readonly (readonly [number, number])[] = [
   [2020, 1.5],
   [2030, 1.75],
   [2045, 2.0],
+  [2060, 2.3],
+  [2080, 2.6],
+  [2100, 2.8],
 ];
 const FARE: readonly (readonly [number, number])[] = [
   [1960, 3.0],
@@ -131,6 +134,7 @@ const FARE: readonly (readonly [number, number])[] = [
   [2020, 0.86],
   [2030, 0.82],
   [2045, 0.8],
+  [2100, 0.74],
 ];
 
 const yearFrac = (q: number) => yearOf(q) + (quarterOf(q) - 1) / 4 + 0.125;

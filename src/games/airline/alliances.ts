@@ -16,7 +16,11 @@ export const MILES_PER_MEMBER = 0.015;
 /** 동맹 회사도 지점이 있는 도시의 손님 배수 */
 export const JOINT_BONUS = 1.05;
 
-export const ALLIANCE_NAMES = ['하늘별 동맹', '푸른띠 동맹', '세계일주 동맹', '은빛날개 동맹'] as const;
+export const ALLIANCE_NAMES = [
+  '하늘별 동맹', '푸른띠 동맹', '세계일주 동맹', '은빛날개 동맹',
+  // 세계 항공사 모드는 회사가 많아 동맹도 많이 생긴다
+  '새벽길 동맹', '무지개 동맹', '큰바다 동맹', '북극성 동맹', '한바퀴 동맹', '구름다리 동맹', '해오름 동맹', '바람개비 동맹', '은하수 동맹', '온누리 동맹', '두루미 동맹', '산마루 동맹',
+] as const;
 
 const alive = (state: Pick<AirlineState, 'companies'>, ci: number) => !!state.companies[ci] && !state.companies[ci].out;
 

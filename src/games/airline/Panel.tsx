@@ -7,7 +7,7 @@ import { CompanyBadge, SEAT_SHAPES } from './Art';
 import { CHALLENGE } from './challenges';
 import { ScenarioGoalBox } from './ScenarioTracker';
 import { fmtMoney } from './format';
-import { actor, endT, rankings } from './rules';
+import { actor, endT, rankings, flyingCount, shownCompanies } from './rules';
 import { companyValue, regionsServed } from './simulate';
 import { mLabel } from './time';
 import type { AirlineState } from './types';
@@ -42,7 +42,9 @@ export function Panel({ state, viewer, hint, canEnd, busy, onEndTurn, auto, onAu
   const act = actor(state);
   const shown = state.phase === 'gameover' ? state.companies[state.result?.winners[0] ?? viewer] : state.companies[act];
   const color = coColors(shown);
-  const order = rankings(state);
+  const ranked = rankings(state);
+  // 세계 항공사 모드: 가치 순 위쪽과 내 회사만 보인다 (등수는 모든 회사 가운데)
+  const order = state.options.world ? shownCompanies(state, viewer) : ranked;
   const recent = state.log.slice(-14).reverse();
   const me = state.companies[viewer];
   const left = endT(state) - state.t + 1;
@@ -143,10 +145,11 @@ export function Panel({ state, viewer, hint, canEnd, busy, onEndTurn, auto, onAu
       <section className="al-goal">{goal}</section>
 
       <section className="players al-players">
-        <h2>항공사</h2>
+        <h2>항공사{state.options.world ? <small> {flyingCount(state)}곳 가운데 위쪽</small> : null}</h2>
         <ul>
-          {order.map((i, rank) => {
+          {order.map((i) => {
             const c = state.companies[i];
+            const rank = ranked.indexOf(i);
             const col = coColors(c);
             const pos = state.order.indexOf(i);
             const status = c.out ? '운항 중단' : state.phase !== 'manage' ? '' : i === act ? '경영 중' : pos >= 0 && pos < state.turnPos ? '✓ 마침' : '기다림';

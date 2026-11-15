@@ -20,8 +20,9 @@ import { REAL_AIRLINE } from './realAirlines';
 import { STAFF_GROUPS, emptyStaff, staffNeed } from './staff';
 import { defaultTimes } from './timetable';
 import { DEFAULT_OPTIONS, GOAL_VALUES } from './rules';
+import { emptyReport } from './simulate';
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { AirlineOptions, AirlineSetup, AirlineState, Choice, Company, GoalKind, ModKind, YearAcc } from './types';
+import type { AirlineOptions, AirlineSetup, AirlineState, Choice, Company, CompanyReport, GoalKind, ModKind, YearAcc } from './types';
 
 const SAVE_KEY = 'family-boardgame.airline.save.v1';
 const SETUP_KEY = 'family-boardgame.airline.setup.v1';
@@ -45,7 +46,7 @@ export const DEFAULT_SETUP: AirlineSetup = {
   airlines: [null, null, null, null],
 };
 
-const ERAS = [1963, 1983, 2003];
+const ERAS = [1963, 1983, 2003, 2026];
 const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v);
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isIndex = (v: unknown, n: number): v is number => isInt(v) && v >= 0 && v < n;
@@ -57,7 +58,7 @@ export function parseOptions(v: unknown): AirlineOptions {
   return {
     era: (ERAS.includes(o.era as number) ? o.era : DEFAULT_OPTIONS.era) as AirlineOptions['era'],
     mode: o.mode === 'goal' || o.mode === 'challenge' || o.mode === 'years' || o.mode === 'scenario' ? o.mode : DEFAULT_OPTIONS.mode,
-    years: o.years === 10 || o.years === 30 || o.years === 20 ? o.years : DEFAULT_OPTIONS.years,
+    years: o.years === 10 || o.years === 30 || o.years === 20 || o.years === 50 || o.years === 0 ? o.years : DEFAULT_OPTIONS.years,
     goalValue: (GOAL_VALUES as readonly number[]).includes(o.goalValue as number) ? (o.goalValue as number) : DEFAULT_OPTIONS.goalValue,
     goalRegions: isInt(o.goalRegions) && o.goalRegions >= 3 && o.goalRegions <= 6 ? o.goalRegions : DEFAULT_OPTIONS.goalRegions,
     money: o.money === 'rich' || o.money === 'tight' || o.money === 'normal' ? o.money : DEFAULT_OPTIONS.money,
@@ -65,6 +66,8 @@ export function parseOptions(v: unknown): AirlineOptions {
     aiStyle: o.aiStyle === 'relaxed' || o.aiStyle === 'fierce' || o.aiStyle === 'normal' ? o.aiStyle : DEFAULT_OPTIONS.aiStyle,
     names: o.names === 'fictional' || o.names === 'real' ? o.names : DEFAULT_OPTIONS.names,
     history: o.history !== false,
+    // 세계 항공사 모드 (없으면 키를 두지 않는다: 예전 방식)
+    ...(o.world === true ? { world: true } : {}),
     // 운수권 (없으면 키를 두지 않는다: rightsSave.ts)
     ...parseRightsOption(o as Record<string, unknown>),
     // 라이벌 성격 (없으면 키를 두지 않는다: 켜짐)
@@ -169,8 +172,10 @@ export function isValidState(v: unknown): v is AirlineState {
   if (s.version !== 4) return false;
   if (!isInt(s.nextId) || !isInt(s.t) || !isInt(s.startT) || s.startT > s.t || s.q !== Math.floor(s.t / 3) || s.startQ !== Math.floor(s.startT / 3) || !isInt(s.startYear)) return false;
   if (s.phase !== 'manage' && s.phase !== 'gameover') return false;
-  if (!Array.isArray(s.companies) || s.companies.length < 1 || s.companies.length > 4) return false;
+  if (!Array.isArray(s.companies) || s.companies.length < 1 || s.companies.length > (isObj(s.options) && s.options.world === true ? MAX_WORLD_COMPANIES : 4)) return false;
   if (!s.companies.every((c) => isValidCompany(c, s.nextId))) return false;
+  if (!s.companies.every((c) => c.rescuedAt === undefined || isInt(c.rescuedAt))) return false;
+  if (!s.companies.every((c) => (c.dormant === undefined || typeof c.dormant === 'boolean') && (c.joinYear === undefined || isInt(c.joinYear)) && (c.predicted === undefined || typeof c.predicted === 'boolean') && (!c.dormant || c.out))) return false;
   const n = s.companies.length;
   if (!Array.isArray(s.order) || s.order.length < 1 || !s.order.every((i) => isIndex(i, n))) return false;
   if (!isIndex(s.turnPos, s.order.length)) return false;
@@ -300,9 +305,76 @@ export function fillMissing(v: unknown): unknown {
   return s;
 }
 
+/** 세계 항공사 모드의 회사 수 한도 (실제 항공사 + 예측한 미래 항공사 + 사람) */
+const MAX_WORLD_COMPANIES = 120;
+
+// ------------------------------------------------------------------ 세계 항공사 모드: 저장을 가볍게
+
+/** 결산 묶음에서 이만큼(최근)은 그대로 두고, 그보다 오래된 라이벌 결산은 요약만 저장한다 */
+const FULL_REPORTS = 3;
+
+type Packed = CompanyReport | 0 | number[];
+
+function packReport(r: CompanyReport | undefined | null): Packed {
+  if (!r) return 0;
+  if (!r.pax && !r.profit && !r.value && !r.cash && !r.debt) return 0;
+  return [r.profit, r.pax, r.seats, r.value, r.cash, r.debt, r.ticket + r.cargo + r.ancillary + r.side];
+}
+
+function unpackReport(x: unknown): CompanyReport {
+  if (isObj(x)) return x as unknown as CompanyReport;
+  const r = emptyReport();
+  if (!Array.isArray(x)) return r;
+  const n = (i: number) => (isNum(x[i]) ? (x[i] as number) : 0);
+  return { ...r, profit: n(0), pax: n(1), seats: n(2), value: n(3), cash: n(4), debt: n(5), ticket: n(6) };
+}
+
+/**
+ * 세계 항공사 모드는 회사가 수십 곳이라 저장이 브라우저 한도(약 5MB)를 넘기 쉽다.
+ * 사람 회사가 아닌 회사의 오래된 달·해 결산은 요약(이익·손님·좌석·가치·현금·빚·매출)만 남긴다.
+ */
+export function packWorldState(state0: AirlineState, lean = false): unknown {
+  if (!state0.options.world) return state0;
+  // lean: 저장 한도를 넘었을 때 한 번 더 줄인다 (그래프·결산 기록을 최근 것만)
+  const state: AirlineState = lean ? { ...state0, ledger: state0.ledger.slice(-6), years: state0.years.slice(-10), months: state0.months.slice(-60), history: state0.history.slice(-60), news: state0.news.slice(-30) } : state0;
+  const human = state.companies.map((c) => c.kind === 'human');
+  const pack = <T extends { companies: CompanyReport[] }>(list: T[]) =>
+    list.map((r, k) => (k >= list.length - FULL_REPORTS ? r : { ...r, companies: r.companies.map((c, ci) => (human[ci] ? c : packReport(c))) }));
+  // 노선·환승·운항 기록: 오래된 달은 사람 회사 것만, 최근 결산도 사람 회사 것과 눈에 띄는 것만 남긴다
+  const mine = <T extends { company: number }>(list: T[]) => list.filter((x) => human[x.company]);
+  const notable = <T extends { company: number; profit: number }>(list: T[]) => {
+    if (list.length <= 60) return list;
+    const sorted = [...list].sort((a, b) => b.profit - a.profit);
+    const pick = new Set([...sorted.slice(0, 20), ...sorted.slice(-20)]);
+    return list.filter((x) => human[x.company] || pick.has(x));
+  };
+  const slim = (r: AirlineState['report']) => (r ? { ...r, routes: notable(r.routes), xfers: r.xfers.slice(0, 80) } : r);
+  const ledger = pack(state.ledger).map((r) => ({ ...r, routes: mine(r.routes) }));
+  // 라이벌 노선의 지난 열두 달 그래프는 화면에 쓰지 않으니 저장하지 않는다
+  const companies = state.companies.map((c, ci) => (human[ci] ? c : { ...c, routes: c.routes.map((r) => (r.stats && r.stats.hist.length ? { ...r, stats: { ...r.stats, hist: [] } } : r)) }));
+  return { ...state, companies, ledger, years: pack(state.years), report: slim(state.report), qReport: slim(state.qReport) };
+}
+
+function unpackWorldState(v: unknown): unknown {
+  if (!isObj(v) || !isObj(v.options) || v.options.world !== true) return v;
+  const unpack = (list: unknown) =>
+    Array.isArray(list) ? list.map((r) => (isObj(r) && Array.isArray(r.companies) ? { ...r, companies: (r.companies as unknown[]).map(unpackReport) } : r)) : list;
+  return { ...v, ledger: unpack(v.ledger), years: unpack(v.years) };
+}
+
+/** 소수는 셋째 자리까지만 저장한다 (세계 항공사 모드) */
+const round3 = (_k: string, v: unknown) => (typeof v === 'number' && !Number.isInteger(v) ? Math.round(v * 1000) / 1000 : v);
+
+/** 저장할 글 (세계 항공사 모드는 가볍게 줄여서) */
+export function serializeSave(setup: AirlineSetup, state: AirlineState, savedAt = Date.now(), lean = false): string {
+  if (!state.options.world) return JSON.stringify({ setup, state, savedAt } satisfies SavedAirlineGame);
+  return JSON.stringify({ setup, state: packWorldState(state, lean), savedAt }, round3);
+}
+
 export function parseSaved(v: unknown): SavedAirlineGame | null {
   if (!isObj(v)) return null;
   const saved = { ...(v as unknown as SavedAirlineGame) };
+  saved.state = unpackWorldState(saved.state) as AirlineState;
   saved.state = migrateV3(fillMissing(migrateV2(saved.state))) as AirlineState;
   if (!isValidSetup(saved.setup) || !isValidState(saved.state)) return null;
   // 예전 1:1 제휴는 동맹으로
@@ -332,7 +404,17 @@ export function loadSavedAirlineGame(): SavedAirlineGame | null {
 }
 
 export function saveAirlineGame(setup: AirlineSetup, state: AirlineState): void {
-  saveJson(SAVE_KEY, { setup, state, savedAt: Date.now() } satisfies SavedAirlineGame);
+  try {
+    window.localStorage.setItem(SAVE_KEY, serializeSave(setup, state));
+  } catch {
+    // 세계 항공사 모드의 아주 긴 판: 한도를 넘으면 기록을 더 줄여 다시 저장해 본다. 그래도 안 되면 게임만 계속한다.
+    if (!state.options.world) return;
+    try {
+      window.localStorage.setItem(SAVE_KEY, serializeSave(setup, state, Date.now(), true));
+    } catch {
+      /* 저장 없이 계속 */
+    }
+  }
 }
 
 export function clearSavedAirlineGame(): void {

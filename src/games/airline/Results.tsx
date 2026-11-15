@@ -9,7 +9,7 @@ import { AwardCeremony } from './AwardsArt';
 import { FameResult } from './AchievementsView';
 import { ScenarioResult } from './ScenarioTracker';
 import { SCENARIO } from './scenarios';
-import { rankings } from './rules';
+import { rankings, shownCompanies } from './rules';
 import { companyValue, regionsServed } from './simulate';
 import { qLabel } from './time';
 import type { AirlineState, QuarterReport as Report } from './types';
@@ -180,7 +180,10 @@ interface GameOverProps {
 
 export function GameOver({ state, onRestart, onChangeSetup, onExit, onLook }: GameOverProps) {
   const result = state.result!;
-  const order = rankings(state);
+  const ranked = rankings(state);
+  const viewer = state.companies.findIndex((c) => c.kind === 'human');
+  // 세계 항공사 모드: 위쪽 10곳과 내 회사만 (등수는 운항 중인 모든 회사 가운데)
+  const order = state.options.world ? shownCompanies(state, viewer, 10) : ranked;
   const humans = state.companies.filter((c) => c.kind === 'human');
   const winner = result.winners.length > 0 ? state.companies[result.winners[0]] : null;
   const challenge = state.challenge ? CHALLENGE[state.challenge.id] : state.scenario ? SCENARIO[state.scenario.id] : null;
@@ -203,11 +206,12 @@ export function GameOver({ state, onRestart, onChangeSetup, onExit, onLook }: Ga
         {challenge && state.challenge && <p className="al-muted">{state.challenge.progress}</p>}
         {state.scenario && <ScenarioResult state={state} />}
         <ol className="al-rank-list">
-          {order.map((i, rank) => {
+          {order.map((i, k) => {
             const c = state.companies[i];
+            const rank = ranked.indexOf(i);
             return (
-              <li key={i} className={result.winners.includes(i) ? 'al-rank-winner' : ''} style={{ animationDelay: `${0.25 + rank * 0.15}s` }}>
-                <span className="medal">{c.out ? '🛑' : MEDALS[rank]}</span>
+              <li key={i} className={result.winners.includes(i) ? 'al-rank-winner' : ''} style={{ animationDelay: `${0.25 + k * 0.15}s` }}>
+                <span className="medal">{c.out ? '🛑' : (MEDALS[rank] ?? `${rank + 1}등`)}</span>
                 {realOf(c) && (
                   <span className="al-rank-photo">
                     <AirlinePhoto airline={realOf(c)!} width={80} />

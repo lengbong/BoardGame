@@ -50,7 +50,7 @@ export function BizModelSetup({ setup, onChange }: { setup: AirlineSetup; onChan
           seat.kind !== 'human' ? null : (
             <li key={i}>
               <span className="al-hub-who" style={{ borderColor: SEAT_COLORS[i as 0].main }}>
-                {SEAT_COLORS[i as 0].name} · 사람
+                내 항공사
               </span>
               <span className="al-sort" role="radiogroup" aria-label={`${SEAT_COLORS[i as 0].name} 자리 사업 모델`}>
                 {BIZ_MODELS.map((m) => (

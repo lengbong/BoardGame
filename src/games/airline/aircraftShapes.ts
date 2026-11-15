@@ -94,8 +94,9 @@ export const SHAPES: Record<string, PlaneShape> = {
   il86: { len: 59.5, span: 48.06, dia: 6.08, sweep: 35, ar: 9.4, tail: 'low', eng: { wing: [0.36, 0.64], d: 2.4, l: 5.6 } },
   yak42: { len: 36.4, span: 34.9, dia: 3.8, sweep: 23, ar: 8.3, tail: 't', eng: { rear: 1, center: 'sduct', d: 1.6, l: 5 } },
   il96: { len: 55.3, span: 57.7, dia: 6.08, sweep: 30, ar: 9.5, tail: 'low', tip: 'winglet', tipH: 2.5, eng: { wing: [0.36, 0.63], d: 2.6, l: 5.8 } },
-  // 상상 속 미래 기종
-  sst2: {
+};
+
+const SST2: PlaneShape = {
     len: 52,
     span: 20,
     dia: 2.5,
@@ -114,7 +115,46 @@ export const SHAPES: Record<string, PlaneShape> = {
       [1, 0.88, 0.93],
     ],
     eng: { box: true, d: 1.4, l: 0 },
-  },
-  hc800: { len: 82, span: 88, dia: 7.6, tall: 1.2, sweep: 34, ar: 8.5, taper: 0.22, decks: 2, tail: 'low', tip: 'curved', tipH: 4, noseLen: 1.35, eng: { wing: [0.34, 0.6], d: 3.8, l: 7 } },
+  };
+
+/** 가오리 모양 (동체·날개 일체형): 넓고 납작한 몸통에 긴 날개, 수평 꼬리날개 없이 엔진은 등 위에 */
+const BWB: PlaneShape = { len: 40, span: 52, dia: 9.5, tall: 0.5, sweep: 36, ar: 6.2, taper: 0.16, crank: true, pos: 0.56, tail: 'none', finH: 3.2, tip: 'winglet', tipH: 2.6, noseLen: 1.1, tailLen: 0.8, windows: 1, eng: { rear: 1, d: 2.9, l: 4.6 } };
+
+/**
+ * 예측해서 지어낸 미래 기종 (aircraft.ts의 FUTURE_ROWS): 치수도 모두 상상이에요.
+ * 오늘의 비슷한 기종에서 날개를 더 길고 가늘게, 엔진을 더 크게 (오픈팬) 바꿔 그린다.
+ */
+Object.assign(SHAPES, {
+  c929: { ...SHAPES['a330-900'], len: 63.8, span: 63.9, dia: 5.92, sweep: 32, tip: 'raked' },
+  'atr-evo': { ...SHAPES.atr72, len: 27.2, tip: 'winglet', tipH: 0.9 },
+  sst2: SST2,
+  etp90: { ...SHAPES.q400, len: 31, span: 31, eng: { rear: 1, d: 1.5, l: 3.2 }, tail: 't' },
+  'b797-8': { ...SHAPES.b737max8, len: 40, span: 51.8, sweep: 20, ar: 19, taper: 0.35, high: true, tail: 't', tip: 'raked', eng: { wing: [0.24], d: 2.3, l: 4 } },
+  'b797-10': { ...SHAPES.b737max8, len: 46, span: 51.8, sweep: 20, ar: 19, taper: 0.35, high: true, tail: 't', tip: 'raked', eng: { wing: [0.24], d: 2.3, l: 4 } },
+  a250: { ...SHAPES.a320neo, len: 40.5, span: 42, ar: 13, tip: 'raked', tail: 't', eng: { rear: 1, d: 3.6, l: 3.4 } },
+  a260: { ...SHAPES.a321neo, len: 48.5, span: 44, ar: 13, tip: 'raked', tail: 't', eng: { rear: 1, d: 3.6, l: 3.4 } },
+  'c919-800': { ...SHAPES.c919, len: 42.5, span: 37.5, tip: 'raked' },
+  z4: BWB,
+  z7: { ...BWB, len: 50, span: 66, dia: 12 },
+  z9h: { ...BWB, len: 54, span: 72, dia: 13, eng: { rear: 1, d: 3.4, l: 5 } },
+  a350neo: { ...SHAPES['a350-900'], span: 66.5, ar: 10.5 },
   'h2-200': { len: 48, span: 44, dia: 4.2, tall: 1.08, sweep: 24, ar: 13, taper: 0.3, tail: 'low', tip: 'raked', eng: { wing: [0.34], d: 2.6, l: 4.6 } },
-};
+  'h2-350': { ...SHAPES['a350-900'], len: 72, span: 68, dia: 6.3, ar: 11.5, tip: 'raked' },
+  a400: { ...SHAPES['a350-1000'], len: 76, span: 72, dia: 6.4, ar: 12.5, tip: 'raked', tail: 't' },
+  'e3-150': { ...SHAPES.e195e2, len: 43.5, span: 37, ar: 12.5 },
+  'e4-120': { ...SHAPES.e195e2, len: 38.5, span: 38, ar: 14, tail: 't', eng: { rear: 1, d: 2.6, l: 3 } },
+  b808: { ...SHAPES['b787-9'], len: 64, span: 64, ar: 11.5 },
+  es90: { ...SHAPES.q400, len: 33, span: 36, ar: 14, eng: { prop: [0.22, 0.5], d: 0.9, l: 0, propD: 3 } },
+  es150: { ...SHAPES['a220-300'], len: 40, span: 40, ar: 13.5, tail: 't', eng: { rear: 1, d: 2.8, l: 3 } },
+  c939: { ...SHAPES['b777-300'], len: 72, span: 66, tip: 'raked' },
+  c949: { ...SHAPES['a350-900'], len: 68, span: 66, ar: 11, tip: 'raked' },
+  hc800: { len: 82, span: 88, dia: 7.6, tall: 1.2, sweep: 34, ar: 8.5, taper: 0.22, decks: 2, tail: 'low', tip: 'curved', tipH: 4, noseLen: 1.35, eng: { wing: [0.34, 0.6], d: 3.8, l: 7 } },
+  a500: { len: 86, span: 90, dia: 8, tall: 1.22, sweep: 33, ar: 9.5, taper: 0.2, decks: 2, tail: 'low', tip: 'raked', noseLen: 1.3, eng: { wing: [0.32, 0.58], d: 4.2, l: 6.4 } },
+  ka100: { ...SHAPES['a220-300'], len: 33, span: 33, ar: 12 },
+  ka250: { ...SHAPES['b787-8'], len: 54, span: 58, ar: 12, tip: 'raked' },
+  b180: { ...SHAPES.a320neo, len: 39.5, span: 36.5, tip: 'winglet', tipH: 2 },
+  overture2: { ...SST2, len: 66, span: 24, dia: 3 },
+  b100: { ...SHAPES['b747-400'], len: 76, span: 76, ar: 10, tip: 'raked', eng: { wing: [0.38, 0.66], d: 3.6, l: 5.6 } },
+  hx1: { ...SST2, len: 70, span: 22, dia: 3.4, sweep: 68, finH: 4.2 },
+  b220h: { ...SHAPES.b737max8, len: 44, span: 54, sweep: 18, ar: 21, taper: 0.33, high: true, tail: 't', tip: 'raked', eng: { wing: [0.24], d: 3, l: 3.2 } },
+} satisfies Record<string, PlaneShape>);

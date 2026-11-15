@@ -7,7 +7,7 @@ import { useMusic } from '../../lib/useMusic';
 import { useTimers } from '../../lib/useTimers';
 import type { GameSettings } from '../common/settings';
 import { coColors, realOf } from './brand';
-import { aiManage, type AiLevel } from './ai';
+import { aiManage, aiTurn, type AiLevel } from './ai';
 import { useFameTracker } from './AchievementsView';
 import { useScenarioPopups } from './ScenarioTracker';
 import { CompanyBadge, SEAT_SHAPES } from './Art';
@@ -93,7 +93,8 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   const [tab, setTab] = useState<Tab>('map');
   const [selected, setSelected] = useState<Selection>(null);
   /** 지도에서 이 회사 노선만 본다 (null이면 모두) */
-  const [focusCo, setFocusCo] = useState<number | null>(null);
+  // 세계 항공사 모드: 수십 회사의 노선이 지도를 덮지 않게 처음에는 내 회사 노선만 보인다
+  const [focusCo, setFocusCo] = useState<number | null>(() => (initialState.options.world ? Math.max(0, initialState.companies.findIndex((c) => c.kind === 'human')) : null));
   const [routeFocus, setRouteFocus] = useState<number | null>(null);
   const [planner, setPlanner] = useState<Planner | null>(null);
   const [report, setReport] = useState<Report | null>(null);
@@ -110,6 +111,22 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   const [choiceOpen, setChoiceOpen] = useState(false);
   const seenChoice = useRef<number | null>(null);
   const prevGame = useRef<AirlineState | null>(null);
+  const saveTimer = useRef<number | undefined>(undefined);
+  const pendingSave = useRef<(() => void) | null>(null);
+  const flushSave = useCallback(() => {
+    window.clearTimeout(saveTimer.current);
+    pendingSave.current?.();
+    pendingSave.current = null;
+  }, []);
+  useEffect(() => {
+    window.addEventListener('pagehide', flushSave);
+    document.addEventListener('visibilitychange', flushSave);
+    return () => {
+      window.removeEventListener('pagehide', flushSave);
+      document.removeEventListener('visibilitychange', flushSave);
+      flushSave();
+    };
+  }, [flushSave]);
   const managedKey = useRef<string>('');
   const lastHuman = useRef<number | null>(null);
   const later = useTimers();
@@ -165,15 +182,25 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
 
   /** 상태가 바뀔 때마다: 저장, 지도 반짝임, 소리, 분기 결산 */
   useLayoutEffect(() => {
-    if (game.phase === 'gameover') clearSavedAirlineGame();
-    else saveAirlineGame(setup, game);
+    if (game.phase === 'gameover') {
+      window.clearTimeout(saveTimer.current);
+      pendingSave.current = null;
+      clearSavedAirlineGame();
+    } else if (game.options.world) {
+      // 세계 항공사 모드는 저장이 커서, 잠깐 모았다가 한 번에 저장한다 (화면을 떠날 때는 바로)
+      pendingSave.current = () => saveAirlineGame(setup, game);
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = window.setTimeout(flushSave, 900);
+    } else saveAirlineGame(setup, game);
     const prev = prevGame.current;
     prevGame.current = game;
     if (!prev || prev === game) return;
     const { pulses: p, summary } = diffPulses(prev, game);
     let fanfare = false;
-    if (p.length > 0 && delays.fx) {
-      setPulses(p);
+    // 세계 항공사 모드: 수십 회사가 한꺼번에 움직이니 우리 회사 것만 반짝인다
+    const shownPulses = game.options.world ? p.filter((x) => game.companies[x.company]?.kind === 'human') : p;
+    if (shownPulses.length > 0 && delays.fx) {
+      setPulses(shownPulses);
       // 사람 회사가 새 노선을 열면 축하 카드 (음악을 켜 두면 거리에 맞는 취항 팡파르, 배경음악은 작게 깔린다)
       const mine = p.filter((x) => x.kind === 'route' && game.companies[x.company]?.kind === 'human');
       const last = mine.at(-1);
@@ -190,7 +217,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
     const monthEnd = game.events.some((e) => e.type === 'month');
     const quarterEnd = game.events.some((e) => e.type === 'quarter');
     // 컴퓨터가 한 일 요약
-    if (prevActor >= 0 && prev.companies[prevActor].kind !== 'human' && summary.has(prevActor) && !monthEnd) {
+    if (prevActor >= 0 && prev.companies[prevActor].kind !== 'human' && summary.has(prevActor) && !monthEnd && !game.options.world) {
       const c = game.companies[prevActor];
       setBanner({ id: fxSeq++, text: `${c.name}: ${summary.get(prevActor)!.join(' · ')}`, color: coColors(c).main });
       if (summary.get(prevActor)!.some((s) => s.startsWith('새 노선'))) alSound.chime();
@@ -279,6 +306,19 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
     if (ci < 0) return;
     const c = game.companies[ci];
     if (c.kind === 'human') return;
+    // 세계 항공사 모드: 라이벌이 수십 곳이라 하나씩 보여 주지 않고, 사람 차례나 달 결산이 올 때까지 한꺼번에 경영한다
+    if (game.options.world) {
+      const t = window.setTimeout(() => {
+        let g = game;
+        while (g.phase === 'manage' && g.t === game.t) {
+          const a = actor(g);
+          if (a < 0 || g.companies[a].kind === 'human') break;
+          g = aiTurn(g);
+        }
+        setGame(g);
+      }, Math.min(delays.think, 40));
+      return () => window.clearTimeout(t);
+    }
     const key = `${game.t}-${game.turnPos}`;
     if (managedKey.current !== key) {
       const t = window.setTimeout(() => {

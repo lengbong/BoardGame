@@ -301,5 +301,9 @@ export function historicOil(year: number): number {
   if (year < 2005) return 1;
   if (year < 2015) return 1.35;
   if (year < 2022) return 1;
-  return 1.2;
+  // 2026년 뒤는 예측: 탄소세로 등유값이 오르다가 수소·전기가 퍼지며 천천히 내린다
+  if (year < 2035) return 1.2;
+  if (year < 2055) return 1.35;
+  if (year < 2075) return 1.2;
+  return 1.05;
 }

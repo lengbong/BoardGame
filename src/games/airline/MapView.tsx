@@ -1,3 +1,4 @@
+import { shownCompanies } from './rules';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { shapeElement } from '../../components/shapes';
 import { useElementWidth } from '../../lib/useElementWidth';
@@ -223,6 +224,12 @@ export function MapView({ state, viewer, selected, onSelect, pulses: allPulses, 
     return m;
   }, [state.companies]);
 
+  // 범례에 보일 회사 (세계 항공사 모드는 가치 순 위쪽과 내 회사, 그리고 지금 고른 회사)
+  const legendIds = useMemo(() => {
+    const ids = shownCompanies(state, viewer);
+    return focusCo !== null && !ids.includes(focusCo) ? [...ids, focusCo] : ids;
+  }, [state, viewer, focusCo]);
+
   // 이름을 늘 붙일 지점: 고른 회사, 없으면 지금 보는 회사
   const labelCo = state.companies[focusCo ?? viewer];
   const fontPx = 11;
@@ -369,7 +376,7 @@ export function MapView({ state, viewer, selected, onSelect, pulses: allPulses, 
             const p = project(city.lon, city.lat);
             const size = citySize(city, year);
             const r = (1.6 + size * 0.32) * k;
-            const owners = (branchOf.get(city.id) ?? []).filter((ci) => focusCo === null || ci === focusCo);
+            const owners = (branchOf.get(city.id) ?? []).filter((ci) => focusCo === null || ci === focusCo).filter((ci, k, all) => all.length <= 4 || ci === viewer || state.companies[ci].hub === city.id || k < 3).slice(0, 5);
             const sel = selected?.kind === 'city' && selected.id === city.id;
             const lp = LABEL_POS[city.id];
             const fs = fontPx * k;
@@ -443,7 +450,8 @@ export function MapView({ state, viewer, selected, onSelect, pulses: allPulses, 
       </div>
       {state.companies.length > 1 && (
         <ul className={`al-map-legend${focusCo !== null ? ' al-legend-focus' : ''}`} aria-label="회사 색 (누르면 그 회사 노선만 보여요)">
-          {state.companies.map((c, i) => {
+          {legendIds.map((i) => {
+            const c = state.companies[i];
             const on = focusCo === i;
             return (
               <li key={i} className={`${c.out ? 'al-out' : ''}${on ? ' al-on' : ''}`}>

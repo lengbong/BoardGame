@@ -16,6 +16,7 @@ import { makerPolitics, routePolitics } from './politics';
 import { ACADEMY_COST, STAFF_GROUPS, hireCost, hireTime, staffNeed, staffPipe } from './staff';
 import { aiChoose, allianceScore } from './choices';
 import { CITIES, CITY, REGIONS, airportClass, citySize, dist, pairKey } from './cities';
+import { worldRouteCap } from './world';
 import {
   applyAction,
   bestFreq,
@@ -94,6 +95,9 @@ const STUCK_LOSS = 4;
 
 /** 그 뒤 새 노선은 이 회사 노선이 보통 버는 달 이익의 이만큼은 벌어야 연다 (많아야 원래 문턱) */
 const OPEN_SHARE = 0.15;
+
+/** 세계 항공사 모드에서 노선이 이만큼 있으면 자리를 잡은 회사로 본다 */
+const WORLD_SETTLED_ROUTES = 6;
 
 /**
  * 컴퓨터 항공사. 한 분기 경영을 행동 목록으로 정한다 (끝에 endTurn은 넣지 않는다).
@@ -217,7 +221,9 @@ export class Planner {
 
   /** 이 회사가 크게 계획을 세우는 달 (석 달에 한 번, 회사마다 다른 달) */
   get planning(): boolean {
-    return (this.s.t + this.ci) % 3 === 0 || this.c.routes.length === 0 || this.c.planes.length === 0;
+    // 세계 항공사 모드: 회사가 수십 곳이라, 자리를 잡은 회사는 여섯 달에 한 번만 크게 계획한다
+    const every = this.s.options.world && this.c.routes.length >= WORLD_SETTLED_ROUTES ? 6 : 3;
+    return (this.s.t + this.ci) % every === 0 || this.c.routes.length === 0 || this.c.planes.length === 0;
   }
 
   /** 이번 분기에 이미 연 노선 수 */
@@ -973,6 +979,8 @@ export class Planner {
 
   private expand(max: number): void {
     if (max <= 0 || this.c.cash - this.reserve() < 30) return;
+    // 세계 항공사 모드: 컴퓨터 회사는 정해진 크기까지만 노선을 넓힌다 (world.ts)
+    if (this.s.options.world && this.c.routes.length >= worldRouteCap(this.c.kind, citySize(CITY[this.c.hub], this.year))) return;
     // 화물 전문인데 갈 곳이 마땅치 않으면 짐이 많은 무역 도시에 지점부터
     if (bizModelOf(this.c) === 'cargo' && this.c.routes.length < 2 && !this.candidates().some((x) => x.profit > 0)) {
       const year = this.year;
@@ -999,6 +1007,7 @@ export class Planner {
 
   private easyExpand(): void {
     if (this.c.cash < 300 || this.c.routes.length >= MAX_ROUTES) return;
+    if (this.s.options.world && this.c.routes.length >= worldRouteCap(this.c.kind, citySize(CITY[this.c.hub], this.year))) return;
     const fromHub = this.c.planes.length < 4;
     const all = this.bestCandidates(5).filter((x) => x.profit > 0);
     const hubOnly = all.filter((x) => x.a === this.c.hub || x.b === this.c.hub);
@@ -1356,6 +1365,8 @@ export function aiTurn(state: AirlineState, rng: Rng = Math.random): AirlineStat
   const ci = state.order[state.turnPos];
   const c = state.companies[ci];
   const level: AiLevel = c.kind === 'ai-easy' ? 'ai-easy' : 'ai-normal';
-  const managed = aiManage(state, ci, level, rng);
+  // 세계 항공사 모드: 회사가 수십 곳이라, 자리를 잡은 라이벌은 석 달에 한 번만 계획을 세운다 (회사마다 다른 달)
+  const resting = !!state.options.world && c.kind !== 'human' && c.routes.length >= WORLD_SETTLED_ROUTES && (state.t + ci) % 3 !== 0 && !c.choice && c.crisis === 0;
+  const managed = resting ? state : aiManage(state, ci, level, rng);
   return applyAction(managed, { type: 'endTurn' }, rng);
 }

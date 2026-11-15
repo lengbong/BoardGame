@@ -517,6 +517,16 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
   const [fail, setFail] = useState<{ state: AirlineState; key: string; why: string } | null>(null);
   const me = state.companies[viewer];
   const tips = useMemo(() => (canAct ? advise(state, viewer) : []), [state, viewer, canAct]);
+  // 지금 적용할 수 없는 권유는 미리 해 보고 까닭을 적어 둔다 (버튼을 흐리게)
+  const blockedWhy = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of tips) {
+      if (!t.apply || t.key === 'choice' || t.key === 'auto') continue;
+      const why = applyAdvice(t, state).why;
+      if (why) m.set(t.key, why);
+    }
+    return m;
+  }, [tips, state]);
   const flying = me.planes.filter((p) => p.legs.length > 0);
   const use = flying.length ? flying.reduce((s, p) => s + planeHours(me, p), 0) / (flying.length * WEEK_HOURS) : 0;
   const first = state.q - state.startQ < 4;
@@ -547,11 +557,14 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
                 <div className="al-tip-text">
                   <b>{t.title}</b>
                   <small>{t.detail}</small>
-                  {fail && fail.state === state && fail.key === t.key && (
-                    <small className="al-tip-why" role="alert" data-testid="al-advice-why">
-                      ⚠ 지금은 할 수 없어요: {fail.why}
-                    </small>
-                  )}
+                  {(() => {
+                    const why = blockedWhy.get(t.key) ?? (fail && fail.state === state && fail.key === t.key ? fail.why : null);
+                    return why ? (
+                      <small className="al-tip-why" role="status" data-testid="al-advice-why">
+                        ⚠ 지금은 할 수 없어요: {why}
+                      </small>
+                    ) : null;
+                  })()}
                 </div>
                 <div className="al-tip-acts">
                   {t.key === 'choice' ? (
@@ -566,6 +579,8 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
                     <button
                       type="button"
                       className="btn btn-small btn-primary"
+                      disabled={blockedWhy.has(t.key)}
+                      title={blockedWhy.get(t.key)}
                       onClick={() => {
                         const res = applyAdvice(t, state);
                         if (res.why) {

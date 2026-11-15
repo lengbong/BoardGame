@@ -11,12 +11,15 @@ import { aiManage, type AiLevel } from './ai';
 import { CompanyBadge, SEAT_SHAPES } from './Art';
 import { ChoiceModal } from './ChoiceModal';
 import { CITY, dist, pairKey } from './cities';
+import { FinIcon } from './FinanceArt';
 import { FinanceView } from './FinanceView';
 import { FleetView } from './FleetView';
 import { fmtMoney, signedMoney } from './format';
 import { InfoPanel } from './InfoPanel';
+import { MapIcon } from './MapArt';
 import { MapView, type Pulse, type Selection } from './MapView';
 import { Panel } from './Panel';
+import { RIcon } from './ReportArt';
 import { NewsView, ReportView } from './ReportView';
 import { GameOver, QuarterReport } from './Results';
 import { RouteOpeningCard, type Opening } from './RouteOpening';
@@ -28,6 +31,7 @@ import { alSound } from './sounds';
 import { AIRLINE_DELAYS, clearSavedAirlineGame, saveAirlineGame } from './storage';
 import { mLabel, monthOf, qLabel } from './time';
 import { MonthToast } from './MonthToast';
+import { StaffIcon } from './StaffArt';
 import { StaffView } from './StaffView';
 import { staffCap, staffNeed } from './staff';
 import type { AirlineAction, AirlineSetup, AirlineState, QuarterReport as Report } from './types';
@@ -35,14 +39,14 @@ import { IataBadge, Kbd } from './ui';
 
 type Tab = 'map' | 'fleet' | 'routes' | 'finance' | 'staff' | 'report' | 'news';
 
-const TABS: { id: Tab; icon: string; label: string }[] = [
-  { id: 'map', icon: '🗺️', label: '지도' },
-  { id: 'fleet', icon: '🛩️', label: '비행기' },
-  { id: 'routes', icon: '🧭', label: '노선' },
-  { id: 'finance', icon: '💰', label: '재무' },
-  { id: 'staff', icon: '👥', label: '인사' },
-  { id: 'report', icon: '📈', label: '보고서' },
-  { id: 'news', icon: '📰', label: '뉴스' },
+const TABS: { id: Tab; icon: ReactNode; label: string }[] = [
+  { id: 'map', icon: <RIcon kind="globe" size={17} />, label: '지도' },
+  { id: 'fleet', icon: <FinIcon kind="plane" size={17} />, label: '비행기' },
+  { id: 'routes', icon: <MapIcon kind="route" size={17} />, label: '노선' },
+  { id: 'finance', icon: <FinIcon kind="wallet" size={17} />, label: '재무' },
+  { id: 'staff', icon: <StaffIcon kind="people" size={17} />, label: '인사' },
+  { id: 'report', icon: <FinIcon kind="chart" size={17} />, label: '보고서' },
+  { id: 'news', icon: <FinIcon kind="megaphone" size={17} />, label: '뉴스' },
 ];
 
 interface GameProps {
@@ -567,7 +571,9 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
                 data-testid={`al-tab-${t.id}`}
                 title={`${t.label} (${i + 1})`}
               >
-                <span aria-hidden="true">{t.icon}</span>
+                <span aria-hidden="true" className="al-tab-icon">
+                  {t.icon}
+                </span>
                 <span className="al-tab-label">{t.label}</span>
                 {t.id === 'fleet' && idle > 0 && <span className="al-tab-badge">{idle}</span>}
                 {t.id === 'staff' && staffWarn && <span className="al-tab-badge" title="일손이 모자라거나 조직 만족도가 아주 낮아요">!</span>}

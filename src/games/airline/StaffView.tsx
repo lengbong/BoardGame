@@ -23,9 +23,10 @@ import {
   staffTotal,
   strikeChance,
 } from './staff';
-import { mLabel, monthsText } from './time';
+import { mLabel } from './time';
+import { AcademyArt, HeadcountBar, MoraleGauge, MoraleWaterfall, MoreInfo, PipelineTimeline, RoleArt, StaffIcon, type StaffIconKind, type Tone } from './StaffArt';
 import type { AirlineAction, AirlineState, StaffGroup } from './types';
-import { ActButton, Meter, Stepper } from './ui';
+import { ActButton, Stepper } from './ui';
 
 interface StaffViewProps {
   state: AirlineState;
@@ -63,53 +64,51 @@ export function StaffView({ state, viewer, canAct, perform }: StaffViewProps) {
     { label: '훈련원', v: mt.academy },
     { label: '서운한 일', v: mt.shock },
   ].filter((x) => Math.round(x.v) !== 0);
-  const moraleTone = me.morale < 30 ? 'bad' : me.morale < 45 ? 'warn' : 'good';
+  const kpis: { icon: StaffIconKind; label: string; value: string; bad: boolean }[] = [
+    { icon: 'plane', label: '뜰 수 있는 운항', value: pct(cap), bad: cap < 1 },
+    { icon: 'clock', label: '초과 근무', value: ot > 0 ? `+${Math.round(ot * 100)}%` : '없음', bad: ot > OVERTIME },
+    { icon: 'strike', label: '파업 걱정', value: strike > 0 ? `달 ${Math.round(strike * 100)}%` : '없음', bad: strike > 0 },
+  ];
+  if (rep) kpis.push({ icon: 'cancel', label: '지난달 일손 부족 결항', value: `${rep.staffCancelled}편`, bad: rep.staffCancelled > 0 });
 
   return (
     <div className="al-staff">
       <section className="al-card al-staff-sum">
-        <h4>
-          👥 직원 {total.toLocaleString('ko-KR')}명 <small>이번 달 임금 어림 {fmtMoney(pay)}</small>
+        <h4 className="al-staff-title">
+          <StaffIcon kind="people" size={20} /> 직원 {total.toLocaleString('ko-KR')}명
+          <small>
+            <StaffIcon kind="coin" size={14} /> 이번 달 임금 어림 {fmtMoney(pay)}
+          </small>
         </h4>
-        <div className="al-ops-kpi al-staff-kpi">
-          <div>
-            <span>조직 만족도</span>
-            <b className={me.morale < 45 ? 'al-neg' : ''} data-testid="al-morale">
-              {Math.round(me.morale)} <small>→ {Math.round(mt.value)}</small>
-            </b>
-          </div>
-          <div>
-            <span>뜰 수 있는 운항</span>
-            <b className={cap < 1 ? 'al-neg' : ''}>{pct(cap)}</b>
-          </div>
-          <div>
-            <span>초과 근무</span>
-            <b className={ot > OVERTIME ? 'al-neg' : ''}>{ot > 0 ? `+${Math.round(ot * 100)}%` : '없음'}</b>
-          </div>
-          <div>
-            <span>파업 걱정</span>
-            <b className={strike > 0 ? 'al-neg' : ''}>{strike > 0 ? `달 ${Math.round(strike * 100)}%` : '없음'}</b>
-          </div>
-          {rep && (
-            <div>
-              <span>지난달 일손 부족 결항</span>
-              <b className={rep.staffCancelled > 0 ? 'al-neg' : ''}>{rep.staffCancelled}편</b>
-            </div>
-          )}
+        <div className="al-morale">
+          <figure className="al-morale-gauge">
+            <MoraleGauge value={me.morale} target={mt.value} />
+            <figcaption>
+              조직 만족도{' '}
+              <b className={me.morale < 45 ? 'al-neg' : ''} data-testid="al-morale">
+                {Math.round(me.morale)} <small>→ {Math.round(mt.value)}</small>
+              </b>
+            </figcaption>
+          </figure>
+          <figure className="al-morale-why">
+            <figcaption>만족도가 향하는 곳은 이렇게 정해져요</figcaption>
+            <MoraleWaterfall base={62} parts={parts.map((x) => ({ label: x.label, v: Math.round(x.v) }))} target={Math.round(mt.value)} />
+          </figure>
         </div>
-        <Meter value={me.morale / 100} tone={moraleTone} label={`조직 만족도 ${Math.round(me.morale)}`} />
-        <p className="al-staff-parts">
-          <span className="al-muted">만족도가 향하는 곳 {Math.round(mt.value)} = 기본 62</span>
-          {parts.map((x) => (
-            <span key={x.label} className={`tag ${x.v > 0 ? 'al-pos' : 'al-neg'}`}>
-              {x.label} {x.v > 0 ? '+' : '−'}
-              {Math.abs(Math.round(x.v))}
-            </span>
+        <ul className="al-staff-kpi">
+          {kpis.map((k) => (
+            <li key={k.label} className={k.bad ? 'al-kpi-bad' : 'al-kpi-ok'}>
+              <StaffIcon kind={k.icon} size={26} />
+              <span>
+                <small>{k.label}</small>
+                <b className={k.bad ? 'al-neg' : ''}>{k.value}</b>
+              </span>
+            </li>
           ))}
-        </p>
-        <p className="al-muted al-tip">
-          만족도는 달마다 조금씩 이 값으로 움직여요. 만족도가 높으면 정시 운항과 서비스 평판이 좋아지고, 30 아래로 떨어지면 파업이 날 수 있어요. 일손이 모자라면 15%까지는 초과 근무로 버티지만(임금 1.5배, 만족도 ↓) 그 넘게 모자라면 결항이 나요.
-        </p>
+        </ul>
+        <MoreInfo label="만족도·일손이 어떻게 움직이나요?">
+          만족도는 달마다 조금씩 ‘향하는 곳’으로 움직여요. 만족도가 높으면 정시 운항과 서비스 평판이 좋아지고, 30 아래로 떨어지면 파업이 날 수 있어요. 일손이 모자라면 15%까지는 초과 근무로 버티지만(임금 1.5배, 만족도 ↓) 그 넘게 모자라면 결항이 나요.
+        </MoreInfo>
       </section>
 
       <div className="al-staff-groups">
@@ -119,16 +118,29 @@ export function StaffView({ state, viewer, canAct, perform }: StaffViewProps) {
       </div>
 
       <section className="al-card al-academy">
-        <h4>🎓 훈련원 {me.academy ? <small className="al-pos">운영 중 · 달 유지비 {fmtFine(ACADEMY_UPKEEP)}</small> : <small>{fmtMoney(ACADEMY_COST)} · 달 유지비 {fmtFine(ACADEMY_UPKEEP)}</small>}</h4>
-        <p>
-          회사 훈련원이 있으면 새로 뽑은 사람이 더 빨리 일을 시작하고(조종사 {STAFF_INFO.pilot.hire}→{STAFF_INFO.pilot.academy}달, 정비사 {STAFF_INFO.tech.hire}→{STAFF_INFO.tech.academy}달), 뽑는 돈이 40% 줄고, 조직 만족도가 4 올라요.
-        </p>
+        <h4>
+          <StaffIcon kind="school" size={20} /> 훈련원 {me.academy ? <small className="al-pos">운영 중 · 달 유지비 {fmtFine(ACADEMY_UPKEEP)}</small> : <small>{fmtMoney(ACADEMY_COST)} · 달 유지비 {fmtFine(ACADEMY_UPKEEP)}</small>}
+        </h4>
+        <div className="al-academy-body">
+          <AcademyArt open={me.academy} />
+          <ul className="al-academy-perks">
+            <li>
+              <StaffIcon kind="clock" size={18} /> 더 빨리 일해요 <small>조종사 {STAFF_INFO.pilot.hire}→{STAFF_INFO.pilot.academy}달 · 정비사 {STAFF_INFO.tech.hire}→{STAFF_INFO.tech.academy}달</small>
+            </li>
+            <li>
+              <StaffIcon kind="coin" size={18} /> 뽑는 돈 <b className="al-pos">−40%</b>
+            </li>
+            <li>
+              <StaffIcon kind="smile" size={18} /> 조직 만족도 <b className="al-pos">+4</b>
+            </li>
+          </ul>
+        </div>
         {!me.academy && (
           <ActButton blocker={block(academyBlocker(state, viewer))} onClick={() => perform({ type: 'buildAcademy' })} testId="al-academy">
             훈련원 세우기 (−{fmtMoney(ACADEMY_COST)})
           </ActButton>
         )}
-        <p className="al-muted al-tip">비행기가 열 대를 넘어 해마다 사람을 많이 뽑는 회사에 알맞아요.</p>
+        <MoreInfo>회사 훈련원이 있으면 새로 뽑은 사람이 더 빨리 일을 시작하고, 뽑는 돈이 40% 줄고, 조직 만족도가 4 올라요. 비행기가 열 대를 넘어 해마다 사람을 많이 뽑는 회사에 알맞아요.</MoreInfo>
       </section>
     </div>
   );
@@ -163,29 +175,49 @@ function GroupCard({
   const cost = hireCost(state, me, group, n, fast);
   const wage = salary(state, group);
   const extra = s.have - need;
-  const tone = cov < 1 / (1 + OVERTIME) ? 'bad' : cov < 1 ? 'warn' : 'good';
+  const tone: Tone = cov < 1 / (1 + OVERTIME) ? 'bad' : cov < 1 ? 'warn' : 'good';
   const step = n >= 100 ? 10 : n >= 20 ? 5 : 1;
   return (
     <section className="al-card al-staff-group" data-testid={`al-staff-${group}`}>
-      <h4>
-        <span aria-hidden="true">{info.icon}</span> {info.name}{' '}
-        <small>
-          필요 {need.toLocaleString('ko-KR')} · 지금 {s.have.toLocaleString('ko-KR')}
-          {pipe > 0 ? ` · 뽑는 중 ${pipe}` : ''}
-        </small>
-      </h4>
-      <Meter value={need > 0 ? Math.min(1, s.have / need) : 1} tone={tone} label={`${info.name} 채운 정도 ${Math.round(cov * 100)}%`} />
+      <div className="al-sg-head">
+        <RoleArt group={group} size={60} />
+        <div className="al-sg-main">
+          <h4>
+            {info.name}{' '}
+            <small>
+              필요 {need.toLocaleString('ko-KR')} · 지금 {s.have.toLocaleString('ko-KR')}
+              {pipe > 0 ? ` · 뽑는 중 ${pipe}` : ''}
+            </small>
+          </h4>
+          <HeadcountBar need={need} have={s.have} pipe={pipe} tone={tone} name={info.name} />
+          <ul className="al-hc-legend">
+            <li>
+              <i className={`al-sw al-sw-have al-tone-${tone}`} /> 지금 {s.have.toLocaleString('ko-KR')}
+            </li>
+            {pipe > 0 && (
+              <li>
+                <i className="al-sw al-sw-pipe" /> 훈련 중 {pipe.toLocaleString('ko-KR')}
+              </li>
+            )}
+            {extra < 0 && (
+              <li>
+                <i className="al-sw al-sw-short" /> 모자람 {(-extra).toLocaleString('ko-KR')}
+              </li>
+            )}
+          </ul>
+        </div>
+      </div>
       <p className={`al-staff-state ${extra < 0 ? 'al-neg' : 'al-muted'}`}>
-        {need <= 0 ? '아직 필요 없어요' : extra < 0 ? `${-extra}명 모자라요 (${Math.round(cov * 100)}%)` : extra > need * 0.15 ? `${extra}명 여유 — 늘릴 비행기 몫이에요 (너무 많으면 임금만 나가요)` : `넉넉해요 (+${extra}명)`}
+        <StaffIcon kind={extra < 0 ? 'alert' : 'check'} size={16} className={extra < 0 ? '' : 'al-pos'} />{' '}
+        {need <= 0 ? '아직 필요 없어요' : extra < 0 ? `${-extra}명 모자라요 (${Math.round(cov * 100)}%)` : extra > need * 0.15 ? `${extra}명 여유 — 너무 많으면 임금만 나가요` : `넉넉해요 (+${extra}명)`}
       </p>
       {s.pipe.length > 0 && (
-        <ul className="al-staff-pipe">
-          {s.pipe.map((p, i) => (
-            <li key={i}>
-              🎓 {p.n}명 훈련 중 · {mLabel(p.ready)}부터 ({monthsText(Math.max(0, p.ready - state.t))} 뒤)
-            </li>
-          ))}
-        </ul>
+        <div className="al-staff-pipe">
+          <span className="al-staff-pipe-title">
+            <StaffIcon kind="school" size={16} /> 훈련 중 — 일을 시작하는 달
+          </span>
+          <PipelineTimeline now={state.t} batches={s.pipe} />
+        </div>
       )}
       <div className="al-staff-hire">
         <Stepper value={n} min={1} max={400} step={step} label={`${info.name} 뽑을 사람 수`} format={(v) => `${v}명`} onChange={setN} />
@@ -201,12 +233,13 @@ function GroupCard({
           뽑기 −{fmtFine(cost)}
         </ActButton>
       </div>
-      <p className="al-muted al-tip">
-        {mLabel(state.t + months)}부터 일해요. 훈련하는 동안은 임금의 절반이 나가요. {GROUP_TIP[group]}
+      <p className="al-muted al-tip al-staff-start">
+        <StaffIcon kind="calendar" size={15} /> 지금 뽑으면 <b>{mLabel(state.t + months)}</b>부터 일해요
       </p>
+      <MoreInfo>훈련하는 동안은 임금의 절반이 나가요. {GROUP_TIP[group]}</MoreInfo>
       <label className="al-staff-pay">
         <span>
-          임금 수준 <b>{Math.round(s.pay * 100)}%</b> <small className="al-muted">한 사람 달 {fmtFine(wage * s.pay)}</small>
+          <StaffIcon kind="coin" size={16} /> 임금 수준 <b>{Math.round(s.pay * 100)}%</b> <small className="al-muted">한 사람 달 {fmtFine(wage * s.pay)}</small>
         </span>
         <input
           type="range"
@@ -219,6 +252,11 @@ function GroupCard({
           aria-label={`${info.name} 임금 수준`}
           data-testid={`al-pay-${group}`}
         />
+        <span className="al-pay-scale" aria-hidden="true">
+          <span style={{ left: '0%' }}>{Math.round(PAY_MIN * 100)}%</span>
+          <span style={{ left: `${((1 - PAY_MIN) / (PAY_MAX - PAY_MIN)) * 100}%` }}>100% 보통</span>
+          <span style={{ left: '100%' }}>{Math.round(PAY_MAX * 100)}%</span>
+        </span>
       </label>
       {s.have > 0 && (
         <div className="al-staff-fire">

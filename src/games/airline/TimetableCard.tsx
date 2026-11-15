@@ -8,6 +8,8 @@ import { BAND_INFO, bandCaps, bandCounts, bandUsed, curfew, timeFit, type Times 
 import { yearOf } from './time';
 import type { AirlineAction, AirlineState, Route } from './types';
 import { ActButton } from './ui';
+import { BandDial, FitBar, RouteIcon } from './RoutesArt';
+import { MoreInfo, StaffIcon } from './StaffArt';
 
 const notMine = '내 차례에만 할 수 있어요';
 
@@ -75,9 +77,32 @@ export function TimetableCard({ state, viewer, canAct, perform, route }: { state
 
   return (
     <section className="al-card al-timetable" data-testid="al-timetable">
-      <h4>
-        🕑 운항 시간표 <small>주 {total}회 왕복을 시간대에 나누기</small>
+      <h4 className="al-fin-title">
+        <StaffIcon kind="clock" /> 운항 시간표 <small>주 {total}회 왕복을 시간대에 나누기</small>
       </h4>
+      <div className="al-tt-top">
+        <BandDial
+          total={total}
+          bands={BAND_INFO.map((b, i) => ({ start: b.start, len: b.len, name: b.name, count: total > 0 ? counts[i] : route.times[i], closed: i === 3 && night.length > 0 }))}
+        />
+        <div className="al-tt-fits">
+          <span className="al-tt-fitcap">시간대가 손님에게 맞는 정도 (│ 100%가 보통)</span>
+          {(
+            [
+              { key: 'biz', icon: 'biz', name: '사업 손님', v: fit.biz },
+              { key: 'leisure', icon: 'leisure', name: '관광 손님', v: fit.leisure },
+            ] as const
+          ).map((x) => (
+            <div key={x.key} className="al-tt-fitrow">
+              <span>
+                <RouteIcon kind={x.icon} size={15} /> {x.name}
+              </span>
+              <FitBar value={x.v} label={x.name} />
+              <b className={x.v >= 1.02 ? 'al-pos' : x.v < 0.95 ? 'al-neg' : ''}>{Math.round(x.v * 100)}%</b>
+            </div>
+          ))}
+        </div>
+      </div>
       <div className="al-tt-bands">
         {BAND_INFO.map((b, i) => {
           const closed = i === 3 && night.length > 0;
@@ -108,11 +133,6 @@ export function TimetableCard({ state, viewer, canAct, perform, route }: { state
           );
         })}
       </div>
-      <p className="al-tt-fit">
-        <span className={`tag ${fit.biz >= 1.02 ? 'al-pos' : fit.biz < 0.95 ? 'al-neg' : ''}`}>💼 사업 손님 {Math.round(fit.biz * 100)}%</span>
-        <span className={`tag ${fit.leisure >= 1.02 ? 'al-pos' : fit.leisure < 0.95 ? 'al-neg' : ''}`}>🏖️ 관광 손님 {Math.round(fit.leisure * 100)}%</span>
-        <span className="al-muted">시간대가 손님에게 맞는 정도 (100%가 보통)</span>
-      </p>
       <div className="al-fare-quick al-tt-presets">
         {PRESETS.map((p) => {
           const why = p.times[3] > 0 && night.length > 0 ? '밤 운항 금지' : timesBlocker(state, viewer, route.id, p.times);
@@ -131,9 +151,9 @@ export function TimetableCard({ state, viewer, canAct, perform, route }: { state
           </ActButton>
         </div>
       )}
-      <p className="al-muted al-tip">
-        사업 손님은 아침·저녁 편을, 관광 손님은 낮 편을 좋아해요. 6,000km 넘는 장거리는 밤에 떠도 괜찮아요. 큰 공항은 아침·저녁 슬롯이 붐벼서, 한 시간대에 몰면 지연이 늘어요.
-      </p>
+      <MoreInfo>
+        사업 손님은 아침·저녁 편을, 관광 손님은 낮 편을 좋아해요. 6,000km 넘는 장거리는 밤에 떠도 괜찮아요. 큰 공항은 아침·저녁 슬롯이 붐벼서, 한 시간대에 몰면 지연이 늘어요. 시간대 칸 아래 숫자는 두 공항에 남은 슬롯이에요.
+      </MoreInfo>
     </section>
   );
 }

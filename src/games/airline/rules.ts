@@ -785,12 +785,33 @@ export function allianceOutlook(state: AirlineState, from: number, to: number): 
 
 // ------------------------------------------------------------------ 행동
 
+/**
+ * 비행기 한 대를 늘 같은 모양(같은 키, 같은 순서)으로 베낀다. 없는 값은 undefined로 두어 저장(JSON)에는 남지 않는다.
+ * 비행기마다 키가 다르거나 키를 지우면(delete) 자바스크립트 엔진이 느린 길로 가서, 컴퓨터 한 차례가 눈에 띄게 느려졌다.
+ */
+function clonePlane(p: Plane): Plane {
+  return {
+    id: p.id,
+    model: p.model,
+    leased: p.leased,
+    rent: p.rent,
+    deposit: p.deposit,
+    since: p.since,
+    legs: p.legs.map((l) => ({ route: l.route, freq: l.freq })),
+    cabin: p.cabin,
+    meal: p.meal,
+    got: p.got,
+    cond: p.cond,
+    check: p.check,
+  };
+}
+
 function cloneCompany(c: Company): Company {
   return {
     ...c,
     branches: [...c.branches],
     routes: c.routes.map((r) => ({ ...r, times: [...r.times] as [number, number, number, number] })),
-    planes: c.planes.map((p) => ({ ...p, legs: p.legs.map((l) => ({ ...l })) })),
+    planes: c.planes.map(clonePlane),
     ads: { ...c.ads },
     awareness: { ...c.awareness },
     businesses: c.businesses.map((b) => ({ ...b })),
@@ -1230,7 +1251,7 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
       const s = edit(state, ci, (c, s) => {
         const x = planeById(c, action.plane)!;
         if (action.on) x.check = s.t;
-        else delete x.check;
+        else x.check = undefined;
         pushEvent(s, { type: 'check', company: ci, plane: x.id, on: action.on });
       });
       return addLog(s, seat, action.on ? `${c0.name}: ${MODEL[p.model].name} 이번 달 C점검 (약 ${fmtMoney(checkCost(p))})` : `${c0.name}: ${MODEL[p.model].name} C점검 미루기`);
@@ -1534,7 +1555,7 @@ export function runMonth(state: AirlineState, rng: Rng = Math.random): AirlineSt
       const age = planeAge(s, p);
       if (inCheck(p, t)) {
         p.cond = restoredCond(age);
-        delete p.check;
+        p.check = undefined;
       } else if (p.legs.length > 0) {
         p.cond = Math.max(0, Math.round((condOf(p) - monthlyWear(planeHours(c, p), age, c.maint)) * 10) / 10);
       } else if (p.cond === undefined) p.cond = condOf(p);

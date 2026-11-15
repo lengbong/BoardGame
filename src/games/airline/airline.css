@@ -1442,8 +1442,21 @@
   gap: 8px;
   font-size: 13.5px;
 }
+.al-ad-meter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .al-ad-meter .al-meter {
-  width: 100%;
+  flex: 1;
+  width: auto;
+  height: 10px;
+}
+.al-ad-meter small {
+  min-width: 32px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  text-align: right;
 }
 .al-service-row {
   display: grid;
@@ -2462,18 +2475,18 @@
 }
 .al-mods li {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--surface-2);
   font-size: 13px;
 }
 .al-goal-list li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 90px;
+  display: flex;
   align-items: center;
-  gap: 2px 8px;
+  gap: 10px;
   font-size: 13.5px;
-}
-.al-goal-list li small {
-  grid-column: 1 / -1;
 }
 .al-grades {
   list-style: none;
@@ -3973,6 +3986,453 @@
   }
   .al-academy-body {
     flex-wrap: wrap;
+  }
+}
+
+/* 💰 재무 */
+.al-game,
+.al-setup {
+  --al-cat-1: #2a78d6;
+  --al-cat-2: #eb6834;
+  --al-cat-3: #1baf7a;
+  --al-cat-4: #eda100;
+  --al-cat-5: #e87ba4;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .al-game,
+  :root:not([data-theme='light']) .al-setup {
+    --al-cat-1: #3987e5;
+    --al-cat-2: #d95926;
+    --al-cat-3: #199e70;
+    --al-cat-4: #c98500;
+    --al-cat-5: #d55181;
+  }
+}
+:root[data-theme='dark'] .al-game,
+:root[data-theme='dark'] .al-setup {
+  --al-cat-1: #3987e5;
+  --al-cat-2: #d95926;
+  --al-cat-3: #199e70;
+  --al-cat-4: #c98500;
+  --al-cat-5: #d55181;
+}
+rect.al-cat-1 {
+  fill: var(--al-cat-1);
+}
+rect.al-cat-2 {
+  fill: var(--al-cat-2);
+}
+rect.al-cat-3 {
+  fill: var(--al-cat-3);
+}
+rect.al-cat-4 {
+  fill: var(--al-cat-4);
+}
+rect.al-cat-5 {
+  fill: var(--al-cat-5);
+}
+.al-sw.al-cat-1 {
+  background: var(--al-cat-1);
+}
+.al-sw.al-cat-2 {
+  background: var(--al-cat-2);
+}
+.al-sw.al-cat-3 {
+  background: var(--al-cat-3);
+}
+.al-sw.al-cat-4 {
+  background: var(--al-cat-4);
+}
+.al-sw.al-cat-5 {
+  background: var(--al-cat-5);
+}
+.al-fin-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.al-fin-title > .al-sicon {
+  color: var(--accent);
+}
+.al-fin-gap {
+  margin-top: 16px !important;
+}
+.al-fin-sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 14px 0 4px !important;
+}
+.al-fin-sub small {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.al-fin-kpi {
+  margin: 0 0 10px;
+}
+.al-fin-kpi li > span > small + b + small {
+  margin-top: 1px;
+}
+.al-kpi-in .al-sicon {
+  color: var(--al-gain);
+}
+.al-kpi-out .al-sicon {
+  color: var(--al-loss);
+}
+.al-nowrap {
+  white-space: nowrap;
+}
+.al-hero-num {
+  margin: -2px 0 8px;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+/* 들어온 돈 · 나간 돈 */
+.al-flow-in-0 {
+  fill: var(--al-gain);
+}
+.al-flow-in-1 {
+  fill: color-mix(in srgb, var(--al-gain) 50%, var(--surface));
+}
+.al-flow-cost {
+  fill: var(--al-loss);
+}
+.al-flow-profit {
+  fill: color-mix(in srgb, var(--al-good) 22%, var(--surface));
+  stroke: color-mix(in srgb, var(--al-good) 60%, var(--surface));
+  stroke-width: 1;
+}
+.al-flow-loss-bg {
+  fill: color-mix(in srgb, var(--al-bad) 18%, var(--surface));
+}
+.al-flow-loss-line {
+  stroke: var(--al-bad);
+  stroke-width: 2;
+}
+.al-flow-gap-label {
+  font-size: 12px;
+  font-weight: 800;
+}
+text.al-pos {
+  fill: var(--al-good);
+}
+text.al-neg {
+  fill: var(--al-bad);
+}
+.al-flow-num {
+  fill: var(--text);
+  font-weight: 700;
+}
+.al-sw-in-0 {
+  background: var(--al-gain);
+}
+.al-sw-in-1 {
+  background: color-mix(in srgb, var(--al-gain) 50%, var(--surface));
+}
+.al-sw-cost {
+  background: var(--al-loss);
+}
+.al-sw-profit {
+  background: color-mix(in srgb, var(--al-good) 22%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--al-good) 60%, var(--surface));
+}
+.al-sw-loss {
+  background: repeating-linear-gradient(45deg, var(--al-bad) 0 2px, color-mix(in srgb, var(--al-bad) 18%, var(--surface)) 2px 5px);
+}
+/* 비용 순위 막대 */
+.al-cost-name {
+  fill: var(--text);
+  font-size: 12.5px;
+}
+.al-fin-rowicon {
+  color: var(--text-muted);
+}
+.al-cost-bar {
+  fill: var(--al-loss);
+}
+.al-cost-est {
+  stroke: var(--text);
+  stroke-width: 2;
+}
+.al-costbars svg g:hover .al-cost-bar {
+  fill: color-mix(in srgb, var(--al-loss) 75%, var(--text));
+}
+/* 회사 가치 */
+.al-asset-in {
+  font-size: 12px;
+  font-weight: 700;
+}
+.al-ink-white {
+  fill: #fff;
+}
+.al-ink-dark {
+  fill: #1a1a19;
+}
+.al-asset-debt {
+  fill: var(--al-bad);
+}
+.al-sw-debt {
+  background: var(--al-bad);
+  height: 6px;
+}
+.al-asset-legend {
+  margin-top: 8px;
+  gap: 4px 14px;
+  font-size: 12.5px;
+}
+.al-asset-legend b {
+  color: var(--text);
+}
+/* 대출 한도 */
+.al-loan-hot {
+  fill: color-mix(in srgb, var(--al-bad) 18%, var(--surface));
+}
+.al-loan-fill {
+  fill: var(--al-blue);
+}
+.al-loan-fill.al-loan-over {
+  fill: var(--al-bad);
+}
+.al-loan-row > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.al-reserve-row > span:first-child {
+  width: auto;
+}
+/* 진행 고리 */
+.al-ring {
+  flex: none;
+  display: block;
+}
+.al-ring-track {
+  fill: none;
+  stroke: var(--surface-2);
+}
+.al-ring-fill {
+  fill: none;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.4s;
+}
+.al-ring-good {
+  stroke: var(--al-good);
+}
+.al-ring-blue {
+  stroke: var(--al-blue);
+}
+.al-ring-warn {
+  stroke: var(--al-warn);
+}
+.al-ring-bad {
+  stroke: var(--al-bad);
+}
+.al-ring-mark {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.al-ring-text {
+  fill: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+}
+.al-goal-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.al-goal-reward {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.al-goal-reward > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.al-goal-reward .al-sicon {
+  color: var(--al-warn);
+}
+/* 제휴 */
+.al-alliance-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 13.5px;
+}
+.al-al-rings {
+  flex: none;
+}
+.al-al-line {
+  stroke: var(--border);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.al-al-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.4;
+}
+.al-perks {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+}
+.al-perks li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.al-perks .al-sicon {
+  color: var(--accent);
+}
+.al-outlook-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.al-outlook-bars {
+  flex: none;
+}
+.al-ob-on {
+  stroke: none;
+}
+.al-ob-off {
+  fill: var(--border);
+}
+.al-mod-icon {
+  color: var(--accent);
+}
+.al-mod-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.al-mod-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+.al-campaign-live {
+  margin-top: 8px;
+}
+/* 운항 관리 */
+.al-ops-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 22px;
+  margin-bottom: 10px;
+}
+.al-ops-top > span {
+  display: flex;
+  flex-direction: column;
+}
+.al-ops-top b {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 18px;
+}
+.al-pips {
+  max-width: 100%;
+  margin: 2px 0 3px;
+}
+.al-svc.al-on .al-muted {
+  color: rgba(255, 255, 255, 0.85);
+}
+.al-pip-on {
+  fill: currentColor;
+}
+.al-pip-off {
+  fill: currentColor;
+  opacity: 0.22;
+}
+.al-spare {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 90px auto;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 13px;
+}
+.al-spare .al-meter {
+  width: 100%;
+}
+.al-spare > .al-sicon {
+  color: var(--text-muted);
+}
+/* 평판 */
+.al-rep {
+  margin-top: 4px;
+}
+.al-rep-label {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 13.5px;
+}
+.al-rep-label .al-sicon {
+  color: var(--al-warn);
+}
+.al-tb-fill {
+  fill: var(--al-good);
+}
+.al-more-text .al-table {
+  margin-bottom: 6px;
+  color: var(--text);
+}
+.al-more-text p {
+  margin: 0;
+}
+@media (max-width: 1000px) {
+  .al-finance {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.al-flow-gap-label {
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+@media (max-width: 640px) {
+  .al-ads li {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    row-gap: 2px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .al-ads li .al-media {
+    justify-self: end;
+    max-width: 100%;
+  }
+  .al-spare {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .al-spare .al-meter {
+    grid-column: 2;
   }
 }
 

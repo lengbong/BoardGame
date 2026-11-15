@@ -129,7 +129,8 @@ export function RoleArt({ group, size = 56 }: { group: StaffGroup; size?: number
 
 // ------------------------------------------------------------------ 작은 아이콘 (24×24, 선 그림)
 
-const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+export const LINE = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+const S = LINE;
 
 export type StaffIconKind = 'people' | 'plane' | 'clock' | 'strike' | 'cancel' | 'calendar' | 'coin' | 'smile' | 'school' | 'check' | 'alert' | 'info';
 

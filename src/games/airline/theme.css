@@ -1,0 +1,469 @@
+/* ================================================================
+   하늘길 항공사 — 운항 관제실 테마
+   색 이름은 airline.css 맨 위에 있다. 이 파일은 AirlineApp에서 맨 나중에 불러서
+   짙은 남색 바탕 · 유리 칸 · 출발 안내판 숫자 · 불 켜진 단추로 겉모습만 바꾼다.
+   ================================================================ */
+
+:root[data-al-ops],
+.al-game,
+.al-setup,
+.al-fame-overlay {
+  --al-mono: 'SF Mono', 'JetBrains Mono', 'Cascadia Mono', 'D2Coding', Consolas, ui-monospace, monospace;
+  --al-lit: rgba(255, 193, 69, 0.55);
+  --al-lit-bg: rgba(255, 193, 69, 0.13);
+  --al-lit-glow: 0 0 16px rgba(255, 193, 69, 0.2);
+  scrollbar-color: #2a4469 transparent;
+}
+
+/* ---------------------------------------------------------------- 바탕: 남색 + 레이더 빛 + 옅은 격자 */
+:root[data-al-ops] body {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(1100px 520px at 78% -12%, rgba(64, 140, 255, 0.17), transparent 62%),
+    radial-gradient(900px 480px at -8% 108%, rgba(76, 201, 255, 0.08), transparent 60%),
+    linear-gradient(rgba(124, 172, 232, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124, 172, 232, 0.035) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    36px 36px,
+    36px 36px;
+  background-attachment: fixed;
+}
+.al-game,
+.al-setup {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- 유리 칸 */
+:is(.al-game, .al-setup) :is(.panel > section, .al-topbar, .al-info, .al-card, .al-route-list, .al-model-card, .al-share-tip),
+.al-setup :is(.setup-section, .resume-card, .how-to, .al-fame-card) {
+  background: var(--al-glass);
+  border-color: var(--al-glass-line);
+  box-shadow:
+    var(--al-glass-hi),
+    0 12px 30px rgba(0, 0, 0, 0.32);
+}
+.al-setup .resume-card {
+  border-color: var(--al-lit);
+  box-shadow:
+    var(--al-glass-hi),
+    var(--al-lit-glow);
+}
+
+/* 칸 제목: 작은 글씨 + 불 켜진 점 (관제판 이름표) */
+.al-game .panel h2,
+.al-setup .setup-section > h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+.al-setup .setup-section > h2 {
+  color: var(--text);
+  font-size: 15px;
+  letter-spacing: 0.08em;
+}
+.al-game .panel h2::before,
+.al-setup .setup-section > h2::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--al-glow);
+  box-shadow: 0 0 8px var(--al-glow);
+}
+.al-setup .setup-section > h2::before {
+  width: 4px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 10px rgba(255, 193, 69, 0.55);
+}
+
+/* ---------------------------------------------------------------- 단추 */
+:where(.al-game, .al-setup, .al-fame-overlay) .btn:not(.btn-primary):not(.btn-ghost):not(.al-legend-btn):not(.al-prow-btn):not(.al-more-btn):not(.al-fame-danger) {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+:where(.al-game, .al-setup, .al-fame-overlay) .btn:hover:not(:disabled):not(.btn-primary) {
+  border-color: #36598a;
+}
+:where(.al-game, .al-setup, .al-fame-overlay) .btn-primary {
+  background: linear-gradient(180deg, #ffd36e, #ffb42a);
+  border-color: #ffca58;
+  color: var(--accent-text);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 6px 18px rgba(255, 170, 30, 0.22);
+}
+:where(.al-game, .al-setup, .al-fame-overlay) .btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffdd86, #ffbf40);
+}
+:where(.al-game, .al-setup, .al-fame-overlay) .btn-primary:disabled {
+  background: #1d2c42;
+  border-color: #2a3f5e;
+  color: var(--text-muted);
+  box-shadow: none;
+}
+:where(.al-game, .al-setup, .al-fame-overlay) .btn-selected {
+  border-color: var(--al-lit);
+  background: var(--al-lit-bg);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--al-lit);
+}
+
+/* 고르기 단추: 고른 칸은 꽉 칠하지 않고 불이 켜진 것처럼 (회사 색으로 칠한 칸은 그대로) */
+:is(.al-game, .al-setup) .choice-group > .choice-option:not(.choice-on) {
+  background: linear-gradient(180deg, #14243b, #101d31);
+  border-color: #233c5e;
+}
+:is(.al-game, .al-setup) .choice-group > .choice-option:not(.choice-on):hover {
+  border-color: #3a6294;
+}
+:is(.al-game, .al-setup) .choice-group:not([style*='--pick']) > .choice-option.choice-on {
+  background: linear-gradient(180deg, rgba(255, 193, 69, 0.2), rgba(255, 193, 69, 0.07));
+  border-color: var(--accent);
+  color: var(--accent);
+  text-shadow: 0 0 12px rgba(255, 193, 69, 0.45);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 193, 69, 0.35),
+    var(--al-lit-glow);
+}
+:is(.al-game, .al-setup) .choice-group:not([style*='--pick']) > .choice-option.choice-on .choice-icon {
+  filter: drop-shadow(0 0 6px rgba(255, 193, 69, 0.5));
+}
+
+/* ---------------------------------------------------------------- 위 띠: 출발 안내판 */
+.al-game .al-topbar {
+  padding: 6px 8px;
+  gap: 12px;
+}
+.al-game .al-date,
+.al-game .al-me-cash {
+  position: relative;
+  padding: 3px 10px 4px;
+  border-radius: 7px;
+  background: linear-gradient(180deg, #111d30 0 50%, #0a1424 50% 100%);
+  border: 1px solid #1c2e48;
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.55),
+    0 1px 0 rgba(255, 255, 255, 0.03);
+}
+/* 글자판 가운데 갈라진 줄 */
+.al-game .al-date::after,
+.al-game .al-me-cash::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+.al-game .al-date b,
+.al-game .al-me-cash b {
+  font-family: var(--al-mono);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--al-flap-text);
+  text-shadow: 0 0 10px rgba(255, 196, 80, 0.35);
+}
+.al-game .al-date b {
+  font-size: 17px;
+}
+.al-game .al-me-cash b.al-pos {
+  color: var(--al-good);
+  text-shadow: 0 0 10px rgba(79, 214, 156, 0.35);
+}
+.al-game .al-me-cash b.al-neg {
+  color: var(--al-bad);
+  text-shadow: 0 0 10px rgba(255, 111, 111, 0.35);
+}
+.al-game .al-date small,
+.al-game .al-me-cash small {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+.al-game .al-me {
+  gap: 8px;
+  border-left-width: 3px;
+}
+.al-game .al-me-name b {
+  font-size: 15.5px;
+}
+
+/* 화면 탭: 관제판 단추 줄 */
+.al-game .al-tabs {
+  gap: 3px;
+  padding: 4px;
+  border-radius: 11px;
+  background: rgba(3, 9, 18, 0.55);
+  border: 1px solid var(--al-glass-line);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.al-game .al-tab {
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  transition:
+    background-color 0.15s,
+    color 0.15s,
+    box-shadow 0.15s;
+}
+.al-game .al-tab-icon {
+  color: inherit;
+}
+.al-game .al-tab:hover {
+  background: rgba(124, 172, 232, 0.09);
+  color: var(--text);
+}
+.al-game .al-tab.al-on {
+  background: linear-gradient(180deg, rgba(255, 193, 69, 0.24), rgba(255, 193, 69, 0.08));
+  border-color: var(--al-lit);
+  color: var(--accent);
+  text-shadow: 0 0 10px rgba(255, 193, 69, 0.4);
+  box-shadow:
+    inset 0 -2px 0 var(--accent),
+    var(--al-lit-glow);
+}
+.al-game .al-tab .al-tab-kbd {
+  background: var(--al-flap);
+  border-color: #2a4062;
+  color: #6f86a5;
+}
+.al-game .al-tab.al-on .al-tab-kbd {
+  color: var(--accent);
+  border-color: var(--al-lit);
+}
+.al-game .al-tab-badge {
+  background: #ff5a5f;
+  box-shadow: 0 0 10px rgba(255, 90, 95, 0.7);
+}
+
+/* 지도 위 지역 칩·노선 고르기 칩·작은 탭: 같은 '불 켜짐' */
+.al-game :is(.al-map-chip, .al-chip, .al-subtab, .al-svc).al-on {
+  background: linear-gradient(180deg, rgba(255, 193, 69, 0.24), rgba(255, 193, 69, 0.09));
+  border-color: var(--al-lit);
+  color: var(--accent);
+  text-shadow: 0 0 10px rgba(255, 193, 69, 0.4);
+  box-shadow: var(--al-lit-glow);
+}
+.al-game .al-map-chip.al-on {
+  outline: 1px solid var(--al-lit);
+}
+
+/* ---------------------------------------------------------------- 지도: 밤의 레이더 화면 */
+.al-game .al-map-wrap {
+  border-color: var(--al-glass-line);
+  box-shadow:
+    0 0 0 1px rgba(76, 201, 255, 0.06),
+    0 14px 34px rgba(0, 0, 0, 0.45),
+    0 0 40px rgba(40, 120, 220, 0.12);
+}
+.al-game .al-equator,
+.al-game .al-tropic {
+  stroke: var(--al-glow);
+}
+.al-game .al-equator {
+  opacity: 0.22;
+}
+.al-game .al-tropic {
+  opacity: 0.13;
+}
+.al-game .al-city-dot {
+  filter: drop-shadow(0 0 2px rgba(160, 215, 255, 0.55));
+}
+.al-game .al-city-ring {
+  filter: drop-shadow(0 0 3px rgba(255, 193, 69, 0.8));
+}
+
+/* ---------------------------------------------------------------- 오른쪽 패널: 내 차례 칸 */
+.al-game .al-turn.turn-card {
+  --al-co-lit: color-mix(in srgb, var(--al-co, var(--accent)) 72%, #ffffff);
+  color: var(--text);
+  border-width: 1px !important;
+  border-color: color-mix(in srgb, var(--al-co-lit) 70%, transparent) !important;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--al-co, var(--accent)) 30%, transparent), transparent 62%),
+    var(--al-glass);
+  box-shadow:
+    inset 0 2px 0 var(--al-co-lit),
+    0 0 26px color-mix(in srgb, var(--al-co-lit) 22%, transparent),
+    0 12px 30px rgba(0, 0, 0, 0.35);
+}
+/* 이름이 긴 항공사(컴퓨터 차례)도 '차례'가 한 글자씩 꺾이지 않게: 넘치면 다음 줄로 */
+.al-game .al-turn .turn-title {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.al-game .al-turn .turn-title > * {
+  flex: none;
+  white-space: nowrap;
+}
+.al-game .al-turn .turn-title > strong {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.al-game .turn-card .tag {
+  background: rgba(124, 172, 232, 0.14);
+  color: var(--text-muted);
+}
+.al-game .hint {
+  color: var(--text);
+}
+.al-game .al-end-btn {
+  padding: 12px;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.al-game .al-end-btn kbd {
+  border-color: rgba(26, 19, 5, 0.45);
+}
+.al-game .players li.is-current {
+  background: rgba(255, 193, 69, 0.07);
+  outline: 1px solid var(--al-lit);
+}
+.al-game .al-prow.is-current .al-status {
+  color: var(--accent);
+}
+.al-game .players li.al-prow-focus {
+  background: color-mix(in srgb, var(--al-co) 16%, var(--surface));
+}
+.al-game .al-meter {
+  background: #0a1424;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.al-game .log li {
+  border-bottom-color: rgba(124, 172, 232, 0.12);
+}
+
+/* 뉴스 연도 머리: 안내판 글자판 */
+.al-game .al-feed-yearhead span {
+  border-radius: 7px;
+  background: linear-gradient(180deg, #111d30 0 50%, #0a1424 50% 100%);
+  border: 1px solid #1c2e48;
+  color: var(--al-flap-text);
+  font-family: var(--al-mono);
+  text-shadow: 0 0 10px rgba(255, 196, 80, 0.35);
+}
+
+/* ---------------------------------------------------------------- 알림·창 */
+:root[data-al-ops] .overlay {
+  background: rgba(2, 6, 14, 0.66);
+  backdrop-filter: blur(3px);
+}
+:root[data-al-ops] .result-card {
+  background: linear-gradient(180deg, #14253d, #0d192b);
+  border: 1px solid var(--al-glass-line);
+  box-shadow:
+    var(--al-glass-hi),
+    0 24px 60px rgba(0, 0, 0, 0.6),
+    0 0 50px rgba(40, 120, 220, 0.15);
+}
+.al-game .al-banner {
+  background: rgba(10, 20, 36, 0.94);
+  box-shadow:
+    0 0 18px color-mix(in srgb, var(--al-pc) 45%, transparent),
+    0 10px 26px rgba(0, 0, 0, 0.45);
+}
+.al-game .al-sim {
+  box-shadow:
+    0 0 24px rgba(255, 193, 69, 0.45),
+    0 8px 22px rgba(0, 0, 0, 0.4);
+}
+.al-game kbd,
+.al-setup kbd {
+  font-family: var(--al-mono);
+}
+
+/* 오른쪽 아래 ❓ 단추와 처음 안내 창 (게임 밖에 있지만 같은 색으로) */
+:root[data-al-ops] .guide-open {
+  background: #13233a;
+  border-color: var(--al-glass-line);
+  box-shadow: 0 0 14px rgba(76, 201, 255, 0.2);
+}
+
+/* ---------------------------------------------------------------- 설정 화면 */
+.al-setup .al-hero {
+  position: relative;
+  padding: 18px 20px;
+  border-radius: 16px;
+  border: 1px solid var(--al-glass-line);
+  background:
+    radial-gradient(600px 200px at 85% 0%, rgba(64, 140, 255, 0.22), transparent 70%),
+    linear-gradient(180deg, #12233b, #0b1729);
+  box-shadow:
+    var(--al-glass-hi),
+    0 16px 40px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+.al-setup .al-hero h1 {
+  font-size: 36px;
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow: 0 0 24px rgba(116, 180, 255, 0.35);
+}
+.al-setup .al-hero-art {
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px rgba(124, 172, 232, 0.25),
+    0 10px 24px rgba(0, 0, 0, 0.45);
+}
+.al-setup .al-hero-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  padding: 2px 10px;
+  border-radius: 6px;
+  background: var(--al-flap);
+  border: 1px solid #1c2e48;
+  color: var(--al-flap-text);
+  font-family: var(--al-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+.al-setup .al-hero-kicker::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--al-good);
+  box-shadow: 0 0 8px var(--al-good);
+}
+.al-setup .seat-card {
+  background: #0f1b2d;
+}
+.al-setup .seat-card input,
+.al-game input:not([type='range']):not([type='checkbox']):not([type='radio']),
+.al-game select {
+  background: #0a1424;
+  border-color: #233c5e;
+}
+.al-setup .setup-footer {
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--al-glass-line);
+  background: var(--al-glass);
+}
+.al-setup .setup-footer .btn-primary {
+  padding: 12px 34px;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .al-game .al-tab {
+    transition: none;
+  }
+}

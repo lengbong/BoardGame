@@ -383,17 +383,28 @@ export function HeroArt() {
     <svg viewBox="0 0 220 140" width={220} height={140} className="al-hero-art" aria-hidden="true">
       <defs>
         <linearGradient id="al-hero-sky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#7ec4ea" />
-          <stop offset="1" stopColor="#d9f0fb" />
+          <stop offset="0" stopColor="#0d2547" />
+          <stop offset="0.65" stopColor="#2a5c8f" />
+          <stop offset="1" stopColor="#e8a860" />
         </linearGradient>
       </defs>
       <rect x="2" y="2" width="216" height="136" rx="22" fill="url(#al-hero-sky)" />
-      <circle cx="176" cy="34" r="14" fill="#ffd36b" opacity="0.9" />
-      <path d="M-10 150 A130 130 0 0 1 230 150" fill="#5aa86b" opacity="0.85" />
-      <path d="M20 140 A110 90 0 0 1 200 140" fill="none" stroke="#fff" strokeWidth="2" strokeDasharray="5 6" opacity="0.8" />
-      <circle cx="42" cy="112" r="4" fill="#fff" stroke="#2a6f8f" strokeWidth="1.5" />
-      <circle cx="178" cy="112" r="4" fill="#fff" stroke="#2a6f8f" strokeWidth="1.5" />
-      <g fill="#fff" opacity="0.95">
+      <circle cx="176" cy="34" r="20" fill="#fff3c4" opacity="0.12" />
+      <circle cx="176" cy="34" r="11" fill="#fff3c4" opacity="0.95" />
+      <g fill="#fff" opacity="0.8">
+        <circle cx="28" cy="24" r="1" />
+        <circle cx="96" cy="16" r="1.2" />
+        <circle cx="132" cy="30" r="0.9" />
+        <circle cx="200" cy="66" r="1" />
+        <circle cx="120" cy="58" r="0.8" />
+      </g>
+      <path d="M-10 150 A130 130 0 0 1 230 150" fill="#13283f" />
+      <path d="M20 140 A110 90 0 0 1 200 140" fill="none" stroke="#ffc145" strokeWidth="2" strokeDasharray="5 6" opacity="0.9" />
+      <circle cx="42" cy="112" r="7" fill="#4cc9ff" opacity="0.25" />
+      <circle cx="178" cy="112" r="7" fill="#4cc9ff" opacity="0.25" />
+      <circle cx="42" cy="112" r="3.5" fill="#eaf4ff" stroke="#4cc9ff" strokeWidth="1.5" />
+      <circle cx="178" cy="112" r="3.5" fill="#eaf4ff" stroke="#4cc9ff" strokeWidth="1.5" />
+      <g fill="#cfe0f5" opacity="0.22">
         <ellipse cx="50" cy="40" rx="22" ry="9" />
         <ellipse cx="66" cy="34" rx="14" ry="9" />
         <ellipse cx="150" cy="78" rx="20" ry="7" />

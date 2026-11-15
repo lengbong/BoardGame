@@ -545,19 +545,7 @@ li.al-row-mine {
   flex-direction: column;
   gap: 8px;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .al-feed {
-    --nk-weather: #3987e5;
-    --nk-company: #d95926;
-    --nk-money: #c98500;
-    --nk-plane: #9085e9;
-    --nk-travel: #199e70;
-    --nk-world: #d55181;
-    --nk-challenge: #0ca30c;
-    --nk-other: #9a9086;
-  }
-}
-:root[data-theme='dark'] .al-feed {
+.al-feed {
   --nk-weather: #3987e5;
   --nk-company: #d95926;
   --nk-money: #c98500;

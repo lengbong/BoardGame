@@ -92,7 +92,7 @@ export function Panel({ state, viewer, hint, canEnd, busy, onEndTurn, auto, onAu
 
   return (
     <aside className="panel al-panel">
-      <section className="turn-card al-turn" style={{ borderColor: color.main, background: color.light }}>
+      <section className="turn-card al-turn" style={{ '--al-co': color.main } as CSSProperties}>
         <div className="turn-title">
           <CompanyBadge color={color.main} shape={SEAT_SHAPES[shown.seat]} size={22} />
           {realOf(shown) && <IataBadge airline={realOf(shown)!} small />}

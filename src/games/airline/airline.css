@@ -2,74 +2,59 @@
    하늘길 항공사 — 모든 클래스는 al- 로 시작한다 (다른 게임과 겹치지 않게)
    ================================================================ */
 
+/* 운항 관제실 테마: 밝기 설정과 상관없이 늘 짙은 남색 화면.
+   공통 색 이름(--surface, --accent …)도 여기서 다시 정해서, 안에 들어간 공용 단추·설정 칸도 같은 분위기가 된다.
+   AirlineApp이 떠 있는 동안 <html data-al-ops>가 붙어서 몸통 배경·❓ 단추·안내 창도 함께 바뀐다. */
+:root[data-al-ops],
 .al-game,
 .al-setup,
 .al-qr-overlay,
-.al-result-overlay {
-  --al-sea-top: #b4e0f0;
-  --al-sea-bottom: #86c6e0;
-  --al-land: #f4e7c5;
-  --al-land-stroke: #b9a476;
-  --al-city: #ffffff;
-  --al-city-stroke: #4a4038;
-  --al-label: #2f2a25;
-  --al-halo: #fffaf0;
-  --al-good: #1d8a52;
-  --al-bad: #c93434;
-  --al-warn: #c27a00;
-  --al-blue: #3e63dd;
-  --al-map-ui: rgba(255, 255, 255, 0.88);
-  --al-c-rev: #2f9e6a;
-  --al-c-fuel: #d9822b;
-  --al-c-crew: #8d6fd1;
-  --al-c-apt: #3f8fbf;
-  --al-c-svc: #c9a227;
-  --al-c-sales: #9a8f80;
-  --al-c-lease: #c75b7a;
-  --al-sky-top: #c9e3f4;
-  --al-sky-bottom: #f1f8fc;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .al-game,
-  :root:not([data-theme='light']) .al-setup,
-  :root:not([data-theme='light']) .al-qr-overlay,
-  :root:not([data-theme='light']) .al-result-overlay {
-    --al-sea-top: #21445a;
-    --al-sea-bottom: #132c3c;
-    --al-land: #3d4a3c;
-    --al-land-stroke: #66785f;
-    --al-city: #f1ece4;
-    --al-city-stroke: #1b1a18;
-    --al-label: #f3eee6;
-    --al-halo: #182630;
-    --al-good: #5fd39a;
-    --al-bad: #ff7b7b;
-    --al-warn: #f2b24a;
-    --al-blue: #8aa6ff;
-    --al-map-ui: rgba(36, 34, 31, 0.9);
-    --al-sky-top: #2b5470;
-    --al-sky-bottom: #4f7d99;
-  }
-}
-:root[data-theme='dark'] .al-game,
-:root[data-theme='dark'] .al-setup,
-:root[data-theme='dark'] .al-qr-overlay,
-:root[data-theme='dark'] .al-result-overlay {
-  --al-sea-top: #21445a;
-  --al-sea-bottom: #132c3c;
-  --al-land: #3d4a3c;
-  --al-land-stroke: #66785f;
-  --al-city: #f1ece4;
-  --al-city-stroke: #1b1a18;
-  --al-label: #f3eee6;
-  --al-halo: #182630;
-  --al-good: #5fd39a;
-  --al-bad: #ff7b7b;
-  --al-warn: #f2b24a;
-  --al-blue: #8aa6ff;
-  --al-map-ui: rgba(36, 34, 31, 0.9);
-  --al-sky-top: #2b5470;
-  --al-sky-bottom: #4f7d99;
+.al-result-overlay,
+.al-fame-overlay {
+  --bg: #07101d;
+  --surface: #0f1b2d;
+  --surface-2: #15253c;
+  --text: #e6eef8;
+  --text-muted: #8ba0ba;
+  --border: #22395a;
+  --accent: #ffc145;
+  --accent-dark: #f2a81d;
+  --accent-text: #1a1305;
+  --shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  --radius: 12px;
+  --board-bg: #0f1b2d;
+  --cell-stroke: #2b4466;
+  /* 관제실 색: 레이더 하늘색, 판의 빛, 유리 칸 */
+  --al-glow: #4cc9ff;
+  --al-glass: linear-gradient(180deg, #15263e, #0c1729);
+  --al-glass-line: rgba(124, 172, 232, 0.2);
+  --al-glass-hi: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --al-flap: #0a1220;
+  --al-flap-text: #ffd36b;
+
+  --al-sea-top: #0e2440;
+  --al-sea-bottom: #071426;
+  --al-land: #1a2d45;
+  --al-land-stroke: #36577e;
+  --al-city: #eaf4ff;
+  --al-city-stroke: #050c17;
+  --al-label: #e4eefa;
+  --al-halo: #06101e;
+  --al-good: #4fd69c;
+  --al-bad: #ff6f6f;
+  --al-warn: #ffb547;
+  --al-blue: #74b4ff;
+  --al-map-ui: rgba(9, 19, 34, 0.88);
+  --al-c-rev: #3fbf86;
+  --al-c-fuel: #e8913a;
+  --al-c-crew: #9d82e6;
+  --al-c-apt: #4aa3d8;
+  --al-c-svc: #d8b23a;
+  --al-c-sales: #8d9bb0;
+  --al-c-lease: #d96b8c;
+  --al-sky-top: #173452;
+  --al-sky-bottom: #2d5a83;
+  color-scheme: dark;
 }
 
 .al-game kbd,
@@ -247,7 +232,7 @@
 .al-tab.al-on {
   background: var(--accent);
   border-color: var(--accent-dark);
-  color: #fff;
+  color: var(--accent-text);
 }
 .al-tab:focus-visible {
   outline: 3px solid var(--accent);
@@ -457,7 +442,7 @@
 }
 .al-map-chip.al-on {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
 }
 .al-map-legend {
   position: absolute;
@@ -739,10 +724,10 @@
 @keyframes al-glow {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(217, 98, 43, 0);
+    box-shadow: 0 0 0 0 rgba(255, 193, 69, 0);
   }
   50% {
-    box-shadow: 0 0 0 4px rgba(217, 98, 43, 0.28);
+    box-shadow: 0 0 0 4px rgba(255, 193, 69, 0.3), 0 0 22px rgba(255, 193, 69, 0.35);
   }
 }
 .al-coname {
@@ -829,7 +814,7 @@
 .al-chip.al-on {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
 }
 .al-chip:disabled {
   opacity: 0.5;
@@ -843,14 +828,14 @@
   margin-left: 6px;
   padding: 0 6px;
   border-radius: 6px;
-  background: #fde8e8;
-  color: #a52a2f;
+  background: color-mix(in srgb, var(--al-bad) 18%, transparent);
+  color: var(--al-bad);
   font-size: 11px;
   font-weight: 700;
 }
 .al-flag-warn {
-  background: #fff3d6;
-  color: #8a5a00;
+  background: color-mix(in srgb, var(--al-warn) 18%, transparent);
+  color: var(--al-warn);
 }
 .al-flag-ok {
   background: #e3f6ec;
@@ -1330,7 +1315,7 @@
 .al-subtab.al-on {
   background: var(--accent);
   border-color: var(--accent-dark);
-  color: #fff;
+  color: var(--accent-text);
 }
 .al-subtab:focus-visible {
   outline: 3px solid var(--accent);
@@ -1548,7 +1533,7 @@
 .al-svc.al-on {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
 }
 .al-svc:disabled {
   cursor: not-allowed;
@@ -1770,7 +1755,7 @@
 .al-turn-date {
   margin: 2px 0 6px;
   font-size: 13px;
-  color: #6f675e;
+  color: var(--text-muted);
 }
 .al-end-btn {
   width: 100%;
@@ -1782,7 +1767,7 @@
   animation: al-glow 2.4s ease-in-out infinite;
 }
 .al-notice {
-  color: #a52a2f;
+  color: var(--al-bad);
 }
 .al-goal {
   display: flex;
@@ -1912,7 +1897,7 @@
   padding: 8px 16px;
   border-radius: 999px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   font-weight: 800;
   transform: translateX(-50%);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
@@ -1922,14 +1907,14 @@
   width: 120px;
   height: 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.2);
   overflow: hidden;
 }
 .al-sim-bar::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: #fff;
+  background: currentColor;
   transform-origin: left;
   animation: al-sim var(--al-sim) linear both;
 }
@@ -2026,8 +2011,8 @@
   font-size: 13.5px;
 }
 .al-qr-warn {
-  background: #fde8e8;
-  color: #8a1f23;
+  background: color-mix(in srgb, var(--al-bad) 16%, var(--surface));
+  color: var(--al-bad);
   font-weight: 700;
 }
 
@@ -2344,12 +2329,12 @@
 
 /* ---------------------------------------------------------------- 2판: 가동률·주문·중고·비서·결정·목표·제휴 */
 .al-flag-good {
-  background: #e3f6ec;
-  color: #1d6b45;
+  background: color-mix(in srgb, var(--al-good) 18%, transparent);
+  color: var(--al-good);
 }
 .al-flag-blue {
-  background: #e4ebff;
-  color: #2a46a8;
+  background: color-mix(in srgb, var(--al-blue) 18%, transparent);
+  color: var(--al-blue);
 }
 .al-chip-static {
   cursor: default;
@@ -3022,14 +3007,8 @@
   aspect-ratio: auto !important;
   height: 100%;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .al-routes,
-  :root:not([data-theme='light']) .al-planes {
-    filter: brightness(1.45) saturate(1.05);
-  }
-}
-:root[data-theme='dark'] .al-routes,
-:root[data-theme='dark'] .al-planes {
+.al-routes,
+.al-planes {
   filter: brightness(1.45) saturate(1.05);
 }
 
@@ -3414,15 +3393,8 @@
   --al-gain: #3a74c4;
   --al-loss: #d77a26;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .al-game,
-  :root:not([data-theme='light']) .al-setup {
-    --al-gain: #4f8fe0;
-    --al-loss: #c8701f;
-  }
-}
-:root[data-theme='dark'] .al-game,
-:root[data-theme='dark'] .al-setup {
+.al-game,
+.al-setup {
   --al-gain: #4f8fe0;
   --al-loss: #c8701f;
 }
@@ -4088,18 +4060,8 @@
   --al-cat-4: #eda100;
   --al-cat-5: #e87ba4;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .al-game,
-  :root:not([data-theme='light']) .al-setup {
-    --al-cat-1: #3987e5;
-    --al-cat-2: #d95926;
-    --al-cat-3: #199e70;
-    --al-cat-4: #c98500;
-    --al-cat-5: #d55181;
-  }
-}
-:root[data-theme='dark'] .al-game,
-:root[data-theme='dark'] .al-setup {
+.al-game,
+.al-setup {
   --al-cat-1: #3987e5;
   --al-cat-2: #d95926;
   --al-cat-3: #199e70;

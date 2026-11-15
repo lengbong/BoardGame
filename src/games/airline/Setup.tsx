@@ -246,6 +246,7 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
       <header className="al-hero">
         <HeroArt />
         <div>
+          <p className="al-hero-kicker">항공사 경영 시뮬레이션</p>
           <h1>하늘길 항공사</h1>
           <p>
             세계 여러 도시에 지점을 내고, 실제 기종의 비행기를 사거나 빌려 노선을 열어요. 운임과 운항 횟수를 정하고, 라이벌 항공사와 손님을 나눠 가지며 달마다 회사를 키우는 경영 게임이에요.

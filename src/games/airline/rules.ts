@@ -3,7 +3,7 @@ import { MODEL, MODELS, isAvailable, leadTime } from './aircraft';
 import { CAMPAIGN_INFO, MEDIA_INFO, adTarget, mediaOf } from './ads';
 import { BUSINESS_INFO } from './business';
 import { cabinBlocker, sameCabin } from './cabin';
-import { BIZ_CHANGE_MONTHS, BIZ_INFO, assignBizModels, bizCabinBlocker, bizChangeCost, bizModelBlocker, bizModelFit, bizModelOf, cabinFor, setBizModelAtStart, settleBizModel } from './bizmodel';
+import { BIZ_CHANGE_MONTHS, BIZ_INFO, assignBizModels, bizCabinBlocker, bizChangeCost, bizModelBlocker, bizModelFit, bizModelOf, cabinFor, fitsBizModel, setBizModelAtStart, settleBizModel } from './bizmodel';
 import { CLASS_FARE_MAX, CLASS_FARE_MIN } from './classes';
 import { blockText, branchPolitics, makerPolitics, politicalNews, polity, routePolitics } from './politics';
 import { MAX_MEMBERS, allianceOf, joinAlliance, leaveAlliance, pruneAlliances } from './alliances';
@@ -31,6 +31,7 @@ import { rightsAssignBlocker, rightsMonth, rightsRoom, rightsRouteBlocker } from
 import { applyRightsAction, isRightsAction, rightsAfterMerge } from './rightsRules';
 import { applyLoyaltyAction, isLoyaltyAction, loyaltyMonth } from './loyaltyRules';
 import { applyRivalAction, isRivalAction, rivalsMonth, truceBlocks } from './relations';
+import { enterMarket, industryMonth, logIndustry, type EnterHooks, type ExitHooks, type MergeDeal, type ShutHow } from './industry';
 import {
   LEASE_RATE,
   MAX_DELIVERIES,
@@ -61,6 +62,7 @@ import {
   sellPrice,
   slotCapacity,
   slotsUsed,
+  WEEK_HOURS,
 } from './simulate';
 import { isQuarterEnd, mLabel, mOf, monthOf, qLabel, qOfM, yearOf, yearOfM } from './time';
 import type {
@@ -420,7 +422,7 @@ function worldYear(state: AirlineState, t: number): AirlineState {
       }
       const j = fate.kind === 'merge' ? s.companies.findIndex((x) => x.airline === fate.into && !x.out) : -1;
       if (j >= 0 && s.companies[j].kind !== 'human') {
-        s = mergeCompanies(s, j, ci, `${withJosa(c.name, '이/가')} ${s.companies[j].name}에 합쳐졌어요. 노선 ${c.routes.length}개와 비행기 ${c.planes.length}대를 ${withJosa(s.companies[j].name, '이/가')} 넘겨받았어요.${tale}`);
+        s = mergeCompanies(s, j, ci, { why: 'world', rate: 0, story: `${withJosa(c.name, '이/가')} ${s.companies[j].name}에 합쳐졌어요. 노선 ${c.routes.length}개와 비행기 ${c.planes.length}대를 ${withJosa(s.companies[j].name, '이/가')} 넘겨받았어요.${tale}` });
         s = { ...s, companies: s.companies.map(cloneCompany) };
         continue;
       }
@@ -1679,6 +1681,10 @@ export function choiceBlocker(state: AirlineState, ci: number, option: number): 
       if (!other || other.out || bizModelOf(c) === 'lcc' || bizModelOf(other) === 'lcc' || (mine && theirs) || (host && host.members.length >= MAX_MEMBERS)) return '이제는 동맹을 맺을 수 없어요';
     }
     if (e.kind === 'order' && fleetCount(c) >= MAX_PLANES) return `비행기는 주문까지 ${MAX_PLANES}대까지예요`;
+    if (e.kind === 'acquire') {
+      const tg = state.companies[e.target];
+      if (!tg || tg.out || tg.sale?.buyer !== ci) return '이제는 인수할 수 없어요';
+    }
     if (e.kind === 'order' && MODEL[e.model] && bizModelFit(c, MODEL[e.model])) return bizModelFit(c, MODEL[e.model]);
   }
   return null;
@@ -1710,12 +1716,17 @@ function applyChoice(state: AirlineState, ci: number, option: number): AirlineSt
         const m = MODEL[e.model];
         c.orders.push({ id: s.nextId, model: m.id, due: s.t + leadTime(m, yearOf(s.q)), price: o.cost });
         s.nextId += 1;
+      } else if (e.kind === 'acquire') {
+        // 값은 회사를 합칠 때 낸다 (선택지 값은 미리 보여 주고 돈을 확인하는 데만)
+        c.cash += o.cost;
       }
     }
     c.choice = null;
     pushEvent(s, { type: 'choice', company: ci, option });
   });
   if (partnerOf && partnerOf.kind === 'alliance') s = allianceNews(joinAlliance(s, ci, partnerOf.with), ci, partnerOf.with);
+  const acquire = o.effects.find((e) => e.kind === 'acquire');
+  if (acquire && acquire.kind === 'acquire') s = industryHooks(s).merge(s, ci, acquire.target, { cost: o.cost, why: 'sale' });
   return addLog(s, c0.seat, `${c0.name}: ${choice.title} — ${o.label}`);
 }
 
@@ -1751,10 +1762,13 @@ function propose(state: AirlineState, ci: number, to: number): AirlineState {
  * j가 과반을 가진 컴퓨터 회사 i를 인수해 합친다: 남은 주식을 사들이고(다른 주주 회사 몫은 주가대로, 창업자 몫은 반값),
  * i의 현금·빚·지점·노선·비행기·주문·직원·부대사업·시설·연료를 넘겨받는다. 같은 두 도시 노선은 하나로 합친다.
  */
-function mergeCompanies(state: AirlineState, j: number, i: number, history?: string): AirlineState {
+function mergeCompanies(state: AirlineState, j: number, i: number, deal: MergeDeal = { why: 'stock' }): AirlineState {
   const n = state.companies.length;
-  const cost = history ? 0 : buyoutCost(state, j, i);
-  const per = marketCap(state, i) / 100;
+  const full = buyoutCost(state, j, i);
+  // 돈이 바닥난 회사·실제 역사의 합병·인수 제안은 값이 다르다 (주주 회사들도 같은 비율로 받는다)
+  const rate = deal.cost !== undefined ? (full > 0 ? deal.cost / full : 0) : (deal.rate ?? 1);
+  const cost = full * rate;
+  const per = (marketCap(state, i) / 100) * rate;
   const holders = state.companies.map((_, k) => k).filter((k) => k !== i && k !== j && stakeOf(state, i, k) > 0);
   const buyer = state.companies[j];
   const target = state.companies[i];
@@ -1823,6 +1837,20 @@ function mergeCompanies(state: AirlineState, j: number, i: number, history?: str
   // 두 회사 운항을 합치면 공항 슬롯을 넘을 수 있다: 넘는 공항은 넘겨받은 비행기부터 횟수를 줄인다
   const absorbed = new Set(target.planes.map((p) => p.id));
   const a = s.companies[j];
+  // 넘겨받은 비행기: 우리 사업 모델에 맞지 않으면 쉬게 하고(팔거나 돌려주면 돼요),
+  // 회전 시간이 다른 회사(저가항공 ↔ 풀서비스)였으면 우리 주간 비행시간 안으로 횟수를 줄인다
+  for (const p of a.planes) {
+    if (!absorbed.has(p.id)) continue;
+    if (!fitsBizModel(bizModelOf(a), MODEL[p.model])) {
+      p.legs = [];
+      continue;
+    }
+    while (p.legs.length > 0 && planeHours(a, p) > WEEK_HOURS + 1e-9) {
+      const leg = p.legs.reduce((x, y) => (y.freq > x.freq ? y : x));
+      leg.freq -= 1;
+      if (leg.freq <= 0) p.legs = p.legs.filter((l) => l !== leg);
+    }
+  }
   for (const city of a.branches) {
     let over = slotsUsed(a, city) - slotCapacity(s, j, city);
     while (over > 0) {
@@ -1841,14 +1869,25 @@ function mergeCompanies(state: AirlineState, j: number, i: number, history?: str
       over -= 1;
     }
   }
+  const got = `노선 ${target.routes.length}개와 비행기 ${target.planes.length}대가 ${buyer.name}의 것이 됐어요.`;
+  const story = target.airline || buyer.airline ? ' (게임 속 이야기)' : '';
+  const how =
+    deal.why === 'rescue'
+      ? `돈이 바닥나 문을 닫기 직전이던 ${withJosa(target.name, '을/를')} ${fmtMoney(cost)}에 사들였어요. ${got} 빚 ${fmtMoney(target.debt)}도 함께 떠안았어요.`
+      : deal.why === 'history'
+        ? `${deal.note ? `${deal.note} ` : ''}실제 역사처럼 ${withJosa(target.name, '이/가')} ${buyer.name}에 합쳐졌어요. ${got}`
+        : deal.why === 'sale'
+          ? `팔리길 기다리던 ${withJosa(target.name, '을/를')} ${fmtMoney(cost)}에 사들여 회사를 합쳤어요. ${got}`
+          : `${buyer.name}이(가) ${target.name} 주식 과반을 사들여 회사를 합쳤어요. ${got}`;
   s = addNews(s, {
-    icon: '🤝',
-    title: history ? `${target.name}, ${buyer.name}에 합쳐져요` : `${withJosa(buyer.name, '이/가')} ${withJosa(target.name, '을/를')} 인수했어요`,
-    text: history ?? `${buyer.name}이(가) ${target.name} 주식 과반을 사들여 회사를 합쳤어요. 노선 ${target.routes.length}개와 비행기 ${target.planes.length}대가 ${buyer.name}의 것이 됐어요.${target.airline || buyer.airline ? ' (게임 속 이야기)' : ''}`,
-    tone: history ? 'info' : 'big',
+    icon: deal.why === 'history' ? '📜' : '🤝',
+    title: deal.why === 'world' ? `${target.name}, ${buyer.name}에 합쳐져요` : `${withJosa(buyer.name, '이/가')} ${withJosa(target.name, '을/를')} 인수했어요`,
+    text: deal.why === 'world' && deal.story ? deal.story : how + story,
+    tone: deal.why === 'world' ? 'info' : 'big',
     company: j,
   });
-  return addLog(s, buyer.seat, history ? `${buyer.name}: ${target.name}과 합침` : `${buyer.name}: ${target.name} 인수 (남은 주식 −${fmtMoney(cost)})`);
+  s = logIndustry(s, { kind: 'merge', company: i, other: j, text: `${buyer.name} ← ${target.name} ${deal.why === 'world' ? '합침' : '인수'}${deal.why === 'rescue' ? ' (문 닫기 직전)' : deal.why === 'history' || deal.why === 'world' ? ' (실제 역사)' : ''}` });
+  return addLog(s, buyer.seat, deal.why === 'world' ? `${buyer.name}: ${target.name}과 합침` : `${buyer.name}: ${target.name} 인수 (${deal.why === 'stock' ? '남은 주식' : '인수 값'} −${fmtMoney(cost)})`);
 }
 
 /** x와 y가 한 동맹이 된 소식 (새로 만들었는지, 누가 들어갔는지) */
@@ -1986,7 +2025,7 @@ export function runMonth(state: AirlineState, rng: Rng = Math.random): AirlineSt
   const t = state.t;
   const q = state.q;
   const n = state.companies.length;
-  const companies = state.companies.map(cloneCompany);
+  let companies = state.companies.map(cloneCompany);
   let s: AirlineState = { ...state, companies, events: [] };
   const newsBefore = s.nextId;
   const bankrupts: number[] = [];
@@ -2081,7 +2120,16 @@ export function runMonth(state: AirlineState, rng: Rng = Math.random): AirlineSt
     if (!c.choice) c.nextChoiceT = Math.min(c.nextChoiceT, t + 1);
   });
 
-  for (const ci of bankrupts) s = canRescue(s, ci, t) ? restructure(s, ci, t) : shutDown(s, ci, t);
+  if (s.options.world) {
+    // 세계 항공사 모드: 컴퓨터 회사는 한 번은 구조 조정으로 살아난다 (world.ts)
+    for (const ci of bankrupts) s = canRescue(s, ci, t) ? restructure(s, ci, t) : shutDown(s, ci, t);
+  } else {
+    // 돈이 바닥난 회사(사람 회사는 운항 중단, 컴퓨터는 인수·법정 관리·운항 중단)와 실제 항공사의 역사 (industry.ts)
+    s = industryMonth(s, t, bankrupts, industryHooks(s));
+  }
+  for (const ci of bankrupts) out.reports[ci].bankrupt = s.companies[ci].out && s.companies[ci].mergedInto === undefined;
+  // 아래 배당·결산은 바뀐 회사 객체로 이어서 셈한다
+  companies = s.companies;
 
   // 가격 경쟁 알림·운항 현장 소식
   s = priceWarNews(s);
@@ -2137,6 +2185,10 @@ export function runMonth(state: AirlineState, rng: Rng = Math.random): AirlineSt
       }
     }
   }
+
+  // 달 결산의 노선·연결 목록은 이번 분기 결산을 합칠 때만 쓴다: 다 합친 분기 것은 비워 저장을 가볍게 (회사가 늘면 커진다)
+  const openQ = isQuarterEnd(t) ? q + 1 : q;
+  s = { ...s, ledger: s.ledger.map((l) => (qOfM(l.t) === openQ || (l.routes.length === 0 && l.xfers.length === 0 && l.ops.length === 0) ? l : { ...l, routes: [], xfers: [], ops: [] })) };
 
   // 해가 끝나면 (12월): 한 해 결산, 연간 목표와 경영 평가
   if (monthOf(t) === 12) {
@@ -2220,6 +2272,14 @@ export function runMonth(state: AirlineState, rng: Rng = Math.random): AirlineSt
   const ids2 = newsIds(s, newsBefore);
   s.report = { ...monthReport, news: ids2 };
   if (qReport) s.qReport = { ...qReport, news: ids2 };
+  // 새 회사 (실제 역사의 창업·빈자리·호황): 결산 칸을 늘리고 이번 달 차례 맨 끝에 경영한다 (industry.ts)
+  const beforeEntry = s.nextId;
+  s = enterMarket(s, industryHooks(s));
+  if (s.nextId !== beforeEntry) {
+    const extra = newsIds(s, beforeEntry);
+    if (s.report) s.report = { ...s.report, news: [...s.report.news, ...extra] };
+    if (qReport && s.qReport) s.qReport = { ...s.qReport, news: [...s.qReport.news, ...extra] };
+  }
   const first = s.order[s.turnPos];
   pushEvent(s, { type: 'month', t });
   if (qReport) pushEvent(s, { type: 'quarter', q });
@@ -2278,9 +2338,26 @@ function restructure(state: AirlineState, ci: number, t: number): AirlineState {
   return addLog(s, c.seat, `🩹 ${c.name} 구조 조정 (노선 −${closed})`);
 }
 
-/** 운항을 멈춘 회사: 내 비행기는 중고 시장으로, 슬롯은 비고, 제휴는 끝난다 */
-function shutDown(state: AirlineState, ci: number, t: number, why?: { title: string; text: string }): AirlineState {
-  let s = state;
+/** 업계 변화(industry.ts)가 쓰는 새 회사 틀·인수·운항 중단 (이번 달 연출 이벤트는 이어 붙인다) */
+export function industryHooks(state: Pick<AirlineState, 'options'>): ExitHooks & EnterHooks {
+  return {
+    merge: (s, j, i, deal) => {
+      const ev = s.events;
+      const after = rightsAfterMerge(s, mergeCompanies(s, j, i, deal), j, i);
+      return { ...after, events: [...ev, ...after.events] };
+    },
+    shutDown: (s, ci, t, how) => shutDown(s, ci, t, how),
+    newCompany,
+    startCash: START_MONEY[state.options.money].cash,
+  };
+}
+
+/** 운항을 멈춘 회사: 내 비행기는 중고 시장으로, 슬롯은 비고, 제휴는 끝난다 (how: 실제 역사 같은 다른 소식 글) */
+function shutDown(state: AirlineState, ci: number, t: number, how?: ShutHow): AirlineState {
+  // 고치기 전에 베낀다 (업계 변화에서 부를 때 앞 상태의 회사를 건드리지 않게)
+  const companies = state.companies.slice();
+  companies[ci] = cloneCompany(companies[ci]);
+  let s: AirlineState = { ...state, companies };
   const c = s.companies[ci];
   const listings = c.planes
     .filter((p) => !p.leased && planeAge(s, p) < 25)
@@ -2301,19 +2378,24 @@ function shutDown(state: AirlineState, ci: number, t: number, why?: { title: str
   c.ads = emptyRegions();
   c.partner = null;
   c.choice = null;
+  c.sale = undefined;
+  if (how?.fate) c.fate = how.fate;
   delete c.fuel;
   delete c.facilities;
   s = pruneAlliances(s);
   // 운항을 멈춘 회사의 주식은 휴지가 되고, 그 회사가 가진 다른 회사 주식은 시장에 나간다
   if (s.stakes) s = { ...s, stakes: s.stakes.map((row, x) => (x === ci ? row.map(() => 0) : row.map((v, y) => (y === ci ? 0 : v)))) };
   s = addNews(s, {
-    icon: '🛑',
-    title: why?.title ?? `${c.name} 운항 중단`,
-    text: why?.text ?? `이 판에서 ${withJosa(c.name, '은/는')} ${CRISIS_MONTHS}달 내내 돈이 모자라 운항을 멈췄어요.${listings.length ? ` 비행기 ${listings.length}대가 중고 시장에 나왔고,` : ''} 쓰던 공항 슬롯과 노선이 비었어요 — 새 노선을 열 기회예요!${c.airline ? ' (게임 속 이야기일 뿐, 실제 회사와는 관계없어요)' : ''}`,
+    icon: how?.icon ?? '🛑',
+    title: how?.title ?? `${c.name} 운항 중단`,
+    text:
+      how?.text ??
+      `이 판에서 ${withJosa(c.name, '은/는')} ${CRISIS_MONTHS}달 내내 돈이 모자라 운항을 멈췄어요.${c.rescued !== undefined ? ' 법정 관리로 한 번 다시 날았지만 버티지 못했어요.' : ''}${listings.length ? ` 비행기 ${listings.length}대가 중고 시장에 나왔고,` : ''} 쓰던 공항 슬롯과 노선이 비었어요 — 새 노선을 열 기회예요!${c.airline ? ' (게임 속 이야기일 뿐, 실제 회사와는 관계없어요)' : ''}`,
     tone: 'bad',
     company: ci,
   });
-  s = addLog(s, c.seat, `🛑 ${c.name} 운항 중단`);
+  s = addLog(s, c.seat, `${how?.icon ?? '🛑'} ${c.name} ${how?.fate ?? '운항 중단'}`);
+  s = logIndustry(s, { kind: 'cease', company: ci, text: `${c.name} ${how?.fate ?? '운항 중단'}` });
   pushEvent(s, { type: 'bankrupt', company: ci });
   return s;
 }

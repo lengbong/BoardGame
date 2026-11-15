@@ -453,6 +453,8 @@ export function MapView({ state, viewer, selected, onSelect, pulses: allPulses, 
           {legendIds.map((i) => {
             const c = state.companies[i];
             const on = focusCo === i;
+            // 판에서 빠진 컴퓨터 회사는 감춘다 (회사가 늘고 줄어도 범례가 넘치지 않게)
+            if (c.out && c.kind !== 'human' && !on) return null;
             return (
               <li key={i} className={`${c.out ? 'al-out' : ''}${on ? ' al-on' : ''}`}>
                 <button

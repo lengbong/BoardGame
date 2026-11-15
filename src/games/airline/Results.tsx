@@ -9,6 +9,7 @@ import { AwardCeremony } from './AwardsArt';
 import { FameResult } from './AchievementsView';
 import { ScenarioResult } from './ScenarioTracker';
 import { SCENARIO } from './scenarios';
+import { exitLabel } from './industry';
 import { rankings, shownCompanies } from './rules';
 import { companyValue, regionsServed } from './simulate';
 import { qLabel } from './time';
@@ -211,7 +212,7 @@ export function GameOver({ state, onRestart, onChangeSetup, onExit, onLook }: Ga
             const rank = ranked.indexOf(i);
             return (
               <li key={i} className={result.winners.includes(i) ? 'al-rank-winner' : ''} style={{ animationDelay: `${0.25 + k * 0.15}s` }}>
-                <span className="medal">{c.out ? '🛑' : (MEDALS[rank] ?? `${rank + 1}등`)}</span>
+                <span className="medal">{c.out ? (c.mergedInto !== undefined ? '🤝' : '🛑') : (MEDALS[rank] ?? `${rank + 1}등`)}</span>
                 {realOf(c) && (
                   <span className="al-rank-photo">
                     <AirlinePhoto airline={realOf(c)!} width={80} />
@@ -223,7 +224,7 @@ export function GameOver({ state, onRestart, onChangeSetup, onExit, onLook }: Ga
                     {CITY[c.hub].name} · 비행기 {c.planes.length}대 · 노선 {c.routes.length}개 · 지역 {regionsServed(c).size}/6 · 태운 손님 {fmtPax(c.stats.pax)}
                   </small>
                 </span>
-                <b className="al-rank-value">{c.out ? '운항 중단' : fmtMoney(companyValue(state, i))}</b>
+                <b className="al-rank-value">{c.out ? exitLabel(state, c) : fmtMoney(companyValue(state, i))}</b>
               </li>
             );
           })}

@@ -33,6 +33,7 @@ import {
   visitGain,
 } from './relations';
 import { NewsView } from './ReportView';
+import { IndustryCard } from './IndustryCard';
 import { allianceOutlook, proposeBlocker, SHOWN_COMPANIES, rankings } from './rules';
 import { alSound } from './sounds';
 import { MoreInfo } from './StaffArt';
@@ -480,10 +481,11 @@ const FOLD_KEY = 'family-boardgame.airline.rivals-folded.v1';
 
 /** 뉴스 화면: 라이벌 카드 + 하늘길 뉴스 (Game.tsx가 부른다) */
 export function NewsWithRivals({ state, viewer, canAct, perform, onCity }: { state: AirlineState; viewer: number; canAct: boolean; perform: (a: AirlineAction) => void; onCity: (id: string) => void }) {
-  if (!rivalsOn(state)) return <NewsView state={state} onCity={onCity} viewer={viewer} />;
   return (
     <div className="al-rv-news">
-      <RivalsCard state={state} viewer={viewer} canAct={canAct} perform={perform} />
+      {rivalsOn(state) && <RivalsCard state={state} viewer={viewer} canAct={canAct} perform={perform} />}
+      {/* 업계 소식: 새 회사·문 닫기·인수·실제 역사 (IndustryCard.tsx) */}
+      <IndustryCard state={state} />
       <NewsView state={state} onCity={onCity} viewer={viewer} />
     </div>
   );

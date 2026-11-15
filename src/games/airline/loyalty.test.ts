@@ -767,7 +767,9 @@ describe('컴퓨터', () => {
       // 컴퓨터는 판 동안 프로그램을 열거나 올린다 (작은 회사·골드만 하는 일은 없다)
       expect(starts).toBeGreaterThan(0);
       expect(s.companies.every((c) => c.kind !== 'ai-easy' || (c.loyalty?.level ?? 0) <= 1)).toBe(true);
-      expect(s.companies.every((c) => c.brandPos)).toBe(true);
+      // 날고 있는 회사는 모두 브랜드 자리를 정했다 (문을 닫거나 인수된 회사는 지운다)
+      // (화물 전문 회사는 손님이 없어 브랜드를 정하지 않는다: 시장 변화로 생긴 화물 회사)
+      expect(s.companies.every((c) => c.out || c.bizModel === 'cargo' || c.brandPos)).toBe(true);
       expect(worst).toBeLessThan(600);
     }, 60000);
   }

@@ -644,7 +644,9 @@ describe('실제 항공사', () => {
     let guard = 0;
     while (s.phase !== 'gameover' && guard++ < 2000) s = aiTurn(s, rng);
     expect(s.phase).toBe('gameover');
-    expect(s.companies.map((c) => c.name)).toEqual(names);
+    // 처음 회사들의 이름은 그대로 (이 10년에는 이름을 바꾼 회사가 없다). 시장 변화로 새로 생긴 회사는 뒤에 붙는다
+    expect(s.companies.slice(0, names.length).map((c) => c.name)).toEqual(names);
+    expect(s.companies.slice(names.length).every((c) => c.born !== undefined && c.born > s.startT)).toBe(true);
     expect(s.news.every((n) => !n.title.includes('파산'))).toBe(true);
   }, 60000);
 

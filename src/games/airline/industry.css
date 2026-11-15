@@ -1,0 +1,104 @@
+/* 하늘길 항공사: 시장 변화 — 업계 소식 카드 (IndustryCard.tsx) */
+
+.al-rv-news > .al-ind {
+  flex: none;
+}
+.al-ind-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+.al-ind-title small {
+  margin-left: auto;
+  font-weight: 400;
+  font-size: 12.5px;
+}
+.al-ind-watch,
+.al-ind-log,
+.al-ind-help {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.al-ind-watch {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--al-glass-line, var(--border));
+  border-radius: 10px;
+  background: rgba(124, 172, 232, 0.05);
+}
+.al-ind-watch li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 13px;
+  min-width: 0;
+}
+.al-ind-watch li > span:last-child {
+  overflow-wrap: anywhere;
+}
+.al-ind-tone-good > span:last-child {
+  color: var(--al-good);
+}
+.al-ind-tone-info > span:last-child {
+  color: var(--al-blue, var(--text-muted));
+}
+.al-ind-tone-warn > span:last-child {
+  color: var(--al-warn);
+}
+.al-ind-tone-bad > span:last-child {
+  color: var(--al-bad);
+}
+.al-ind-log {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.al-ind-log li {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+}
+.al-ind-when {
+  font-family: var(--al-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--al-flap-text, var(--accent));
+  white-space: nowrap;
+}
+.al-ind-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.al-ind-empty {
+  margin: 0;
+  font-size: 13px;
+}
+.al-ind-more {
+  margin-top: 6px;
+}
+.al-ind-help {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+}
+.al-ind-help li::before {
+  content: '· ';
+}
+@media (max-width: 480px) {
+  .al-ind-log li {
+    grid-template-columns: auto 1fr;
+  }
+  .al-ind-when {
+    grid-column: 1 / -1;
+  }
+}

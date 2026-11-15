@@ -14,6 +14,7 @@ import { isValidV4Company, migrateV3, parseModels } from './migrate4';
 import { isValidRightsState, parseRightsOption } from './rightsSave';
 import { isValidLoyaltyState } from './loyaltySave';
 import { isValidRivalsState, parseRivalsOption } from './relations';
+import { MAX_COMPANIES } from './industry';
 import { isValidScenarioState, parseScenarioOption } from './scenarioSave';
 import { CITY, REGIONS } from './cities';
 import { REAL_AIRLINE } from './realAirlines';
@@ -73,6 +74,8 @@ export function parseOptions(v: unknown): AirlineOptions {
     ...parseRightsOption(o as Record<string, unknown>),
     // 라이벌 성격 (없으면 키를 두지 않는다: 켜짐)
     ...parseRivalsOption(o as Record<string, unknown>),
+    // 시장 변화 (없으면 키를 두지 않는다: 켜짐)
+    ...(typeof o.industry === 'boolean' ? { industry: o.industry } : {}),
     // 역사 시나리오 (없으면 키를 두지 않는다: scenarioSave.ts)
     ...parseScenarioOption(o as Record<string, unknown>),
   };
@@ -173,7 +176,7 @@ export function isValidState(v: unknown): v is AirlineState {
   if (s.version !== 4) return false;
   if (!isInt(s.nextId) || !isInt(s.t) || !isInt(s.startT) || s.startT > s.t || s.q !== Math.floor(s.t / 3) || s.startQ !== Math.floor(s.startT / 3) || !isInt(s.startYear)) return false;
   if (s.phase !== 'manage' && s.phase !== 'gameover') return false;
-  if (!Array.isArray(s.companies) || s.companies.length < 1 || s.companies.length > (isObj(s.options) && s.options.world === true ? MAX_WORLD_COMPANIES : 4)) return false;
+  if (!Array.isArray(s.companies) || s.companies.length < 1 || s.companies.length > (isObj(s.options) && s.options.world === true ? MAX_WORLD_COMPANIES : MAX_COMPANIES)) return false;
   if (!s.companies.every((c) => isValidCompany(c, s.nextId))) return false;
   if (!s.companies.every((c) => c.rescuedAt === undefined || isInt(c.rescuedAt))) return false;
   if (!s.companies.every((c) => (c.dormant === undefined || typeof c.dormant === 'boolean') && (c.joinYear === undefined || isInt(c.joinYear)) && (c.predicted === undefined || typeof c.predicted === 'boolean') && (!c.dormant || c.out))) return false;
@@ -194,6 +197,10 @@ export function isValidState(v: unknown): v is AirlineState {
   // 주식 (예전 저장에는 없다): n × n, 0~100%, 한 회사를 남들이 가진 몫 합은 100% 안
   if (s.stakes !== undefined && !(Array.isArray(s.stakes) && s.stakes.length === n && s.stakes.every((row, i) => Array.isArray(row) && row.length === n && row.every((v, j) => isNum(v) && v >= 0 && v <= 100 && (i !== j || v === 0)) && row.reduce((a, b) => a + b, 0) <= 100.001))) return false;
   if (!s.companies.every((c) => (c.mergedInto === undefined || isIndex(c.mergedInto, n)) && (c.lastIssue === undefined || isInt(c.lastIssue)))) return false;
+  // 시장 변화 (예전 저장에는 없다: industry.ts): 새 회사가 들어온 달·법정 관리·인수 제안·빠진 까닭, 업계 연표
+  if (!s.companies.every((c) => (c.born === undefined || isInt(c.born)) && (c.rescued === undefined || isInt(c.rescued)) && (c.fate === undefined || typeof c.fate === 'string'))) return false;
+  if (!s.companies.every((c) => c.sale === undefined || (isObj(c.sale) && isIndex(c.sale.buyer, n) && isInt(c.sale.until) && isNum(c.sale.price) && (c.sale.why === 'history' || c.sale.why === 'distress')))) return false;
+  if (s.industry !== undefined && !(Array.isArray(s.industry) && s.industry.length <= 200 && s.industry.every((e) => isObj(e) && isInt(e.t) && typeof e.kind === 'string' && typeof e.text === 'string' && (e.company === undefined || isIndex(e.company, n)) && (e.other === undefined || isIndex(e.other, n))))) return false;
   // 항공 동맹 (예전 저장에는 없다): 회사마다 동맹 하나, 동맹마다 둘~셋
   if (s.alliances !== undefined) {
     if (!Array.isArray(s.alliances)) return false;

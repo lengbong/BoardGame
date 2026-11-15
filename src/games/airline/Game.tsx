@@ -246,7 +246,15 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
     for (const e of game.events) {
       if (e.type === 'bankrupt') {
         alSound.bankrupt();
-        setBanner({ id: fxSeq++, text: `🛑 ${game.companies[e.company].name} 운항 중단`, color: '#a52a2f' });
+        const gone = game.companies[e.company];
+        setBanner({ id: fxSeq++, text: `🛑 ${gone.name} ${gone.fate ?? '운항 중단'}`, color: '#a52a2f' });
+      } else if (e.type === 'industry') {
+        // 업계 변화: 새 회사 취항·법정 관리·새 이름 (industry.ts)
+        const co = game.companies[e.company];
+        if (!co) continue;
+        if (e.what === 'enter') alSound.chime();
+        else alSound.bell();
+        setBanner({ id: fxSeq++, text: e.what === 'enter' ? `🆕 ${co.name} 새로 취항` : e.what === 'rescue' ? `⚖️ ${co.name} 법정 관리` : `🔁 ${co.name}(으)로 새 출발`, color: coColors(co).main });
       }
     }
     if (monthEnd) {

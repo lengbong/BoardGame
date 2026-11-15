@@ -2,7 +2,7 @@ import { withJosa } from '../../lib/korean';
 import { AWARD_INFO } from './awards';
 import { alliesOf, areAllied } from './alliances';
 import { CITY, pairKey } from './cities';
-import { PERSONA, assignPersonas, hash01, personaDef, personaOf, quoteOf, rivalSalt, rivalsOn, strHash, type QuoteKind } from './personality';
+import { PERSONA, assignPersonas, hash01, personaDef, personaOf, pickPersona, quoteOf, rivalSalt, rivalsOn, strHash, type QuoteKind } from './personality';
 import { companyValue, routeIndex } from './simulate';
 import { stakeOf } from './stocks';
 import { monthOf, yearOfM } from './time';
@@ -190,6 +190,34 @@ function isBook(v: RivalBook | undefined, n: number): v is RivalBook {
 export function emptyBook(state: Pick<AirlineState, 'companies' | 'startT'>): RivalBook {
   const n = state.companies.length;
   return { persona: assignPersonas(state).slice(), rel: grid(n, 0), notes: [], truces: [], offers: [], visit: grid(n, -999), ask: grid(n, -999) };
+}
+
+/**
+ * 판 가운데 새 회사가 들어올 때 장부를 한 칸 늘린다 (state는 새 회사를 넣기 전).
+ * 장부가 아직 없으면 먼저 지금 회사들로 만든다: 회사 목록이 바뀌면 판 씨앗이 바뀌어 기존 성격이 흔들리지 않게.
+ * 새 회사의 성격은 지금 날고 있는 컴퓨터와 겹치지 않게, 사이는 모두 보통에서 시작한다.
+ */
+export function extendRivalBook(state: AirlineState, newcomer: Company, seed: number): RivalBook | undefined {
+  if (!rivalsOn(state)) return state.rivals;
+  const b = copyBook(state);
+  const n = state.companies.length;
+  const used = state.companies.map((c, i) => (c.out ? null : personaOf({ ...state, rivals: b }, i)));
+  const pad = (m: number[][], v: number) => [...m.map((r) => [...r, v]), Array<number>(n + 1).fill(v)];
+  return {
+    ...b,
+    persona: [...b.persona, newcomer.kind === 'human' ? null : pickPersona(newcomer, used, seed)],
+    rel: pad(b.rel, 0),
+    visit: pad(b.visit, -999),
+    ask: pad(b.ask, -999),
+    ...(b.seen ? { seen: pad(b.seen, 0) } : {}),
+    ...(b.said ? { said: pad(b.said, relBand(0)) } : {}),
+  };
+}
+
+/** 장부가 없으면 지금 회사들로 만들어 둔다 (회사 이름이 바뀌기 전에: 판 씨앗이 바뀌어도 성격이 그대로이게) */
+export function fixRivalBook(state: AirlineState): AirlineState {
+  if (!rivalsOn(state) || isBook(state.rivals, state.companies.length)) return state;
+  return { ...state, rivals: copyBook(state) };
 }
 
 /** 고쳐 쓸 수 있게 장부를 베낀다 (없거나 모양이 틀리면 새 장부) */

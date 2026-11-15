@@ -522,7 +522,9 @@ describe('컴퓨터끼리 끝까지 (성격 켜기)', () => {
       }
       expect(s.phase).toBe('gameover');
       expect(s.result!.winners.length).toBeGreaterThan(0);
-      expect(new Set(s.rivals!.persona).size).toBe(4);
+      // 처음 네 회사는 성격이 모두 다르다 (판 가운데 생긴 회사는 그때 날던 회사와 겹치지 않게 받는다)
+      expect(new Set(s.rivals!.persona.slice(0, 4)).size).toBe(4);
+      expect(s.rivals!.persona.length).toBe(s.companies.length);
       for (const row of s.rivals!.rel) for (const v of row) expect(Math.abs(v)).toBeLessThanOrEqual(100);
       // 사람이 없으면 까닭(사람에게 보여 줄 것)은 적지 않는다
       expect(s.rivals!.notes.length).toBe(0);

@@ -281,6 +281,19 @@ export function assignPersonas(state: Pick<AirlineState, 'startT' | 'companies'>
   return out;
 }
 
+/**
+ * 판 가운데 새로 들어온 컴퓨터 회사의 성격: 지금 날고 있는 컴퓨터들과 겹치지 않고 사업 모델에 맞는 것을 씨앗대로 고른다
+ * (모두 쓰였으면 사업 모델에 맞는 아무것이나).
+ */
+export function pickPersona(c: Pick<Company, 'bizModel'>, used: readonly (PersonaId | null)[], seed: number): PersonaId {
+  const deck = [...PERSONA_IDS];
+  for (let k = deck.length - 1; k > 0; k--) {
+    const j = Math.floor(hash01(seed, k, 91) * (k + 1));
+    [deck[k], deck[j]] = [deck[j], deck[k]];
+  }
+  return deck.find((id) => fits(c, id) && !used.includes(id)) ?? deck.find((id) => fits(c, id)) ?? 'saver';
+}
+
 /** 이 회사의 경영진 성격 (사람 회사이거나 성격을 끈 판이면 null). 장부에 적힌 것이 먼저, 없으면 판 씨앗으로 */
 export function personaOf(state: Pick<AirlineState, 'options' | 'companies' | 'startT' | 'rivals'>, ci: number): PersonaId | null {
   if (!rivalsOn(state)) return null;

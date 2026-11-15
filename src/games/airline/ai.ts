@@ -67,6 +67,7 @@ import {
   slotCapacity,
   slotsUsed,
   spareCover,
+  yearProfit,
   type DraftPlane,
 } from './simulate';
 import { monthOf, yearOf } from './time';
@@ -74,6 +75,7 @@ import { aiRights } from './aiRights';
 import { aiLoyalty } from './aiLoyalty';
 import { aiRivals, allyRate, fareBounds, investMult, mealFor, modelTaste, newRoutesFor, pairPull, renewAgeFor, reserveMult, rivalWeights, usedAgeFor } from './aiPersonality';
 import { rightsLeftFor } from './rights';
+import { aliveCount, industryOn, isYoung, recentlyMerged } from './industry';
 import type { AdMedia, AirlineAction, AirlineState, BusinessKind, Cabin, CampaignKind, Company, FacilityKind, ModelDef, RegionId, Rng } from './types';
 
 export type AiLevel = 'ai-easy' | 'ai-normal';
@@ -391,7 +393,8 @@ export class Planner {
   /**
    * 주식: 돈이 아주 넉넉하면 남는 돈을 다른 회사 주식에 넣는다.
    * - 치열한 회사는 다섯 해가 지나면, 돈이 바닥난 컴퓨터 회사나 크기가 우리의 20%도 안 되는 컴퓨터 회사를 사들여 51%를 넘기면 합친다
-   *   (보통·느긋은 사들이지 않는다: 라이벌이 하나둘 사라지면 사람과 겨룰 상대가 줄어든다)
+   * - 시장 변화를 켠 판(industry.ts)이면 보통 성향도 여섯 해가 지나 회사가 넷 넘게 날 때, 두 달 넘게 돈이 모자란 회사나 12%도 안 되는 회사를 사들인다
+   *   (느긋은 사들이지 않는다. 시장 변화를 끄면 보통도 사들이지 않는다: 새 회사가 없으니 사람과 겨룰 상대가 줄어든다)
    * - 그 밖에는 배당 수익률이 좋은 회사를 20%까지 (사람 회사는 49%까지만 살 수 있다)
    */
   private manageStakes(): void {
@@ -405,12 +408,16 @@ export class Planner {
         return;
       }
     }
-    // 2) 작은 컴퓨터 회사 사들이기
-    const hunt = this.style === 'fierce' && this.s.t - this.s.startT >= 60;
-    if (hunt) {
+    // 2) 작은 컴퓨터 회사 사들이기 (시장 변화를 켠 판이면 보통 성향도, 돈이 바닥나 가는 회사나 아주 작은 회사를 — 새 회사가 빈자리를 채운다)
+    const elapsed = this.s.t - this.s.startT;
+    const fierce = this.style === 'fierce' && elapsed >= 60;
+    const normal = this.style === 'normal' && industryOn(this.s) && elapsed >= 72 && aliveCount(this.s) > 3;
+    // 새로 생긴 회사는 몇 해 동안 창업자가 주식을 내놓지 않고, 한 번 합친 회사는 몇 해 동안 소화한다
+    if ((fierce || normal) && !recentlyMerged(this.s, this.ci)) {
+      const weak = (i: number) => (fierce ? companyValue(this.s, i) < mine * 0.2 : companyValue(this.s, i) < mine * 0.08 && yearProfit(this.s, i) < 0);
       const prey = this.s.companies
         .map((x, i) => ({ x, i }))
-        .filter(({ x, i }) => i !== this.ci && !x.out && x.kind !== 'human' && (x.crisis > 0 || companyValue(this.s, i) < mine * 0.2))
+        .filter(({ x, i }) => i !== this.ci && !x.out && x.kind !== 'human' && !x.sale && (x.crisis > (fierce ? 0 : 1) || (!isYoung(this.s, x) && weak(i))))
         .sort((p, q) => stakeOf(this.s, q.i, this.ci) - stakeOf(this.s, p.i, this.ci))[0];
       if (prey) {
         // 한 차례에 과반까지 사들일 수 있다 (인수 제안을 한꺼번에 내는 셈)

@@ -252,7 +252,9 @@ export type ChoiceEffect =
   /** 운항 인력(조종사·객실 승무원) 임금 수준 더하기 */
   | { kind: 'pay'; amount: number }
   | { kind: 'morale'; amount: number }
-  | { kind: 'academy' };
+  | { kind: 'academy' }
+  /** 팔리길 기다리는 회사를 인수한다 (industry.ts, 값은 고른 선택지의 cost) */
+  | { kind: 'acquire'; target: number };
 
 export interface ChoiceOption {
   label: string;
@@ -511,6 +513,37 @@ export interface Company {
   loyalty?: LoyaltyState;
   /** 브랜드 자리 (brandPosition.ts). 없으면 정하지 않았다: 효과 없음 (예전 저장) */
   brandPos?: BrandPosState;
+  /** 판 가운데 새로 생긴 회사면 들어온 달 (없으면 처음부터: industry.ts) */
+  born?: number;
+  /** 법정 관리(회생 절차)를 받은 달 (한 회사에 한 번) */
+  rescued?: number;
+  /** 사겠다는 회사를 기다리는 중 (사람 회사가 결정 사건으로 정한다: industry.ts) */
+  sale?: SaleOffer;
+  /** 판에서 빠진 까닭 한 마디 ('운항 중단', '알래스카항공과 합침' …). 없으면 운항 중단 */
+  fate?: string;
+}
+
+/** 팔리길 기다리는 회사: buyer가 until 달 결산 전까지 정한다 */
+export interface SaleOffer {
+  buyer: number;
+  until: number;
+  /** 인수 값 (억, 남은 주식) */
+  price: number;
+  /** history: 실제 역사의 합병, distress: 돈이 바닥나 */
+  why: 'history' | 'distress';
+}
+
+/** 업계 연표 한 줄 (industry.ts): 새 회사·파산·인수·이름 바꾸기·법정 관리·역사의 위기 */
+export type IndustryKind = 'enter' | 'cease' | 'merge' | 'rename' | 'rescue' | 'crisis' | 'survive' | 'world';
+
+export interface IndustryEntry {
+  t: number;
+  kind: IndustryKind;
+  /** 주인공 회사 (판 밖 일이면 없다) */
+  company?: number;
+  /** 사들인 회사 */
+  other?: number;
+  text: string;
 }
 
 /** 광고 매체 (ads.ts) */
@@ -571,6 +604,8 @@ export interface AirlineOptions {
   rights?: RightsMode;
   /** 라이벌 경영진 성격과 관계 (relations.ts). 없으면 켜짐 */
   personas?: boolean;
+  /** 시장 변화: 새 회사 등장·파산과 법정 관리·인수·실제 항공사의 역사 (industry.ts). 없으면 켜짐 */
+  industry?: boolean;
 }
 
 export interface AirlineSetup {
@@ -968,6 +1003,8 @@ export type GameEvent =
   | { id: number; type: 'month'; t: number }
   | { id: number; type: 'quarter'; q: number }
   | { id: number; type: 'bankrupt'; company: number }
+  /** 업계 변화 연출: 새 회사·법정 관리·이름 바꾸기 */
+  | { id: number; type: 'industry'; company: number; what: 'enter' | 'rescue' | 'rename' }
   | RightsEvent
   | LoyaltyEvent
   | { id: number; type: 'gameover' };
@@ -1036,6 +1073,8 @@ export interface AirlineState {
   rights?: RightsBook;
   /** 라이벌 성격과 관계 장부 (예전 저장에는 없다: relations.ts) */
   rivals?: RivalBook;
+  /** 업계 연표 (예전 저장에는 없다: industry.ts) */
+  industry?: IndustryEntry[];
   nextId: number;
   result: GameResult | null;
   challenge: ChallengeProgress | null;

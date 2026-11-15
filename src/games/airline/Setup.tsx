@@ -29,6 +29,7 @@ import { Meter } from './ui';
 import { RightsSetup } from './RightsSetup';
 import { LoyaltyHowTo } from './LoyaltyCard';
 import { RivalsSetup } from './RivalsCard';
+import { IndustrySetup } from './IndustryCard';
 import { ScenarioModeIcon, ScenarioPicker } from './ScenarioPicker';
 import { SCENARIO } from './scenarios';
 
@@ -340,6 +341,7 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
             <IconPicker caption="시작 자금" value={opt.money} options={MONEY_CHOICES} onChange={(money) => setOpt({ money })} testId="al-money" />
             <IconPicker caption="라이벌 성향" value={opt.aiStyle} options={STYLE_CHOICES} onChange={(aiStyle) => setOpt({ aiStyle })} testId="al-aistyle" />
             <RivalsSetup opt={opt} setOpt={setOpt} />
+            <IndustrySetup opt={opt} setOpt={setOpt} />
             <IconPicker caption="실제 역사" value={opt.history === false ? 'off' : 'on'} options={HISTORY_CHOICES} onChange={(v) => setOpt({ history: v === 'on' })} testId="al-history" />
             <p className="al-note">
               {opt.history === false

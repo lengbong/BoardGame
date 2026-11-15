@@ -1,4 +1,3 @@
-import { shownCompanies } from './rules';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import './report.css';
 import { coColors, realOf } from './brand';
@@ -9,7 +8,8 @@ import { CITY, REGIONS, REGION_INFO } from './cities';
 import { FIXED_ICON } from './events';
 import { axisMoney, fmtMoney, fmtPax, pct, signedMoney } from './format';
 import { GRADE_INFO } from './goals';
-import { rankings } from './rules';
+import { existedAt, exitLabel } from './industry';
+import { rankings, shownCompanies } from './rules';
 import { companyValue, pairDemand, regionsServed } from './simulate';
 import { staffTotal } from './staff';
 import { mLabel, mOf, mShort, monthOf, qLabel, qShort, quarterOf, yearOf, yearOfM } from './time';
@@ -63,14 +63,22 @@ export function ReportView({ state, viewer }: { state: AirlineState; viewer: num
 
 const costOf = (r: CompanyReport) => r.fuel + r.crew + r.airport + r.service + r.sales + r.lease + r.fleet + r.branch + r.ads + r.interest + r.disrupt + r.staff + r.tax;
 
-/** 달 기록에서 회사마다 선 (운항을 멈춘 회사는 멈춘 뒤로 비운다) */
+/** 그래프에 그릴 회사: 보일 회사 가운데 기록 안에 한 번이라도 있었던 회사 (판 가운데 생긴 회사는 생긴 뒤부터, 이번 달에 막 생긴 회사는 빼고) */
+function chartCos(state: AirlineState, viewer: number): number[] {
+  return shownCompanies(state, viewer).filter((i) => state.months.some((p) => existedAt(state.companies[i], p.t) && (p.value[i] ?? 0) !== 0));
+}
+
+/** 달 기록에서 회사마다 선 (운항을 멈춘 회사는 멈춘 뒤로, 새로 생긴 회사는 생기기 전을 비운다) */
 function monthSeries(state: AirlineState, viewer: number, pick: (p: MonthPoint, i: number) => number): Series[] {
-  return shownCompanies(state, viewer).map((i) => [state.companies[i], i] as const).map(([c, i]) => ({
-    name: c.name,
-    color: coColors(c).main,
-    shape: SEAT_SHAPES[c.seat],
-    values: state.months.map((p) => (c.out && p.value[i] === 0 ? null : pick(p, i))),
-  }));
+  return chartCos(state, viewer).map((i) => {
+    const c = state.companies[i];
+    return {
+      name: c.name,
+      color: coColors(c).main,
+      shape: SEAT_SHAPES[c.seat],
+      values: state.months.map((p) => ((c.out && p.value[i] === 0) || !existedAt(c, p.t) ? null : pick(p, i))),
+    };
+  });
 }
 
 function monthTicks(state: AirlineState) {
@@ -312,7 +320,8 @@ function YearView({ state, viewer }: { state: AirlineState; viewer: number }) {
     value: r.profit,
     detail: [r.now ? '지금까지' : '한 해', `수입 ${fmtMoney(r.revenue)}`, `비용 ${fmtMoney(r.cost)}`, `손님 ${fmtPax(r.pax)}`, `탑승률 ${pct(r.lf)}`],
   }));
-  const ids = shownCompanies(state, viewer);
+  // 한 해라도 날았던 회사만 (판 가운데 생긴 회사·일찍 문을 닫은 회사가 많아도 막대가 빽빽하지 않게)
+  const ids = shownCompanies(state, viewer).filter((i) => years.some((y) => y.companies[i] && (y.companies[i].flights > 0 || y.companies[i].profit !== 0)));
   const coLegend = ids.map((i) => state.companies[i]).map((c) => ({ name: c.name, color: coColors(c).main, shape: SEAT_SHAPES[c.seat] }));
   return (
     <>
@@ -655,13 +664,18 @@ function OpsView({ state, viewer }: { state: AirlineState; viewer: number }) {
 function QuarterView({ state, viewer }: { state: AirlineState; viewer: number }) {
   const [table, setTable] = useState(false);
   const hist = state.history;
-  const ids = shownCompanies(state, viewer);
-  const series: Series[] = ids.map((i) => [state.companies[i], i] as const).map(([c, i]) => ({
-    name: c.name,
-    color: coColors(c).main,
-    shape: SEAT_SHAPES[c.seat],
-    values: hist.map((h) => (c.out && h.value[i] === 0 ? null : h.value[i])),
-  }));
+  // 분기 끝 달(h.q의 마지막 달)에 있었던 회사만 (새로 생긴 회사는 생긴 뒤부터)
+  const was = (i: number, q: number) => existedAt(state.companies[i], q * 3 + 2);
+  const ids = shownCompanies(state, viewer).filter((i) => hist.some((h) => was(i, h.q) && (h.value[i] ?? 0) !== 0));
+  const series: Series[] = ids.map((i) => {
+    const c = state.companies[i];
+    return {
+      name: c.name,
+      color: coColors(c).main,
+      shape: SEAT_SHAPES[c.seat],
+      values: hist.map((h) => ((c.out && h.value[i] === 0) || !was(i, h.q) ? null : h.value[i])),
+    };
+  });
   const labels = hist.map((h, k) => (k === 0 ? '시작' : qShort(h.q)));
   const span = hist.length;
   const every = span > 80 ? 5 : span > 40 ? 2 : 1;
@@ -723,7 +737,7 @@ function QuarterView({ state, viewer }: { state: AirlineState; viewer: number })
                     <tr key={h.q}>
                       <th>{h.q === hist[0].q ? '시작' : qLabel(h.q)}</th>
                       {ids.map((i) => (
-                        <td key={i}>{fmtMoney(h.value[i] ?? 0)}</td>
+                        <td key={i}>{was(i, h.q) ? fmtMoney(h.value[i] ?? 0) : '—'}</td>
                       ))}
                     </tr>
                   ))}
@@ -840,7 +854,7 @@ function QuarterView({ state, viewer }: { state: AirlineState; viewer: number })
           <RIcon kind="medal" /> 회사 비교 <small>회사 가치 순</small>
         </h4>
         <ul className="al-cmp">
-          {order.map((i, rank) => {
+          {order.filter((i) => !state.companies[i].out || state.companies[i].kind === 'human').map((i, rank) => {
             const c = state.companies[i];
             const r = rep?.companies[i];
             const last = c.reviews.length > 0 ? c.reviews[c.reviews.length - 1] : null;
@@ -895,6 +909,14 @@ function QuarterView({ state, viewer }: { state: AirlineState; viewer: number })
             );
           })}
         </ul>
+        {(() => {
+          const gone = order.filter((i) => state.companies[i].out && state.companies[i].kind !== 'human');
+          return gone.length > 0 ? (
+            <p className="al-muted al-cmp-gone">
+              판에서 빠진 회사: {gone.map((i) => `${state.companies[i].name}(${exitLabel(state, state.companies[i])})`).join(' · ')}
+            </p>
+          ) : null;
+        })()}
         <MoreInfo label="표로 보기">
           <div className="al-table-wrap">
             <table className="al-table al-compare">
@@ -921,7 +943,7 @@ function QuarterView({ state, viewer }: { state: AirlineState; viewer: number })
                   const r = rep?.companies[i];
                   return (
                     <tr key={i} className={i === viewer ? 'al-row-mine' : ''}>
-                      <td>{c.out ? '운항 중단' : `${rank + 1}등`}</td>
+                      <td>{c.out ? exitLabel(state, c) : `${rank + 1}등`}</td>
                       <td>
                         <CoName c={c} /> <small className="al-muted">{CITY[c.hub].name}</small>
                       </td>

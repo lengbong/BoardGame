@@ -4,6 +4,7 @@ import { seededRandom } from '../../lib/random';
 import { MODEL } from './aircraft';
 import { aiManage, aiTurn, planTurn } from './ai';
 import { advise } from './advisor';
+import { LCC_TURN } from './bizmodel';
 import { CHALLENGES } from './challenges';
 import { AIRPORT_INFO, CITY, airportClass, dist } from './cities';
 import { MAX_ROUTES, actor, applyAction, createGame } from './rules';
@@ -35,7 +36,8 @@ function checkFleet(s: AirlineState): void {
         expect(airportClass(CITY[r.a], year)).toBeGreaterThanOrEqual(m.runway);
         expect(airportClass(CITY[r.b], year)).toBeGreaterThanOrEqual(m.runway);
         expect(leg.freq).toBeGreaterThanOrEqual(1);
-        expect(leg.freq).toBeLessThanOrEqual(maxFreq(m, d));
+        // 저가항공은 회전이 빨라 같은 비행시간에 더 자주 난다 (시장 변화로 생긴 새 저가항공)
+        expect(leg.freq).toBeLessThanOrEqual(c.bizModel === 'lcc' ? Math.ceil(maxFreq(m, d) / LCC_TURN) : maxFreq(m, d));
         expect(c.branches).toContain(r.a);
         expect(c.branches).toContain(r.b);
       }
@@ -223,7 +225,8 @@ describe('컴퓨터끼리 끝까지', () => {
       let s = createGame(setup(kinds, { years: 10 }, swap ? ['paris', 'newyork'] : ['newyork', 'paris']), rng);
       const H = swap ? 1 : 0;
       let guard = 0;
-      while (s.phase !== 'gameover' && guard++ < 400) {
+      // 시장 변화로 새 회사가 생기면 한 달 차례가 늘어난다
+      while (s.phase !== 'gameover' && guard++ < 1500) {
         const ci = s.order[s.turnPos];
         if (ci === H) {
           if (s.companies[ci].choice) s = applyAction(s, { type: 'choose', option: 0 }, rng);

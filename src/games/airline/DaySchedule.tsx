@@ -3,6 +3,8 @@ import { coColors, inkOn } from './brand';
 import { CITY, dist } from './cities';
 import { legHours, routeOf } from './simulate';
 import { BAND_INFO, bandCounts } from './timetable';
+import { BAND_ICON, FleetIcon } from './FleetArt';
+import { MoreInfo } from './StaffArt';
 import type { AirlineState, Plane } from './types';
 
 /**
@@ -71,9 +73,19 @@ export function DaySchedule({ state, ci, planes, highlight, limit = 10 }: { stat
       <div className="al-day-row al-day-axis" aria-hidden="true">
         <span className="al-day-name" />
         <div className="al-day-track al-day-track-axis">
-          {BAND_INFO.map((b) => (
+          {BAND_INFO.map((b, i) => (
             <span key={b.name} className="al-day-band-label" style={{ left: pos(b.start), width: width(b.start, b.start + b.len) }}>
-              {b.icon} {b.name}
+              <FleetIcon kind={BAND_ICON[i]} size={13} /> {b.name}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="al-day-row al-day-hours-row" aria-hidden="true">
+        <span className="al-day-name" />
+        <div className="al-day-hours">
+          {[6, 9, 12, 15, 18, 21, 24, 27].map((h) => (
+            <span key={h} style={{ left: pos(h) }}>
+              {String(h % 24).padStart(2, '0')}시
             </span>
           ))}
         </div>
@@ -110,7 +122,7 @@ export function DaySchedule({ state, ci, planes, highlight, limit = 10 }: { stat
         );
       })}
       {flying.length > shown.length && <p className="al-muted al-tip">비행기 {flying.length - shown.length}대 더 있어요.</p>}
-      <p className="al-muted al-tip">어느 바쁜 하루를 어림한 것이에요 (05시 → 다음 날 05시). 막대 하나가 한 편이고, 노선의 시간대 몫대로 놓았어요.</p>
+      <MoreInfo label="이 표는 어떻게 읽어요?">어느 바쁜 하루를 어림한 것이에요 (05시 → 다음 날 05시). 막대 하나가 한 편(도착 도시 이름)이고, 노선의 시간대 몫대로 놓았어요.</MoreInfo>
     </div>
   );
 }

@@ -20,6 +20,9 @@ import {
 import { fmtMoney, signedMoney } from './format';
 import { cabinChangeBlocker, cabinTargets, refitCost } from './rules';
 import { cabinOutlook } from './simulate';
+import { FinIcon } from './FinanceArt';
+import { FleetIcon } from './FleetArt';
+import { MoreInfo } from './StaffArt';
 import type { AirlineAction, AirlineState, Cabin, ModelDef, Pitch, Plane } from './types';
 import { ActButton, Stepper } from './ui';
 
@@ -133,8 +136,8 @@ export function CabinEditor({ state, viewer, plane, canAct, perform, onClose }: 
   return (
     <div className="al-cabin" data-testid={`al-cabin-${plane.id}`}>
       <div className="al-cabin-head">
-        <h5>
-          🪑 {m.name} 좌석 배치 <small className="al-muted">· {seats}석</small>
+        <h5 className="al-fl-cabin-title">
+          <FleetIcon kind="seat" size={16} /> {m.name} 좌석 배치 <small className="al-muted">· {seats}석</small>
         </h5>
         <button type="button" className="btn btn-small btn-ghost" onClick={onClose}>
           닫기
@@ -185,20 +188,31 @@ export function CabinEditor({ state, viewer, plane, canAct, perform, onClose }: 
               ))}
             </div>
           </div>
-          <p className="al-cabin-outlook">
+          <div className="al-cabin-outlook al-fl-outlook">
             {plane.legs.length > 0 ? (
               <>
-                지금 노선 이익 (한 달) <b>{signedMoney(Math.round(outlook.now))}</b> → 이 배치면 <b className={outlook.next >= outlook.now ? 'al-good' : 'al-bad'}>{signedMoney(Math.round(outlook.next))}</b>
-                <small className="al-muted"> · 좌석 {outlook.seatsNow} → {outlook.seatsNext}</small>
+                <span className="al-fl-out-box">
+                  <small>지금 (한 달 노선 이익)</small>
+                  <b>{signedMoney(Math.round(outlook.now))}</b>
+                  <small className="al-muted">{outlook.seatsNow}석</small>
+                </span>
+                <svg className="al-fl-out-arrow" width={28} height={16} viewBox="0 0 28 16" aria-hidden="true">
+                  <path d="M2 8h22M18 3l6 5-6 5" />
+                </svg>
+                <span className={`al-fl-out-box ${outlook.next >= outlook.now ? 'al-fl-out-up' : 'al-fl-out-down'}`}>
+                  <small>이 배치면</small>
+                  <b className={outlook.next >= outlook.now ? 'al-good' : 'al-bad'}>{signedMoney(Math.round(outlook.next))}</b>
+                  <small className="al-muted">{outlook.seatsNext}석</small>
+                </span>
               </>
             ) : (
               <span className="al-muted">노선에 넣으면 배치에 따른 이익 변화를 미리 보여 줘요.</span>
             )}
-          </p>
-          <p className="al-muted al-tip">
-            고급 좌석은 사업 손님에게 비싸게 팔리고(먼 길일수록), 손님이 우리를 더 골라요. 대신 한 자리가 일반석 여러 개만큼 넓어서 전체 좌석이 줄어요. 일반석이 넓으면 편안해서 손님과 평판이
-            오르고, 촘촘하면 좌석이 늘지만 덜 좋아해요.
-          </p>
+          </div>
+          <MoreInfo label="고급 좌석과 간격은 어떻게 달라요?">
+            고급 좌석은 사업 손님에게 비싸게 팔리고(먼 길일수록), 손님이 우리를 더 골라요. 대신 한 자리가 일반석 여러 개만큼 넓어서 전체 좌석이 줄어요. 일반석이 넓으면 편안해서 손님과 평판이 오르고, 촘촘하면
+            좌석이 늘지만 덜 좋아해요.
+          </MoreInfo>
           <div className="al-cabin-apply">
             {same.length > 1 && (
               <label className="al-check">
@@ -213,7 +227,9 @@ export function CabinEditor({ state, viewer, plane, canAct, perform, onClose }: 
           </div>
         </>
       )}
-      <h5 className="al-meal-title">🍽️ 기내식</h5>
+      <h5 className="al-meal-title al-fl-cabin-title">
+        <FinIcon kind="meal" size={16} /> 기내식
+      </h5>
       <div className="al-service-row" role="radiogroup" aria-label="기내식">
         {[1, 2, 3, 4, 5].map((lv) => {
           const o = plane.legs.length > 0 ? mealOutlook(lv) : null;
@@ -236,9 +252,21 @@ export function CabinEditor({ state, viewer, plane, canAct, perform, onClose }: 
           );
         })}
       </div>
-      <p className="al-muted al-tip">기내식은 언제든 공짜로 바꿀 수 있어요. 좋을수록 손님 한 명당 비용이 늘지만 손님이 더 고르고 평판이 올라요.{same.length > 1 && all ? ` (체크하면 ${same.length}대 모두 바뀌어요)` : ''}</p>
+      <p className="al-muted al-tip">
+        기내식은 언제든 공짜로 바꿀 수 있어요.{same.length > 1 && all ? ` (체크하면 ${same.length}대 모두 바뀌어요)` : ''}
+      </p>
+      <MoreInfo>좋을수록 손님 한 명당 비용이 늘지만 손님이 우리를 더 고르고 평판이 올라요. 단계마다 아래 ‘비용 ×’는 기본 식사에 견준 손님 한 명당 비용이에요.</MoreInfo>
     </div>
   );
+}
+
+/** 좌석만 짧게 (예: '93석 (비즈 17 · 일반 76, 보통)') — 기내식은 따로 아이콘과 함께 쓴다 */
+export function cabinSeatText(plane: Plane): string {
+  const m = MODEL[plane.model];
+  if (fixedCabin(m)) return `${m.seats}석 (한 등급)`;
+  const c = plane.cabin;
+  const parts = [c.first > 0 ? `일등 ${c.first}` : '', c.business > 0 ? `비즈 ${c.business}` : '', `일반 ${economySeats(m, c)}`].filter(Boolean);
+  return `${cabinSeats(m, c)}석 (${parts.join(' · ')}, ${PITCH_NAMES[c.pitch]})`;
 }
 
 /** 비행기 카드에 쓰는 한 줄 요약 */

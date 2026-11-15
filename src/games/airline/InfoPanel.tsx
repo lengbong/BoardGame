@@ -13,8 +13,13 @@ import { WEEK_HOURS, branchCost, branchUpkeep, businessCost, legFreq, pairDemand
 import { monthOf, yearOf } from './time';
 import type { AirlineAction, AirlineState } from './types';
 import { cityPhoto } from './images';
-import { ActButton, CoName, LoadMeter, Meter, Photo, Stars } from './ui';
+import { ActButton, CoName, LoadMeter, Photo } from './ui';
 import type { Selection } from './MapView';
+import { coColors } from './brand';
+import { FinIcon, ProgressRing } from './FinanceArt';
+import { AnyIconView, MapIcon, MiniBar, MixBar, RouteArt, SeasonChart, ShareStack, StarRow, StatRing, UseBar, adviceIcon, weatherIcon, type Tone } from './MapArt';
+import { MoreInfo, StaffIcon } from './StaffArt';
+import './map-panel.css';
 
 interface Common {
   state: AirlineState;
@@ -99,83 +104,107 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
             ✕
           </button>
         </header>
-        <dl className="al-traits">
-          <div>
-            <dt>도시 크기</dt>
-            <dd>
-              <Meter value={size / 10} tone="blue" label={`도시 크기 ${size.toFixed(1)}`} /> {size.toFixed(1)}
-              {later > size + 0.4 && <span className="al-up" title="10년 뒤 더 커져요"> ↗</span>}
-            </dd>
+        <div className="al-mp-tiles">
+          <div className="al-mp-tile">
+            <StatRing value={size / 10} text={size.toFixed(1)} tone="blue" size={44} label={`도시 크기 ${size.toFixed(1)} / 10`} />
+            <span>
+              <small>도시 크기</small>
+              <b>
+                {size.toFixed(1)}
+                <small className="al-muted"> / 10</small>
+              </b>
+              {later > size + 0.4 && (
+                <small className="al-up" title="10년 뒤 더 커져요">
+                  <MapIcon kind="up" size={12} /> 10년 뒤 {later.toFixed(1)}
+                </small>
+              )}
+            </span>
           </div>
-          <div>
-            <dt>손님 성격</dt>
-            <dd className="al-mix">
-              <span className="al-mix-bar" aria-hidden="true">
-                <span className="al-mix-biz" style={{ width: `${c.biz * 100}%` }} />
-                <span className="al-mix-fun" style={{ width: `${(1 - c.biz) * 100}%` }} />
+          <div className="al-mp-tile">
+            <span className="al-mp-tile-icon al-mp-ink-gold">
+              <FinIcon kind="star" size={22} />
+            </span>
+            <span>
+              <small>관광 매력</small>
+              <StarRow value={c.fun} label={`관광 매력 ${c.fun} / 10`} />
+              <small className="al-muted">{c.fun} / 10</small>
+            </span>
+          </div>
+          <div className={`al-mp-tile${wx.cause ? ' al-mp-tile-warn' : ''}`}>
+            <span className={`al-mp-tile-icon ${wx.cause ? 'al-mp-ink-warn' : 'al-mp-ink-gold'}`}>
+              <MapIcon kind={weatherIcon(wx.cause)} size={22} />
+            </span>
+            <span>
+              <small>이번 달 날씨</small>
+              <b>{wx.cause ? `${WEATHER_INFO[wx.cause].name} 걱정` : '대체로 괜찮아요'}</b>
+              {wx.cause && <small className="al-muted">지연·결항 ×{wx.factor.toFixed(1)}</small>}
+            </span>
+          </div>
+          <div className="al-mp-tile">
+            <span className="al-mp-tile-icon">
+              <FinIcon kind="tower" size={22} />
+            </span>
+            <span>
+              <small>공항</small>
+              <b>{AIRPORT_INFO[cls].name}</b>
+              <small className="al-muted">{cls >= 4 ? '모든 비행기' : cls === 3 ? '점보까지' : cls === 2 ? '중형까지' : '작은 비행기만'}</small>
+            </span>
+          </div>
+          <div className="al-mp-tile">
+            <span className="al-mp-tile-icon">
+              <MapIcon kind="gate" size={22} />
+            </span>
+            <span className="al-mp-tile-grow">
+              <small>내 슬롯{me.hub === city ? ' (본사 2배)' : ''}</small>
+              <b>
+                주 {slotsUsed(me, city)} <small className="al-muted">/ {slotCapacity(state, viewer, city)}회</small>
+              </b>
+              <UseBar used={slotsUsed(me, city)} total={slotCapacity(state, viewer, city)} label={`내 슬롯 주 ${slotsUsed(me, city)} / ${slotCapacity(state, viewer, city)}회`} />
+            </span>
+          </div>
+          <div className="al-mp-tile">
+            <span className="al-mp-tile-icon">
+              <FinIcon kind="coin" size={22} />
+            </span>
+            <span>
+              <small>공항 이용료</small>
+              <b>{FEE_INFO[c.fee].name}</b>
+            </span>
+          </div>
+        </div>
+        <div className="al-mp-charts">
+          <figure className="al-mp-fig">
+            <figcaption>손님 성격</figcaption>
+            <MixBar biz={c.biz} />
+          </figure>
+          <figure className="al-mp-fig">
+            <figcaption>
+              관광 손님 달마다 <small className="al-muted">{SEASON_NAMES[c.season]}</small>
+            </figcaption>
+            <SeasonChart values={season} current={m0} label={`${SEASON_NAMES[c.season]}, 이번 달 관광 손님 ×${season[m0].toFixed(2)}`} />
+          </figure>
+        </div>
+        {(events.length > 0 || effects.length > 0) && (
+          <div className="al-mp-news">
+            <FinIcon kind="megaphone" size={16} />
+            {events.map((e) => (
+              <span key={`${e.year}${e.kind}`} className="tag al-tag-event">
+                {FIXED_ICON[e.kind]} {e.year}년 {e.title}
               </span>
-              사업 {pct(c.biz)} · 관광 {pct(1 - c.biz)}
-            </dd>
-          </div>
-          <div>
-            <dt>관광 매력</dt>
-            <dd>
-              <Stars n={Math.round(c.fun / 2)} /> {c.fun}/10
-            </dd>
-          </div>
-          <div>
-            <dt>성수기</dt>
-            <dd className="al-season">
-              <span className="al-season-bars" aria-hidden="true">
-                {season.map((m, i) => (
-                  <span key={i} className={i === m0 ? 'al-season-now' : ''} style={{ height: `${Math.round(m * 9)}px` }} title={`${i + 1}월 관광 손님 ×${m.toFixed(2)}`} />
-                ))}
+            ))}
+            {effects.map((e) => (
+              <span key={e.id} className="tag al-tag-event">
+                {e.kind === 'tourism' ? '🎒 여행 붐' : '🏢 박람회'}
               </span>
-              {SEASON_NAMES[c.season]}
-            </dd>
+            ))}
           </div>
-          <div>
-            <dt>이번 달 날씨</dt>
-            <dd>{wx.cause ? `${WEATHER_INFO[wx.cause].icon} ${WEATHER_INFO[wx.cause].name} 걱정 (지연·결항 ×${wx.factor.toFixed(1)})` : '☀️ 대체로 괜찮아요'}</dd>
-          </div>
-          <div>
-            <dt>공항</dt>
-            <dd>
-              {AIRPORT_INFO[cls].name} {cls >= 4 ? '(모든 비행기)' : cls === 3 ? '(점보까지)' : cls === 2 ? '(중형까지)' : '(작은 비행기만)'}
-            </dd>
-          </div>
-          <div>
-            <dt>내 슬롯</dt>
-            <dd>
-              주 {slotsUsed(me, city)} / {slotCapacity(state, viewer, city)}회{me.hub === city ? ' (본사 2배)' : ''}
-            </dd>
-          </div>
-          <div>
-            <dt>이용료</dt>
-            <dd>{FEE_INFO[c.fee].name}</dd>
-          </div>
-          {(events.length > 0 || effects.length > 0) && (
-            <div className="al-trait-wide">
-              <dt>소식</dt>
-              <dd>
-                {events.map((e) => (
-                  <span key={`${e.year}${e.kind}`} className="tag al-tag-event">
-                    {FIXED_ICON[e.kind]} {e.year}년 {e.title}
-                  </span>
-                ))}
-                {effects.map((e) => (
-                  <span key={e.id} className="tag al-tag-event">
-                    {e.kind === 'tourism' ? '🎒 여행 붐' : '🏢 박람회'}
-                  </span>
-                ))}
-              </dd>
-            </div>
-          )}
-        </dl>
+        )}
       </div>
       <div className="al-info-side">
         <section>
-          <h4>여기 있는 회사</h4>
+          <h4 className="al-mp-h4">
+            <FinIcon kind="building" size={15} /> 여기 있는 회사
+          </h4>
           {here.length === 0 ? (
             <p className="al-muted">아직 아무도 없어요.</p>
           ) : (
@@ -183,8 +212,18 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
               {here.map(({ co, i }) => (
                 <li key={i}>
                   <CoName c={co} />
-                  {co.hub === city ? <span className="tag">본사</span> : <span className="tag">지점</span>}
-                  <small>노선 {co.routes.filter((r) => r.a === city || r.b === city).length}개</small>
+                  {co.hub === city ? (
+                    <span className="tag al-mp-tag">
+                      <MapIcon kind="hub" size={12} /> 본사
+                    </span>
+                  ) : (
+                    <span className="tag al-mp-tag">
+                      <FinIcon kind="building" size={12} /> 지점
+                    </span>
+                  )}
+                  <small className="al-mp-inline">
+                    <MapIcon kind="route" size={13} /> 노선 {co.routes.filter((r) => r.a === city || r.b === city).length}개
+                  </small>
                 </li>
               ))}
             </ul>
@@ -196,7 +235,9 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
               <ActButton primary blocker={block(branchBlocker(state, viewer, city))} onClick={() => perform({ type: 'openBranch', city })} testId="al-open-branch">
                 🏢 지점 열기 · {fmtMoney(branchCost(city, state.q))}
               </ActButton>
-              <small className="al-muted">유지비 달마다 {fmtMoney(branchUpkeep(city, state.q))}. 지점이 있어야 노선을 열 수 있어요.</small>
+              <small className="al-muted al-mp-inline">
+                <FinIcon kind="coin" size={13} /> 유지비 달마다 {fmtMoney(branchUpkeep(city, state.q))} · 지점이 있어야 노선을 열 수 있어요
+              </small>
             </>
           ) : (
             <>
@@ -227,13 +268,16 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
         </section>
         {xfers.length > 0 && (
           <section>
-            <h4>여기서 갈아타는 손님 <small className="al-muted">지난달</small></h4>
-            <ol className="al-dests">
+            <h4 className="al-mp-h4">
+              <MapIcon kind="xfer" size={15} /> 여기서 갈아타는 손님 <small className="al-muted">지난달</small>
+            </h4>
+            <ol className="al-dests al-mp-bars">
               {xfers.map((x) => (
                 <li key={`${x.a}-${x.b}`}>
-                  <span>
+                  <span className="al-mp-bar-name">
                     {CITY[x.a].name} → {CITY[x.b].name}
                   </span>
+                  <MiniBar value={x.pax / Math.max(1, ...xfers.map((y) => y.pax))} className="al-mp-mini-xfer" />
                   <small>
                     {fmtPax(x.pax)} · {x.companies.map((ci) => state.companies[ci].name).join('·')}
                   </small>
@@ -244,15 +288,23 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
         )}
         {through.length > 0 && (
           <section>
-            <h4>이 도시를 지나는 노선</h4>
+            <h4 className="al-mp-h4">
+              <MapIcon kind="route" size={15} /> 이 도시를 지나는 노선
+            </h4>
             <ul className="al-through">
               {through.map(({ co, i, r }) => (
                 <li key={`${i}-${r.id}`}>
                   <button type="button" className="al-link" onClick={() => onSelect({ kind: 'route', company: i, route: r.id })}>
                     <CoName c={co} /> {CITY[r.a === city ? r.b : r.a].name}
                   </button>
-                  <small>
-                    주 {routeFreq(co, r.id)}회{r.stats ? ` · 탑승률 ${pct(r.stats.lf)}` : ''}
+                  <small className="al-mp-inline">
+                    주 {routeFreq(co, r.id)}회
+                    {r.stats && (
+                      <>
+                        {' · '}
+                        <LoadMeter lf={r.stats.lf} /> {pct(r.stats.lf)}
+                      </>
+                    )}
                   </small>
                 </li>
               ))}
@@ -260,18 +312,28 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
           </section>
         )}
         <section>
-          <h4>여기서 손님이 많은 곳</h4>
-          <ol className="al-dests">
+          <h4 className="al-mp-h4">
+            <FinIcon kind="people" size={15} /> 여기서 손님이 많은 곳 <small className="al-muted">한 방향 주간</small>
+          </h4>
+          <ol className="al-dests al-mp-bars">
             {dests.map((d) => {
               const mineRoute = routeOnPair(me, city, d.id);
+              const top = Math.max(1, dests[0]?.demand ?? 1);
               return (
                 <li key={d.id}>
-                  <button type="button" className="al-link" onClick={() => onPlanRoute(city, d.id)} disabled={!canAct && !mineRoute}>
+                  <button type="button" className="al-link al-mp-bar-name" onClick={() => onPlanRoute(city, d.id)} disabled={!canAct && !mineRoute}>
                     {CITY[d.id].name}
                   </button>
+                  <MiniBar value={d.demand / top} className={mineRoute ? 'al-mp-mini-mine' : 'al-mp-mini-fill'} label={`${CITY[d.id].name} 주 ${fmtPax(d.demand)}`} />
                   <small>
-                    {km(d.d)} · 주 {fmtPax(d.demand)}
-                    {mineRoute ? ' · ✓ 내 노선' : me.branches.includes(d.id) ? ' · 지점 있음' : ''}
+                    {fmtPax(d.demand)} · {km(d.d)}
+                    {mineRoute ? (
+                      <b className="al-pos"> · ✓ 내 노선</b>
+                    ) : me.branches.includes(d.id) ? (
+                      ' · 지점 있음'
+                    ) : (
+                      ''
+                    )}
                   </small>
                 </li>
               );
@@ -301,21 +363,68 @@ function RoutePanel({ state, viewer, canAct, onEditRoute, onPlanRoute, onSelect,
     <div className="al-info al-route-info" data-testid="al-route-panel">
       <div className="al-info-main">
         <header className="al-info-head">
-          <span className="al-landmark" aria-hidden="true">
-            ✈️
-          </span>
+          <RouteArt />
           <div>
             <h3>
               {CITY[r.a].name} ⇄ {CITY[r.b].name} <small>{km(d)}</small>
             </h3>
-            <p>
-              한 방향 주간 잠재 손님 {fmtPax(dem.biz + dem.leisure)} (사업 {pct(dem.biz / (dem.biz + dem.leisure))}) · 이 두 도시를 나는 회사 {ops.length}곳
-            </p>
+            <p>두 도시를 오가는 손님과 이 노선을 나는 회사들이에요.</p>
           </div>
           <button type="button" className="btn btn-ghost btn-small al-close" onClick={() => onSelect(null)} aria-label="닫기 (Esc)">
             ✕
           </button>
         </header>
+        <div className="al-mp-tiles al-mp-tiles-route">
+          <div className="al-mp-tile">
+            <span className="al-mp-tile-icon">
+              <MapIcon kind="route" size={22} />
+            </span>
+            <span>
+              <small>거리</small>
+              <b>{km(d)}</b>
+            </span>
+          </div>
+          <div className="al-mp-tile">
+            <span className="al-mp-tile-icon">
+              <FinIcon kind="people" size={22} />
+            </span>
+            <span>
+              <small>잠재 손님 (한 방향 주간)</small>
+              <b>{fmtPax(dem.biz + dem.leisure)}</b>
+            </span>
+          </div>
+          <div className="al-mp-tile">
+            <span className="al-mp-tile-icon">
+              <FinIcon kind="plane" size={22} />
+            </span>
+            <span>
+              <small>나는 회사</small>
+              <b>{ops.length}곳</b>
+            </span>
+          </div>
+        </div>
+        <div className="al-mp-charts">
+          <figure className="al-mp-fig">
+            <figcaption>손님 성격</figcaption>
+            <MixBar biz={dem.biz / Math.max(1e-9, dem.biz + dem.leisure)} />
+          </figure>
+          {ops.some(({ rt }) => rt!.stats) && (
+            <figure className="al-mp-fig">
+              <figcaption>회사마다 손님 몫 <small className="al-muted">지난달</small></figcaption>
+              <ShareStack
+                parts={ops.map(({ co, rt }) => ({ name: co.name, v: rt!.stats?.share ?? 0, color: coColors(co).main }))}
+                label={`손님 몫: ${ops.map(({ co, rt }) => `${co.name} ${rt!.stats ? pct(rt!.stats.share) : '—'}`).join(', ')}`}
+              />
+              <ul className="al-hc-legend">
+                {ops.map(({ co, i, rt }) => (
+                  <li key={i}>
+                    <i className="al-sw" style={{ background: coColors(co).main }} /> {co.name} {rt!.stats ? pct(rt!.stats.share) : '—'}
+                  </li>
+                ))}
+              </ul>
+            </figure>
+          )}
+        </div>
         <table className="al-table al-ops">
           <thead>
             <tr>
@@ -371,11 +480,26 @@ function RoutePanel({ state, viewer, canAct, onEditRoute, onPlanRoute, onSelect,
           </>
         )}
         {r.stats && r.stats.xfer > 0 && (
-          <p className="al-muted">
-            {owner.name}의 이 노선에는 갈아타는 손님도 주 {fmtPax(r.stats.xfer)}씩 타요.
+          <p className="al-muted al-mp-note">
+            <MapIcon kind="xfer" size={15} /> {owner.name}의 이 노선에는 갈아타는 손님도 주 {fmtPax(r.stats.xfer)}씩 타요.
           </p>
         )}
-        <p className="al-muted al-tip">손님은 운임이 싸고, 자주 날고, 새롭고 편한 비행기를 띄우고, 평판·광고가 좋은 회사를 더 많이 골라요.</p>
+        <h4 className="al-mp-h4">손님이 회사를 고르는 기준</h4>
+        <ul className="al-mp-why">
+          <li>
+            <FinIcon kind="tag" size={16} /> 싼 운임
+          </li>
+          <li>
+            <StaffIcon kind="clock" size={16} /> 자주 나는 편
+          </li>
+          <li>
+            <FinIcon kind="plane" size={16} /> 새롭고 편한 비행기
+          </li>
+          <li>
+            <FinIcon kind="star" size={16} /> 평판·광고
+          </li>
+        </ul>
+        <MoreInfo>손님은 운임이 싸고, 자주 날고, 새롭고 편한 비행기를 띄우고, 평판·광고가 좋은 회사를 더 많이 골라요.</MoreInfo>
       </div>
     </div>
   );
@@ -389,11 +513,15 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
   const flying = me.planes.filter((p) => p.legs.length > 0);
   const use = flying.length ? flying.reduce((s, p) => s + planeHours(me, p), 0) / (flying.length * WEEK_HOURS) : 0;
   const first = state.q - state.startQ < 4;
+  const meal = me.planes.length > 0 ? me.planes.reduce((t, p) => t + p.meal, 0) / me.planes.length : me.service;
+  const useTone: Tone = use >= 0.55 ? 'good' : use >= 0.3 ? 'warn' : 'bad';
+  const repTone: Tone = me.reputation >= 60 ? 'good' : me.reputation >= 40 ? 'warn' : 'bad';
+  const onTone: Tone = me.onTime >= 0.85 ? 'good' : me.onTime >= 0.7 ? 'warn' : 'bad';
   return (
     <div className="al-info al-overview">
       <div className="al-info-main">
-        <h3>
-          🧑‍💼 경영 비서 <small>지난달 숫자로 고른 할 만한 일</small>
+        <h3 className="al-mp-h3">
+          <StaffIcon kind="people" size={20} /> 경영 비서 <small>지난달 숫자로 고른 할 만한 일</small>
         </h3>
         {!canAct ? (
           <p className="al-muted">내 차례가 되면 할 만한 일을 골라 드릴게요. 그동안 지도와 보고서를 둘러보세요.</p>
@@ -403,8 +531,11 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
           <ul className="al-tips al-advice" data-testid="al-advice">
             {tips.map((t) => (
               <li key={t.key}>
-                <span className="al-tip-icon" aria-hidden="true">
-                  {t.icon}
+                <span className="al-tip-icon al-mp-tip-icon" aria-hidden="true">
+                  {(() => {
+                    const ic = adviceIcon(t.key);
+                    return ic ? <AnyIconView icon={ic} size={22} /> : t.icon;
+                  })()}
                 </span>
                 <div className="al-tip-text">
                   <b>{t.title}</b>
@@ -437,34 +568,83 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
             ))}
           </ul>
         )}
-        {canAct && first && <p className="al-muted al-tip">처음 한 해는 비서가 권하는 대로 해 봐도 좋아요. 첫해에는 리스 보증금이 없어요.</p>}
+        {canAct && first && (
+          <p className="al-muted al-tip al-mp-note">
+            <StaffIcon kind="info" size={15} /> 처음 한 해는 비서가 권하는 대로 해 봐도 좋아요. 첫해에는 리스 보증금이 없어요.
+          </p>
+        )}
       </div>
       <div className="al-info-side">
-        <h4>내 회사 한눈에</h4>
-        <ul className="al-facts">
+        <h4 className="al-mp-h4">
+          <FinIcon kind="chart" size={15} /> 내 회사 한눈에
+        </h4>
+        <div className="al-mp-rings">
+          <figure>
+            <StatRing value={use} text={`${Math.round(use * 100)}%`} tone={useTone} label={`비행기 가동률 ${Math.round(use * 100)}%`} />
+            <figcaption>가동률</figcaption>
+          </figure>
+          <figure>
+            <StatRing value={me.reputation / 100} text={`${Math.round(me.reputation)}`} tone={repTone} label={`평판 ${Math.round(me.reputation)}`} />
+            <figcaption>평판</figcaption>
+          </figure>
+          <figure>
+            <StatRing value={me.onTime} text={`${Math.round(me.onTime * 100)}%`} tone={onTone} label={`정시 운항 ${Math.round(me.onTime * 100)}%`} />
+            <figcaption>정시 운항</figcaption>
+          </figure>
+        </div>
+        <ul className="al-mp-facts">
           <li>
-            본사 <b>{CITY[me.hub].name}</b> · 지점 <b>{me.branches.length}</b>곳 · 노선 <b>{me.routes.length}</b>개
+            <MapIcon kind="hub" size={16} />
+            <span>
+              본사 <b>{CITY[me.hub].name}</b>
+            </span>
           </li>
           <li>
-            비행기 <b>{me.planes.length}</b>대 (가동률 {Math.round(use * 100)}%){me.orders.length > 0 && ` · 주문 ${me.orders.length}`}
+            <FinIcon kind="building" size={16} />
+            <span>
+              지점 <b>{me.branches.length}</b>곳
+            </span>
           </li>
           <li>
-            평판 <b>{Math.round(me.reputation)}</b> · 기내식 평균 {(me.planes.length > 0 ? me.planes.reduce((t, p) => t + p.meal, 0) / me.planes.length : me.service).toFixed(1)}단계 · 정시 운항 <b>{Math.round(me.onTime * 100)}%</b>
-            {me.partner !== null && ` · 제휴 ${state.companies[me.partner].name}`}
+            <MapIcon kind="route" size={16} />
+            <span>
+              노선 <b>{me.routes.length}</b>개
+            </span>
           </li>
+          <li>
+            <FinIcon kind="plane" size={16} />
+            <span>
+              비행기 <b>{me.planes.length}</b>대{me.orders.length > 0 && <small className="al-muted"> · 주문 {me.orders.length}</small>}
+            </span>
+          </li>
+          <li>
+            <FinIcon kind="meal" size={16} />
+            <span>
+              기내식 <b>{meal.toFixed(1)}</b>단계
+            </span>
+          </li>
+          {me.partner !== null && (
+            <li>
+              <FinIcon kind="rings" size={16} />
+              <span>
+                제휴 <b>{state.companies[me.partner].name}</b>
+              </span>
+            </li>
+          )}
         </ul>
         {me.goals.length > 0 && (
           <>
-            <h4>올해 목표</h4>
-            <ul className="al-goals-mini">
+            <h4 className="al-mp-h4">
+              <FinIcon kind="target" size={15} /> 올해 목표
+            </h4>
+            <ul className="al-goal-list al-mp-goals">
               {me.goals.map((g) => {
                 const v = goalProgress(state, viewer, g);
+                const done = g.done === true || (g.done !== false && v >= 1);
                 return (
                   <li key={g.kind}>
-                    <span>
-                      {v >= 1 ? '✅' : '🎯'} {g.text}
-                    </span>
-                    <Meter value={v} tone={v >= 1 ? 'good' : 'blue'} label={`${g.text} ${Math.round(v * 100)}%`} />
+                    <ProgressRingMini v={v} done={done} fail={g.done === false} label={`${g.text} ${Math.round(v * 100)}%`} />
+                    <span className="al-goal-text">{g.text}</span>
                   </li>
                 );
               })}
@@ -479,4 +659,9 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
       </div>
     </div>
   );
+}
+
+/** 목표 진행 작은 고리 (재무 화면과 같은 모양) */
+function ProgressRingMini({ v, done, fail, label }: { v: number; done: boolean; fail: boolean; label: string }) {
+  return <ProgressRing value={fail ? v : done ? 1 : v} tone={fail ? 'bad' : done ? 'good' : 'blue'} mark={done ? 'done' : fail ? 'fail' : undefined} size={32} label={label} />;
 }

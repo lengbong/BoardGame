@@ -1,0 +1,675 @@
+/* 🧭 노선 화면: SVG 그림 (RoutesArt.tsx) */
+
+/* ---------------------------------------------------------------- 작은 칩 */
+.al-routes-view .al-chip-static,
+.al-estimate .al-chip-static {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.al-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px 4px;
+}
+
+/* ---------------------------------------------------------------- 노선 목록 */
+.al-rl-sum {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.al-rl-sum > span {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+}
+.al-rl-sum small {
+  color: var(--text-muted);
+}
+.al-rl-sum b {
+  font-size: 15px;
+}
+.al-rl-sum .al-rl-lf {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.al-rr-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 0;
+}
+.al-rr-cities {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.al-rr-glyph {
+  flex: none;
+}
+.al-route-row .al-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.al-rr-planes {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-muted);
+}
+.al-rr-planes .al-sicon {
+  color: var(--accent);
+}
+.al-rr-lf {
+  min-width: 30px;
+  color: var(--text-muted);
+}
+.al-rr-sub .al-meter {
+  width: 46px;
+}
+
+/* ---------------------------------------------------------------- 하늘길 그림 */
+.al-ra {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.al-ra-city {
+  flex: none;
+  font-size: 18px;
+  font-weight: 800;
+}
+.al-ra-arc {
+  flex: 1;
+  min-width: 70px;
+}
+.al-ra-arc svg {
+  display: block;
+  overflow: visible;
+}
+.al-ra-path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.2;
+  stroke-dasharray: 5 5;
+  stroke-linecap: round;
+}
+.al-ra-dot {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+.al-ra-chip {
+  fill: var(--surface-2);
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.al-ra-km {
+  fill: var(--text);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.al-ra-plane {
+  fill: var(--accent);
+}
+.al-routes-empty-art {
+  display: block;
+}
+.al-rea-ground {
+  fill: color-mix(in srgb, var(--al-blue) 14%, var(--surface));
+}
+.al-rea-path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.4;
+  stroke-dasharray: 6 5;
+  stroke-linecap: round;
+}
+.al-rea-thin {
+  stroke-width: 1.6;
+  opacity: 0.6;
+}
+
+/* ---------------------------------------------------------------- 노선 머리 */
+.al-re-head {
+  align-items: center;
+}
+.al-re-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.al-re-title h3 {
+  margin: 0;
+}
+.al-re-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+}
+.al-re-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.al-re-fact > .al-sicon {
+  color: var(--accent);
+}
+.al-re-fact > span {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.al-re-fact small {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.al-re-fact b {
+  font-size: 15px;
+}
+.al-re-split {
+  flex: 1;
+  min-width: 180px;
+}
+.al-split svg {
+  display: block;
+}
+.al-split-legend {
+  margin-top: 3px;
+}
+.al-split-legend li b {
+  color: var(--text);
+}
+.al-split-legend .al-sicon {
+  color: var(--text-muted);
+}
+
+/* ---------------------------------------------------------------- 띄우는 비행기 */
+.al-routes-view .al-plane-rows li {
+  grid-template-columns: 72px minmax(0, 1fr) auto auto;
+}
+.al-pr-use,
+.al-idle-hours {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.al-pr-use .al-meter,
+.al-idle-hours .al-meter {
+  width: 56px;
+  height: 6px;
+}
+.al-idle-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-width: 0;
+}
+.al-idle-hours small {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+.al-routes-view .al-idle-rows li {
+  flex-wrap: wrap;
+}
+.al-routes-view .al-idle-rows .btn {
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- 운임 눈금 */
+.al-farescale svg {
+  display: block;
+  overflow: visible;
+}
+.al-fs-cheap {
+  fill: color-mix(in srgb, var(--al-cat-3) 30%, var(--surface));
+}
+.al-fs-dear {
+  fill: color-mix(in srgb, var(--al-cat-2) 30%, var(--surface));
+}
+.al-fs-zero {
+  stroke: var(--text);
+  stroke-width: 2;
+}
+.al-fs-me {
+  fill: var(--text);
+}
+.al-fs-rival {
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+.al-fs-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 6px;
+}
+.al-fs-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+}
+.al-fs-key {
+  display: inline-block;
+}
+.al-fs-key-me {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 8px solid var(--text);
+}
+.al-fs-key-rival {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+/* ---------------------------------------------------------------- 이번 달 어림 */
+.al-estimate .al-est-big {
+  margin-bottom: 4px;
+}
+.al-est-rings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 4px 0 10px;
+}
+.al-est-rings figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.al-est-rings figcaption {
+  max-width: 84px;
+  font-size: 11.5px;
+  line-height: 1.25;
+  color: var(--text-muted);
+  text-align: center;
+}
+.al-est-pax {
+  flex: 1;
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.al-est-pax > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+.al-est-pax > span:first-child {
+  margin-top: 0;
+}
+.al-est-pax > span .al-sicon {
+  color: var(--accent);
+}
+.al-est-pax small {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.al-est-pax b {
+  font-size: 15px;
+}
+.al-est-pax b small {
+  font-weight: 500;
+}
+.al-est-pax > small {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.al-rmoney svg {
+  display: block;
+}
+.al-rm-rev,
+rect.al-c-rev {
+  fill: var(--al-c-rev);
+}
+rect.al-c-fuel {
+  fill: var(--al-c-fuel);
+}
+rect.al-c-crew {
+  fill: var(--al-c-crew);
+}
+rect.al-c-apt {
+  fill: var(--al-c-apt);
+}
+rect.al-c-svc {
+  fill: var(--al-c-svc);
+}
+rect.al-c-sales {
+  fill: var(--al-c-sales);
+}
+rect.al-c-lease {
+  fill: var(--al-c-lease);
+}
+.al-cost-legend i.al-sw-profit,
+.al-cost-legend i.al-sw-loss {
+  border-radius: 2px;
+}
+.al-estimate .al-last {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ---------------------------------------------------------------- 운항과 지난 열두 달 */
+.al-ro-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.al-ro-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  min-width: 0;
+}
+.al-ro-tile small {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.al-ro-tile b {
+  font-size: 14px;
+}
+.al-ro-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.al-ro-row > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.al-ro-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.al-ro-tile > svg {
+  max-width: 100%;
+  margin-top: 2px;
+}
+.al-ro-wide {
+  grid-column: 1 / -1;
+}
+.al-ro-cause {
+  font-size: 26px;
+  line-height: 1;
+}
+.al-ro-risk {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 140px);
+  align-items: center;
+  gap: 6px;
+}
+.al-ro-risk .al-meter {
+  width: 100%;
+  height: 6px;
+}
+
+/* ---------------------------------------------------------------- 라이벌 */
+.al-rival-card .al-split {
+  margin-bottom: 8px;
+}
+.al-rival-card .al-rivals {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.al-rival-facts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+.al-rival-lf {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.al-rival-lf .al-meter {
+  width: 46px;
+}
+.al-rival-lf small {
+  color: var(--text-muted);
+}
+
+/* ---------------------------------------------------------------- 운항 시간표 */
+.al-tt-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+.al-dial {
+  flex: none;
+  display: block;
+}
+.al-dial-track {
+  fill: none;
+  stroke: var(--surface-2);
+}
+.al-dial-on {
+  fill: none;
+  stroke: var(--accent);
+}
+.al-dial-off {
+  fill: none;
+  stroke: var(--border);
+}
+.al-dial-closed {
+  fill: none;
+  stroke: color-mix(in srgb, var(--al-bad) 30%, var(--surface));
+  stroke-dasharray: 3 3;
+}
+.al-dial-hour {
+  fill: var(--text-muted);
+  font-size: 8.5px;
+}
+.al-dial-num {
+  fill: var(--text);
+  font-size: 19px;
+  font-weight: 800;
+}
+.al-dial-sub {
+  fill: var(--text-muted);
+  font-size: 8.5px;
+}
+.al-tt-fits {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.al-tt-fitcap {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.al-tt-fitrow {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.al-tt-fitrow > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+.al-tt-fitrow > span .al-sicon {
+  color: var(--text-muted);
+}
+.al-tt-fitrow b {
+  text-align: right;
+}
+.al-fitbar svg {
+  display: block;
+}
+.al-fit-up {
+  fill: var(--al-good);
+}
+.al-fit-down {
+  fill: var(--al-bad);
+}
+.al-fit-even {
+  fill: var(--text-muted);
+}
+
+/* ---------------------------------------------------------------- 새 노선 찾기 */
+.al-dest-row {
+  gap: 3px;
+}
+.al-dr-demand {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+}
+.al-dr-demand .al-meter {
+  flex: 1;
+  width: auto;
+  max-width: 140px;
+  height: 7px;
+}
+.al-dr-demand small {
+  font-size: 11.5px;
+}
+.al-dr-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  font-size: 11.5px;
+}
+.al-dr-facts > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.al-nr-title {
+  font-size: 15px !important;
+}
+.al-nr-title .al-ra-city {
+  font-size: 16px;
+}
+.al-nr-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.al-nr-facts .al-chip-static {
+  white-space: normal;
+}
+/* 그림 | 글·버튼 덩어리(.al-opt-body, 자리가 모자라면 버튼이 글 아래 줄로) */
+.al-routes-view .al-options li {
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  padding: 8px 0;
+}
+.al-opt-text {
+  gap: 3px;
+}
+.al-opt-text small {
+  white-space: nowrap;
+}
+.al-opt-bars {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+}
+.al-opt-bars > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.al-opt-bars .al-meter {
+  width: 52px;
+}
+.al-nr-empty {
+  margin: 20px auto;
+}
+.al-nr-empty p {
+  margin: 0;
+  font-size: 13px;
+}
+.al-route-main > .al-empty-main p {
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------- 좁은 화면 */
+@media (max-width: 640px) {
+  .al-ra-city {
+    font-size: 15px;
+  }
+  .al-re-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .al-re-split {
+    min-width: 100%;
+  }
+  .al-routes-view .al-plane-rows li {
+    grid-template-columns: 60px minmax(0, 1fr) auto;
+  }
+  .al-routes-view .al-plane-rows .al-plane-chip {
+    width: 60px;
+  }
+  .al-tt-fitrow {
+    grid-template-columns: 78px minmax(0, 1fr) 38px;
+  }
+  .al-routes-view .al-plane-rows li > .btn {
+    grid-column: 2 / -1;
+    justify-self: start;
+  }
+  .al-routes-view .al-options li {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+  .al-routes-view .al-plane-chip-big {
+    width: 72px;
+  }
+  .al-ro-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .al-tt-top {
+    flex-wrap: wrap;
+  }
+}

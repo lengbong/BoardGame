@@ -1,0 +1,351 @@
+/* 🛩️ 비행기 화면 (FleetView · CabinEditor · DaySchedule)
+   이 파일은 airline.css보다 먼저 들어올 수 있어서, 같은 무게의 규칙에 지지 않게 .al-fleet / .al-day 안으로 적어요. */
+
+/* 이번 달 바로 받기 칸 */
+.al-fleet .al-fl-deliv {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  max-width: 100%;
+}
+.al-fleet .al-fl-deliv-pips {
+  display: inline-flex;
+  gap: 1px;
+}
+.al-fleet .al-fl-deliv-pips .al-sicon {
+  color: var(--text-muted);
+  opacity: 0.35;
+}
+.al-fleet .al-fl-deliv-pips .al-sicon.al-on {
+  color: var(--accent);
+  opacity: 1;
+}
+.al-fleet .al-fl-deliv b {
+  color: var(--text);
+}
+.al-fleet .al-subtab .al-sicon {
+  vertical-align: -0.2em;
+}
+
+/* 요약 타일 */
+.al-fleet .al-fl-sum {
+  padding: 10px 12px;
+}
+.al-fleet .al-fl-kpi {
+  margin: 0;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+.al-fleet .al-fl-kpi li > span > small + b + small {
+  margin-top: 1px;
+}
+.al-fleet .al-fl-kpi .al-kpi-warn {
+  border-color: color-mix(in srgb, var(--al-warn) 50%, var(--surface));
+}
+.al-fleet .al-fl-kpi .al-kpi-warn .al-sicon {
+  color: var(--al-warn);
+}
+.al-fleet .al-fl-kpi .al-kpi-ok > .al-sicon {
+  color: var(--accent);
+}
+.al-fleet .al-fl-families {
+  margin-top: 8px;
+}
+.al-fleet .al-fl-families .al-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 주문 대기 */
+.al-fleet .al-orders h4 {
+  margin-bottom: 2px;
+}
+.al-fleet .al-fl-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 4px;
+}
+.al-fleet .al-fl-meta .al-sicon {
+  color: var(--text-muted);
+}
+.al-fleet .al-fl-meta .al-sicon + .al-sicon,
+.al-fleet .al-fl-meta > .al-sicon:not(:first-child) {
+  margin-left: 6px;
+}
+.al-fleet .al-fl-meta .al-flag {
+  margin-left: 6px;
+}
+.al-fleet .al-fl-arrivals {
+  margin: 0 0 4px;
+}
+.al-fl-axis {
+  stroke: var(--border);
+  stroke-width: 2;
+}
+.al-fl-tick {
+  stroke: var(--text-muted);
+  stroke-width: 1;
+  opacity: 0.6;
+}
+.al-fl-now {
+  fill: var(--surface);
+  stroke: var(--text-muted);
+  stroke-width: 2;
+}
+.al-fl-dot {
+  fill: var(--al-blue);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+.al-fl-dot-plane {
+  fill: #fff;
+}
+.al-fl-label {
+  fill: var(--text);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+/* 비행기 한 줄 */
+.al-fleet .al-fl-cabin {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  text-align: left;
+}
+.al-fleet .al-fl-cabin .al-sicon {
+  color: var(--accent);
+}
+.al-fleet .al-fl-cabin .al-sicon + * {
+  margin-right: 0;
+}
+.al-fleet .al-pl-route {
+  min-width: 0;
+}
+.al-fleet .al-fl-use {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  max-width: 340px;
+  font-size: 12.5px;
+}
+.al-fleet .al-fl-use-label b {
+  font-size: 13.5px;
+}
+.al-fleet .al-fl-hours svg {
+  overflow: visible;
+}
+.al-fleet .al-fl-seg {
+  stroke: none;
+}
+.al-fleet .al-fl-seg.al-fl-seg-alt {
+  opacity: 0.72;
+}
+.al-fleet .al-fl-idle-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 0;
+}
+
+/* 새 비행기 · 중고 시장 */
+.al-fleet .al-fl-howto {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 13px;
+}
+.al-fleet .al-fl-howto > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.al-fleet .al-fl-howto .al-sicon {
+  color: var(--accent);
+}
+.al-fleet .al-used > .al-more,
+.al-fleet .al-shop > .al-more {
+  margin-top: -4px;
+}
+.al-fleet .al-used > .al-fl-howto {
+  margin-bottom: 4px;
+}
+.al-fleet .al-fl-specs {
+  margin-top: 2px;
+}
+.al-fl-rowicon {
+  color: var(--text-muted);
+}
+.al-fl-spec-label {
+  fill: var(--text-muted);
+  font-size: 11.5px;
+}
+.al-fl-spec-value {
+  fill: var(--text);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.al-fleet .al-fl-spec-bar {
+  fill: var(--al-blue);
+  stroke: none;
+}
+.al-fleet .al-fl-spec-bar.al-tone-good {
+  fill: var(--al-good);
+}
+.al-fleet .al-fl-spec-bar.al-tone-warn {
+  fill: var(--al-warn);
+}
+.al-fleet .al-fl-spec-bar.al-tone-bad {
+  fill: var(--al-bad);
+}
+.al-fleet .al-fl-facts {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.al-fleet .al-fl-facts li {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.al-fleet .al-fl-newprice {
+  font-size: 11.5px;
+}
+.al-fleet .al-fl-soon {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--border);
+}
+.al-fleet .al-fl-soon .al-fin-sub {
+  margin-top: 0 !important;
+  flex-wrap: wrap;
+}
+.al-fleet .al-fl-soon-years {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.al-fleet .al-fl-soon-years li {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.al-fleet .al-fl-soon-years li > span {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.al-fleet .al-fl-soon-years .al-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 좌석 배치 편집 */
+.al-fleet .al-fl-cabin-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.al-fleet .al-fl-cabin-title .al-sicon {
+  color: var(--accent);
+}
+.al-fleet .al-fl-outlook {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.al-fleet .al-fl-out-box {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  line-height: 1.25;
+}
+.al-fleet .al-fl-out-box b {
+  font-size: 16px;
+}
+.al-fleet .al-fl-out-box small {
+  font-size: 11.5px;
+}
+.al-fleet .al-fl-out-up {
+  border-color: color-mix(in srgb, var(--al-good) 45%, var(--surface));
+}
+.al-fleet .al-fl-out-down {
+  border-color: color-mix(in srgb, var(--al-bad) 45%, var(--surface));
+}
+.al-fleet .al-fl-out-arrow path {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 하루 운항표: 시간대 아이콘 · 시각 눈금 */
+.al-day .al-day-band-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.al-day .al-day-band-label .al-sicon {
+  color: var(--accent);
+}
+.al-day .al-day-hours-row {
+  margin-top: -4px;
+}
+.al-day .al-day-hours {
+  position: relative;
+  height: 14px;
+}
+.al-day .al-day-hours span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 1000px) {
+  .al-fleet .al-plane-list li .al-pl-route {
+    grid-column: 1 / -1;
+  }
+  .al-fleet .al-fl-use {
+    max-width: none;
+  }
+}
+@media (max-width: 640px) {
+  .al-fleet .al-fl-kpi {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .al-fleet .al-fl-deliv {
+    margin-left: 0;
+  }
+  .al-day .al-day-hours span:nth-child(even) {
+    display: none;
+  }
+}
+.al-fleet .al-pl-act .btn {
+  white-space: nowrap;
+}

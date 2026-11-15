@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { shapeElement } from '../../components/shapes';
 import { useElementWidth } from '../../lib/useElementWidth';
 import { coColors } from './brand';
@@ -29,6 +29,10 @@ interface MapViewProps {
   flying: boolean;
   fx: boolean;
   zoomCmd?: { n: number; kind: 'in' | 'out' | 'reset' };
+  /** 이 회사의 노선·비행기·지점만 보여 준다 (null이면 모두) */
+  focusCo?: number | null;
+  /** 범례에서 회사를 고르면 (같은 회사를 다시 누르면 null) */
+  onFocusCo?: (company: number | null) => void;
 }
 
 type View = { x: number; y: number; w: number; h: number };
@@ -103,7 +107,7 @@ function regionView(region: RegionId): View {
   return clampView({ x: (minX + maxX) / 2 - w / 2, y: (minY + maxY) / 2 - h / 2, w, h });
 }
 
-export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx, zoomCmd }: MapViewProps) {
+export function MapView({ state, viewer, selected, onSelect, pulses: allPulses, flying, fx, zoomCmd, focusCo = null, onFocusCo }: MapViewProps) {
   const [view, setView] = useState<View>(FULL);
   const wrapRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -186,7 +190,7 @@ export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx,
   const waterPaths = useMemo(() => WATER.map((s) => ({ name: s.name, d: shapePath(s.pts) })), []);
 
   // 노선들 (같은 두 도시를 여러 회사가 날면 조금씩 다르게 휘게)
-  const routes = useMemo(() => {
+  const allRoutes = useMemo(() => {
     const lanes = new Map<string, number>();
     const out: { key: string; company: number; route: number; d: string; copies: string[]; mid: { x: number; y: number }; flying: boolean; freq: number; pair: string; dist: number }[] = [];
     state.companies.forEach((c, ci) => {
@@ -202,6 +206,9 @@ export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx,
     });
     return out;
   }, [state.companies]);
+  // 회사를 골랐으면 그 회사 노선만 (휘는 자리는 모든 노선 기준이라 골라도 선이 움직이지 않는다)
+  const routes = focusCo === null ? allRoutes : allRoutes.filter((r) => r.company === focusCo);
+  const pulses = focusCo === null ? allPulses : allPulses.filter((p) => p.company === focusCo);
 
   const pulseRoute = new Map<string, number>();
   const pulseCity = new Map<string, number>();
@@ -216,12 +223,13 @@ export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx,
     return m;
   }, [state.companies]);
 
-  const viewerCo = state.companies[viewer];
+  // 이름을 늘 붙일 지점: 고른 회사, 없으면 지금 보는 회사
+  const labelCo = state.companies[focusCo ?? viewer];
   const fontPx = 11;
   const showLabel = (id: string) => {
     if (zoom >= 1.7) return true;
     if (selected?.kind === 'city' && selected.id === id) return true;
-    if (viewerCo?.branches.includes(id)) return true;
+    if (labelCo?.branches.includes(id)) return true;
     return citySize(CITY[id], year) >= 7.5;
   };
 
@@ -249,7 +257,7 @@ export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx,
         className={`al-map${flying ? ' al-map-flying' : ''}`}
         viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
         role="img"
-        aria-label="세계 지도: 도시를 누르면 정보가, 노선을 누르면 노선 정보가 나와요"
+        aria-label={`세계 지도${focusCo !== null && state.companies[focusCo] ? ` (${state.companies[focusCo].name} 노선만)` : ''}: 도시를 누르면 정보가, 노선을 누르면 노선 정보가 나와요`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
@@ -361,7 +369,7 @@ export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx,
             const p = project(city.lon, city.lat);
             const size = citySize(city, year);
             const r = (1.6 + size * 0.32) * k;
-            const owners = branchOf.get(city.id) ?? [];
+            const owners = (branchOf.get(city.id) ?? []).filter((ci) => focusCo === null || ci === focusCo);
             const sel = selected?.kind === 'city' && selected.id === city.id;
             const lp = LABEL_POS[city.id];
             const fs = fontPx * k;
@@ -434,15 +442,36 @@ export function MapView({ state, viewer, selected, onSelect, pulses, flying, fx,
         ))}
       </div>
       {state.companies.length > 1 && (
-        <ul className="al-map-legend" aria-label="회사 색">
-          {state.companies.map((c, i) => (
-            <li key={i} className={c.out ? 'al-out' : ''}>
-              <svg viewBox="0 0 20 20" width={12} height={12} aria-hidden="true">
-                {shapeElement(SEAT_SHAPES[c.seat], 10, 10, 9, coColors(c).main)}
-              </svg>
-              {c.name}
+        <ul className={`al-map-legend${focusCo !== null ? ' al-legend-focus' : ''}`} aria-label="회사 색 (누르면 그 회사 노선만 보여요)">
+          {state.companies.map((c, i) => {
+            const on = focusCo === i;
+            return (
+              <li key={i} className={`${c.out ? 'al-out' : ''}${on ? ' al-on' : ''}`}>
+                <button
+                  type="button"
+                  className="al-legend-btn"
+                  style={{ '--al-co': coColors(c).main } as CSSProperties}
+                  aria-pressed={on}
+                  disabled={!onFocusCo}
+                  onClick={() => onFocusCo?.(on ? null : i)}
+                  title={on ? '모든 항공사 노선 보기' : `${c.name} 노선만 보기`}
+                  data-testid={`al-legend-${i}`}
+                >
+                  <svg viewBox="0 0 20 20" width={12} height={12} aria-hidden="true">
+                    {shapeElement(SEAT_SHAPES[c.seat], 10, 10, 9, coColors(c).main)}
+                  </svg>
+                  {c.name}
+                </button>
+              </li>
+            );
+          })}
+          {focusCo !== null && onFocusCo && (
+            <li>
+              <button type="button" className="al-legend-btn al-legend-all" onClick={() => onFocusCo(null)} title="모든 항공사 노선 보기 (Esc)" data-testid="al-legend-all">
+                ✕ 모두 보기
+              </button>
             </li>
-          ))}
+          )}
         </ul>
       )}
     </div>

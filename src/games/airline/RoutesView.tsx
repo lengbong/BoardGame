@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import './routes.css';
 import { coColors } from './brand';
 import { MODEL, availableModels } from './aircraft';
 import { openSuggestion, type Candidate } from './ai';
@@ -36,7 +37,13 @@ import { SparkBars, Sparkline } from './Charts';
 import { causeInfo } from './ReportView';
 import { DaySchedule } from './DaySchedule';
 import { TimetableCard } from './TimetableCard';
-import { ActButton, CoName, LoadMeter, Stepper } from './ui';
+import { ActButton, CoName, LoadMeter, Meter, Stepper } from './ui';
+import { FinIcon, ProgressRing } from './FinanceArt';
+import { MoreInfo, StaffIcon } from './StaffArt';
+import { FareScale, RouteArc, RouteGlyph, RouteIcon, RouteMoney, RoutesEmptyArt, SplitBar } from './RoutesArt';
+
+/** 탑승률 고리 색: 많이 비면 빨강, 알맞으면 초록, 꽉 차면 주황 */
+const lfTone = (lf: number) => (lf < 0.55 ? 'bad' : lf > 0.97 ? 'warn' : 'good');
 
 export interface Planner {
   from: string;
@@ -68,6 +75,9 @@ export function RoutesView(props: RoutesViewProps) {
     return (b.stats?.profit ?? -1e9) - (a.stats?.profit ?? -1e9);
   });
   const current = focus !== null ? me.routes.find((r) => r.id === focus) : undefined;
+  const withStats = me.routes.filter((r) => r.stats);
+  const profitSum = withStats.reduce((t, r) => t + (r.stats?.profit ?? 0), 0);
+  const avgLf = withStats.length > 0 ? withStats.reduce((t, r) => t + (r.stats?.lf ?? 0), 0) / withStats.length : null;
 
   return (
     <div className="al-routes-view">
@@ -87,6 +97,20 @@ export function RoutesView(props: RoutesViewProps) {
             </button>
           ))}
         </div>
+        {withStats.length > 0 && (
+          <div className="al-rl-sum">
+            <span>
+              <small>달 이익 합</small>
+              <b className={profitSum < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(profitSum)}</b>
+            </span>
+            {avgLf !== null && (
+              <span className="al-rl-lf">
+                <ProgressRing value={avgLf} tone={lfTone(avgLf)} size={42} label={`평균 탑승률 ${pct(avgLf)}`} />
+                <small>평균 탑승률</small>
+              </span>
+            )}
+          </div>
+        )}
         {routes.length === 0 && <p className="al-muted al-empty">아직 노선이 없어요. ‘＋ 새 노선’이나 지도에서 도시를 눌러 시작해요.</p>}
         <ul>
           {routes.map((r) => {
@@ -105,14 +129,22 @@ export function RoutesView(props: RoutesViewProps) {
                   }}
                 >
                   <span className="al-rr-name">
-                    {CITY[r.a].name} ⇄ {CITY[r.b].name}
-                    {warn && <span className={`al-flag${warn === '꽉 참' ? ' al-flag-warn' : ''}`}>{warn}</span>}
+                    <span className="al-rr-cities">
+                      {CITY[r.a].name} <RouteGlyph /> {CITY[r.b].name}
+                    </span>
+                    {warn && (
+                      <span className={`al-flag${warn === '꽉 참' ? ' al-flag-warn' : ''}`}>
+                        <StaffIcon kind={warn === '꽉 참' ? 'check' : 'alert'} size={11} /> {warn}
+                      </span>
+                    )}
                   </span>
                   <span className="al-rr-sub">
-                    <small>
-                      ✈️{planes.length} · 주 {freq}회
+                    <small className="al-rr-planes" title={`비행기 ${planes.length}대 · 주 ${freq}회 왕복`}>
+                      <FinIcon kind="plane" size={13} />
+                      {planes.length} · 주 {freq}회
                     </small>
                     {st && <LoadMeter lf={st.lf} />}
+                    {st && <small className="al-rr-lf">{pct(st.lf)}</small>}
                     <small className={st && st.profit < 0 ? 'al-neg' : 'al-pos'}>{st ? signedMoney(st.profit) : '새 노선'}</small>
                   </span>
                 </button>
@@ -128,6 +160,7 @@ export function RoutesView(props: RoutesViewProps) {
           <RouteEditor {...props} routeId={current.id} />
         ) : (
           <div className="al-empty-main">
+            <RoutesEmptyArt />
             <p>왼쪽에서 노선을 고르면 비행기·운항 횟수·운임을 바꾸고, 바뀐 결과를 바로 어림해서 보여 줘요.</p>
             <button type="button" className="btn btn-primary" disabled={!canAct} onClick={() => onPlanner({ from: me.hub, to: null })}>
               ＋ 새 노선 찾기
@@ -159,6 +192,10 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
   const block = canAct ? null : notMine;
   const key = pairKey(r.a, r.b);
   const rivals = state.companies.map((c, i) => ({ c, i, rt: c.out || i === viewer ? undefined : c.routes.find((x) => pairKey(x.a, x.b) === key) })).filter((x) => x.rt);
+  // 이 노선의 주간 좌석 (한 방향): 나와 라이벌
+  const seatsOf = (c: (typeof state.companies)[number], routeId: number) => planesOnRoute(c, routeId).reduce((t, p) => t + cabinSeats(MODEL[p.model], p.cabin) * legFreq(p, routeId), 0);
+  const mySeats = seatsOf(me, r.id);
+  const myFreq = planes.reduce((t, p) => t + legFreq(p, r.id), 0);
 
   // 이 노선에 보태기 좋은 새 기종 (리스로 한 대 더 띄웠을 때 늘어나는 이익)
   const extra = useMemo(() => {
@@ -187,21 +224,43 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
 
   return (
     <div className="al-editor" data-testid="al-route-editor">
-      <header className="al-editor-head">
-        <div>
-          <h3>
-            <button type="button" className="al-link" onClick={() => onShowCity(r.a)}>
+      <header className="al-editor-head al-re-head">
+        <div className="al-re-title">
+          <h3 className="al-ra">
+            <button type="button" className="al-link al-ra-city" onClick={() => onShowCity(r.a)}>
               {CITY[r.a].name}
-            </button>{' '}
-            ⇄{' '}
-            <button type="button" className="al-link" onClick={() => onShowCity(r.b)}>
+            </button>
+            <RouteArc distance={d} />
+            <button type="button" className="al-link al-ra-city" onClick={() => onShowCity(r.b)}>
               {CITY[r.b].name}
-            </button>{' '}
-            <small>{km(d)}</small>
+            </button>
           </h3>
-          <p className="al-muted">
-            한 방향 주간 잠재 손님 {fmtPax(dem.biz + dem.leisure)} (사업 {pct(dem.biz / Math.max(1, dem.biz + dem.leisure))}) · 라이벌 {rivals.length}곳
-          </p>
+          <div className="al-re-facts">
+            <span className="al-re-fact">
+              <FinIcon kind="people" size={18} />
+              <span>
+                <small>한 방향 주간 잠재 손님</small>
+                <b>{fmtPax(dem.biz + dem.leisure)}</b>
+              </span>
+            </span>
+            <span className="al-re-fact">
+              <FinIcon kind="rings" size={18} />
+              <span>
+                <small>라이벌</small>
+                <b>{rivals.length > 0 ? `${rivals.length}곳` : '없어요'}</b>
+              </span>
+            </span>
+            <div className="al-re-split">
+              <SplitBar
+                label="잠재 손님 나눔"
+                height={10}
+                parts={[
+                  { key: 'biz', name: <><RouteIcon kind="biz" size={13} /> 사업</>, v: dem.biz, color: 'var(--al-cat-1)', text: pct(dem.biz / Math.max(1, dem.biz + dem.leisure)) },
+                  { key: 'leisure', name: <><RouteIcon kind="leisure" size={13} /> 관광</>, v: dem.leisure, color: 'var(--al-cat-3)', text: pct(dem.leisure / Math.max(1, dem.biz + dem.leisure)) },
+                ]}
+              />
+            </div>
+          </div>
         </div>
         <ActButton
           small
@@ -220,7 +279,12 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
       <div className="al-editor-grid">
         <div className="al-editor-left">
           <section className="al-card">
-            <h4>띄우는 비행기</h4>
+            <h4 className="al-fin-title">
+              <FinIcon kind="plane" /> 띄우는 비행기{' '}
+              <small>
+                {planes.length}대 · 주 {myFreq}회 왕복 · 좌석 {mySeats.toLocaleString('ko-KR')}
+              </small>
+            </h4>
             {planes.length === 0 && <p className="al-muted">비행기가 없어서 운항하지 않아요. 아래에서 넣어 주세요.</p>}
             <ul className="al-plane-rows">
               {planes.map((p) => {
@@ -235,8 +299,12 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
                     <span className="al-pr-name">
                       <b>{m.name}</b>
                       <small>
-                        {cabinSeats(m, p.cabin)}석 · {p.leased ? '리스' : '내 것'} · 가동 {Math.round(use * 100)}%
+                        {cabinSeats(m, p.cabin)}석 · {p.leased ? '리스' : '내 것'}
                       </small>
+                      <span className="al-pr-use" title={`한 주 ${Math.round(planeHours(me, p))} / ${WEEK_HOURS}시간 날아요`}>
+                        <Meter value={use} tone={use > 0.92 ? 'warn' : 'blue'} label={`가동률 ${Math.round(use * 100)}%`} />
+                        <small>가동 {Math.round(use * 100)}%</small>
+                      </span>
                       {elsewhere.length > 0 && (
                         <small className="al-muted" title={elsewhere.map((x) => `${CITY[x!.a].name}–${CITY[x!.b].name}`).join(', ')}>
                           다른 노선 {elsewhere.length}개도 날아요
@@ -257,7 +325,9 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
             </ul>
             {others.length > 0 && (
               <>
-                <h5>내 비행기 더 넣기</h5>
+                <h5 className="al-fin-sub">
+                  <FinIcon kind="parked" size={16} /> 내 비행기 더 넣기
+                </h5>
                 <ul className="al-idle-rows">
                   {others.slice(0, 8).map(({ p, f, idle }) => {
                     const m = MODEL[p.model];
@@ -265,11 +335,12 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
                     const spare = WEEK_HOURS - planeHours(me, p);
                     return (
                       <li key={p.id}>
-                        <span>
-                          {m.name}{' '}
-                          <small className="al-muted">
-                            ({Math.floor(planeAge(state, p))}년 · {idle ? '쉬는 중' : `다른 노선을 날고 ${Math.round(spare)}시간 남음`})
-                          </small>
+                        <span className="al-idle-name">
+                          <b>{m.name}</b> <small className="al-muted">{Math.floor(planeAge(state, p))}년</small>
+                          <span className="al-idle-hours" title={idle ? '쉬는 중이에요' : `다른 노선을 날고 한 주 ${Math.round(spare)}시간 남아요`}>
+                            <Meter value={spare / WEEK_HOURS} tone={idle ? 'good' : 'blue'} label={`남는 시간 ${Math.round(spare)}시간`} />
+                            <small>{idle ? '쉬는 중' : `${Math.round(spare)}시간 남음`}</small>
+                          </span>
                         </span>
                         <ActButton small blocker={canAct ? why : notMine} onClick={() => perform({ type: 'assign', plane: p.id, route: r.id, freq: f })}>
                           넣기 · 주 {f}회
@@ -282,15 +353,21 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
             )}
             {extra.length > 0 && (
               <>
-                <h5>새로 들여서 넣기</h5>
+                <h5 className="al-fin-sub">
+                  <FinIcon kind="shop" size={16} /> 새로 들여서 넣기
+                </h5>
                 <ul className="al-idle-rows">
                   {extra.map(({ m, freq, gain }) => {
                     const used = state.market.find((u) => u.model === m.id);
                     const deposit = depositFor(state, viewer, m.id);
                     return (
                       <li key={m.id}>
-                        <span>
-                          {m.name} <small className="al-muted">주 {freq}회 · 이익 {signedMoney(gain)}</small>
+                        <span className="al-idle-name">
+                          <b>{m.name}</b>
+                          <span className="al-chips">
+                            <span className="al-chip-static">주 {freq}회</span>
+                            <span className="al-chip-static al-pos">이익 {signedMoney(gain)}</span>
+                          </span>
                         </span>
                         <span className="al-two">
                           <ActButton
@@ -316,9 +393,17 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
             )}
           </section>
           <section className="al-card">
-            <h4>
-              운임 <small>{fareText(r.fare)}</small>
+            <h4 className="al-fin-title">
+              <FinIcon kind="tag" /> 운임 <small>{fareText(r.fare)}</small>
             </h4>
+            {rivals.length > 0 && (
+              <FareScale
+                mine={r.fare}
+                min={FARE_MIN}
+                max={FARE_MAX}
+                rivals={rivals.map(({ c, i, rt }) => ({ key: String(i), fare: rt!.fare, color: coColors(c).main, name: c.name }))}
+              />
+            )}
             <div className="al-fare">
               <span>싸게</span>
               <input
@@ -341,68 +426,127 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
                 </button>
               ))}
             </div>
-            <p className="al-muted al-tip">싸면 손님이 늘고(특히 관광객), 비싸면 한 명에게 더 받아요. 좌석이 꽉 차면 올려 보고, 많이 비면 내려 보세요.</p>
+            {rivals.length > 0 && (
+              <p className="al-muted al-tip al-fs-legend">
+                <span>
+                  <i className="al-fs-key al-fs-key-me" /> 내 운임
+                </span>
+                <span>
+                  <i className="al-fs-key al-fs-key-rival" /> 라이벌 운임
+                </span>
+                <span>(점에 마우스를 올리면 회사 이름)</span>
+              </p>
+            )}
+            <MoreInfo>싸면 손님이 늘고(특히 관광객), 비싸면 한 명에게 더 받아요. 좌석이 꽉 차면 올려 보고, 많이 비면 내려 보세요.</MoreInfo>
           </section>
           <TimetableCard state={state} viewer={viewer} canAct={canAct} perform={perform} route={r} />
         </div>
         <div className="al-editor-right">
           <EstimateCard est={est} lastProfit={r.stats?.profit ?? null} lastLf={r.stats?.lf ?? null} lastPremLf={r.stats?.premLf ?? null} />
           <section className="al-card al-route-ops">
-            <h4>운항과 지난 열두 달</h4>
+            <h4 className="al-fin-title">
+              <StaffIcon kind="clock" /> 운항과 지난 열두 달
+            </h4>
             {(() => {
               const risk = opsRates(state, viewer, r.id);
               const info = causeInfo(risk.cause);
               const hist = r.stats?.hist ?? [];
+              const lastHist = hist[hist.length - 1];
               return (
-                <dl className="al-est-grid">
-                  <div>
-                    <dt>탑승률 흐름</dt>
-                    <dd>
-                      <Sparkline values={hist.map((x) => x[0])} label="최근 열두 달 탑승률" />
-                    </dd>
+                <div className="al-ro-grid">
+                  <div className="al-ro-tile">
+                    <span className="al-ro-head">
+                      <small>탑승률 흐름</small>
+                      {lastHist && <b>{pct(lastHist[0])}</b>}
+                    </span>
+                    <Sparkline values={hist.map((x) => x[0])} width={112} height={28} label="최근 열두 달 탑승률" />
                   </div>
-                  <div>
-                    <dt>이익 흐름</dt>
-                    <dd>
-                      <SparkBars values={hist.map((x) => x[1])} label="최근 열두 달 이익" />
-                    </dd>
+                  <div className="al-ro-tile">
+                    <span className="al-ro-head">
+                      <small>이익 흐름</small>
+                      {lastHist && <b className={lastHist[1] < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(lastHist[1])}</b>}
+                    </span>
+                    <SparkBars values={hist.map((x) => x[1])} width={112} height={28} label="최근 열두 달 이익" />
                   </div>
-                  <div>
-                    <dt>지난달 정시율 · 결항</dt>
-                    <dd>{r.stats ? `${pct(r.stats.onTime)} · 결항 ${(r.stats.cancel * 100).toFixed(1)}%` : '—'}</dd>
+                  <div className="al-ro-tile al-ro-row al-ro-wide">
+                    {r.stats ? (
+                      <ProgressRing value={r.stats.onTime} tone={r.stats.onTime >= 0.85 ? 'good' : r.stats.onTime >= 0.7 ? 'warn' : 'bad'} size={46} label={`지난달 정시율 ${pct(r.stats.onTime)}`} />
+                    ) : (
+                      <ProgressRing value={0} size={46} label="지난달 정시율 없음" />
+                    )}
+                    <span>
+                      <small>지난달 정시율</small>
+                      <b>{r.stats ? pct(r.stats.onTime) : '—'}</b>
+                      <small>결항 {r.stats ? `${(r.stats.cancel * 100).toFixed(1)}%` : '—'}</small>
+                    </span>
                   </div>
-                  <div>
-                    <dt>이번 달 걱정</dt>
-                    <dd>
-                      {info.icon} {info.name}
-                      {risk.city ? ` (${CITY[risk.city].name})` : ''} · 지연 약 {pct(risk.late)} · 결항 약 {(risk.cancel * 100).toFixed(1)}%
-                    </dd>
+                  <div className="al-ro-tile al-ro-row al-ro-wide">
+                    <span className="al-ro-cause" aria-hidden="true">
+                      {info.icon}
+                    </span>
+                    <span>
+                      <small>이번 달 걱정</small>
+                      <b>
+                        {info.name}
+                        {risk.city ? ` (${CITY[risk.city].name})` : ''}
+                      </b>
+                      <span className="al-ro-risk">
+                        <small>지연 약 {pct(risk.late)}</small>
+                        <Meter value={risk.late / 0.3} tone={risk.late > 0.15 ? 'bad' : 'warn'} label={`지연 약 ${pct(risk.late)}`} />
+                      </span>
+                      <span className="al-ro-risk">
+                        <small>결항 약 {(risk.cancel * 100).toFixed(1)}%</small>
+                        <Meter value={risk.cancel / 0.05} tone={risk.cancel > 0.02 ? 'bad' : 'warn'} label={`결항 약 ${(risk.cancel * 100).toFixed(1)}%`} />
+                      </span>
+                    </span>
                   </div>
-                </dl>
+                </div>
               );
             })()}
           </section>
           {planes.length > 0 && (
             <section className="al-card">
-              <h4>
-                하루 운항표 <small>이 노선을 나는 비행기 {planes.length}대 · 진한 막대가 이 노선</small>
+              <h4 className="al-fin-title">
+                <StaffIcon kind="calendar" /> 하루 운항표 <small>이 노선을 나는 비행기 {planes.length}대 · 진한 막대가 이 노선</small>
               </h4>
               <DaySchedule state={state} ci={viewer} planes={planes} highlight={r.id} limit={6} />
             </section>
           )}
           {rivals.length > 0 && (
-            <section className="al-card">
-              <h4>라이벌</h4>
+            <section className="al-card al-rival-card">
+              <h4 className="al-fin-title">
+                <FinIcon kind="rings" /> 라이벌 <small>한 방향 주간 좌석 나눔</small>
+              </h4>
+              <SplitBar
+                label="이 노선 주간 좌석"
+                parts={[
+                  { key: 'me', name: <CoName c={me} />, v: mySeats, color: color.main, text: `${mySeats.toLocaleString('ko-KR')}석` },
+                  ...rivals.map(({ c, i, rt }) => {
+                    const seats = seatsOf(c, rt!.id);
+                    return { key: String(i), name: <CoName c={c} />, v: seats, color: coColors(c).main, text: `${seats.toLocaleString('ko-KR')}석` };
+                  }),
+                ]}
+              />
               <ul className="al-rivals">
                 {rivals.map(({ c, i, rt }) => {
                   const ps = planesOnRoute(c, rt!.id);
                   return (
                     <li key={i}>
                       <CoName c={c} />
-                      <small>
-                        {ps.map((p) => `${MODEL[p.model].name}×${legFreq(p, rt!.id)}`).join(', ') || '비행기 없음'} · {fareText(rt!.fare)}
-                        {rt!.stats ? ` · 탑승률 ${pct(rt!.stats.lf)}` : ''}
-                      </small>
+                      <span className="al-rival-facts">
+                        <span className="al-chip-static" title="비행기 × 주간 왕복">
+                          <FinIcon kind="plane" size={12} /> {ps.map((p) => `${MODEL[p.model].name}×${legFreq(p, rt!.id)}`).join(', ') || '비행기 없음'}
+                        </span>
+                        <span className="al-chip-static">
+                          <FinIcon kind="tag" size={12} /> {fareText(rt!.fare)}
+                        </span>
+                        {rt!.stats && (
+                          <span className="al-rival-lf">
+                            <LoadMeter lf={rt!.stats.lf} />
+                            <small>탑승률 {pct(rt!.stats.lf)}</small>
+                          </span>
+                        )}
+                      </span>
                     </li>
                   );
                 })}
@@ -438,46 +582,45 @@ export function EstimateCard({
   lastPremLf?: number | null;
   title?: string;
 }) {
-  const total = Math.max(est.revenue, est.cost.total, 1);
   return (
     <section className="al-card al-estimate" aria-live="polite">
-      <h4>{title}</h4>
+      <h4 className="al-fin-title">
+        <FinIcon kind="chart" /> {title}
+      </h4>
       <div className="al-est-big">
         <span>예상 이익</span>
         <b className={est.profit < 0 ? 'al-neg' : 'al-pos'} data-testid="al-est-profit">
           {signedMoney(est.profit)}
         </b>
       </div>
-      <dl className="al-est-grid">
-        <div>
-          <dt>주간 손님 (한 방향)</dt>
-          <dd>
-            {fmtPax(est.paxWeek)} / 좌석 {est.seatsWeek.toLocaleString('ko-KR')}
-          </dd>
+      <div className="al-est-rings">
+        <figure>
+          <ProgressRing value={est.lf} tone={lfTone(est.lf)} size={58} label={`탑승률 ${pct(est.lf)}`} />
+          <figcaption>탑승률</figcaption>
+        </figure>
+        <figure>
+          <ProgressRing value={est.share} tone="blue" size={58} label={`이 두 도시 손님 중 내 몫 ${pct(est.share)}`} />
+          <figcaption>두 도시 손님 중 내 몫</figcaption>
+        </figure>
+        <div className="al-est-pax">
+          <span>
+            <FinIcon kind="people" size={16} /> <small>주간 손님 (한 방향)</small>
+          </span>
+          <b>
+            {fmtPax(est.paxWeek)} <small>/ 좌석 {est.seatsWeek.toLocaleString('ko-KR')}</small>
+          </b>
+          {est.xferWeek > 0 && (
+            <small className="al-muted">
+              <RouteIcon kind="xfer" size={13} /> 그중 갈아타는 손님 {fmtPax(est.xferWeek)}
+            </small>
+          )}
+          <span>
+            <FinIcon kind="ticket" size={16} /> <small>달 운임 수입</small>
+          </span>
+          <b>{fmtMoney(est.revenue)}</b>
         </div>
-        <div>
-          <dt>탑승률</dt>
-          <dd>
-            <LoadMeter lf={est.lf} /> {pct(est.lf)}
-          </dd>
-        </div>
-        <div>
-          <dt>이 두 도시 손님 중 내 몫</dt>
-          <dd>{pct(est.share)}</dd>
-        </div>
-        <div>
-          <dt>달 운임 수입</dt>
-          <dd>{fmtMoney(est.revenue)}</dd>
-        </div>
-      </dl>
-      <div className="al-costbar" aria-hidden="true">
-        <span className="al-c-rev" style={{ width: `${(est.revenue / total) * 100}%` }} />
       </div>
-      <div className="al-costbar" aria-hidden="true">
-        {COST_PARTS.map((p) => (
-          <span key={p.key} className={p.cls} style={{ width: `${((est.cost[p.key] as number) / total) * 100}%` }} />
-        ))}
-      </div>
+      <RouteMoney revenue={est.revenue} costs={COST_PARTS.map((p) => ({ key: p.key, name: p.name, v: est.cost[p.key] as number, cls: p.cls }))} />
       <ul className="al-cost-legend">
         <li>
           <i className="al-c-rev" /> 수입 {fmtMoney(est.revenue)}
@@ -487,12 +630,18 @@ export function EstimateCard({
             <i className={p.cls} /> {p.name} {fmtMoney(est.cost[p.key] as number)}
           </li>
         ))}
+        <li>
+          <i className={est.profit >= 0 ? 'al-sw-profit' : 'al-sw-loss'} /> {est.profit >= 0 ? '이익' : '손해'}
+        </li>
       </ul>
       {lastProfit !== null && (
         <p className="al-muted al-last">
-          지난달 실제: 이익 {signedMoney(lastProfit)}
-          {lastLf !== null && ` · 탑승률 ${pct(lastLf)}`}
-          {lastPremLf !== null && ` · 고급 좌석 ${pct(lastPremLf)}`}
+          <StaffIcon kind="calendar" size={14} /> 지난달 실제
+          <span className="al-chip-static">
+            이익 <b className={lastProfit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(lastProfit)}</b>
+          </span>
+          {lastLf !== null && <span className="al-chip-static">탑승률 {pct(lastLf)}</span>}
+          {lastPremLf !== null && <span className="al-chip-static">고급 좌석 {pct(lastPremLf)}</span>}
         </p>
       )}
     </section>
@@ -522,6 +671,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
       .sort((a, b) => b.demand - a.demand);
   }, [state, from, viewer, me, maxRange, region, onlyBranch]);
 
+  const maxDemand = Math.max(1, ...list.map((x) => x.demand));
   const to = planner.to;
   const options = useMemo(() => {
     if (!to) return [];
@@ -544,6 +694,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
     return out.sort((a, b) => b.e.profit - a.e.profit).slice(0, 5);
   }, [state, viewer, me, from, to, year]);
 
+  const bestProfit = Math.max(1, ...options.map((o) => o.e.profit));
   const needBranch = to ? [from, to].filter((c) => !me.branches.includes(c)) : [];
   const branchMoney = needBranch.reduce((s, c) => s + branchCost(c, state.q), 0);
   let why: string | null = canAct ? null : notMine;
@@ -604,7 +755,9 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
   return (
     <div className="al-newroute" data-testid="al-planner">
       <header className="al-editor-head">
-        <h3>새 노선 찾기</h3>
+        <h3 className="al-fin-title">
+          <RouteIcon kind="route" size={20} /> 새 노선 찾기
+        </h3>
         <button type="button" className="btn btn-small btn-ghost" onClick={() => onPlanner(null)} aria-label="닫기">
           ✕ 닫기
         </button>
@@ -649,9 +802,23 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                     {x.mine && <span className="al-flag al-flag-ok">내 노선</span>}
                     {!x.reach && <span className="al-flag">너무 멀어요</span>}
                   </span>
-                  <small>
-                    {km(x.d)} · 주 {fmtPax(x.demand)}
-                    {x.rivals > 0 ? ` · 라이벌 ${x.rivals}` : ''} · {x.branch ? '지점 ✓' : `지점 ${fmtMoney(branchCost(x.c.id, state.q))}`}
+                  <span className="al-dr-demand" title={`한 방향 주간 잠재 손님 ${fmtPax(x.demand)}`}>
+                    <FinIcon kind="people" size={13} />
+                    <Meter value={x.demand / maxDemand} tone="blue" label={`주간 손님 ${fmtPax(x.demand)}`} />
+                    <small>주 {fmtPax(x.demand)}</small>
+                  </span>
+                  <small className="al-dr-facts">
+                    <span>
+                      <RouteIcon kind="route" size={13} /> {km(x.d)}
+                    </span>
+                    {x.rivals > 0 && (
+                      <span>
+                        <FinIcon kind="rings" size={13} /> 라이벌 {x.rivals}
+                      </span>
+                    )}
+                    <span className={x.branch ? 'al-pos' : ''}>
+                      <FinIcon kind="building" size={13} /> {x.branch ? '지점 ✓' : `지점 ${fmtMoney(branchCost(x.c.id, state.q))}`}
+                    </span>
                   </small>
                 </button>
               </li>
@@ -660,15 +827,32 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
         </div>
         <div className="al-nr-right">
           {!to ? (
-            <p className="al-muted al-empty-main">왼쪽에서 갈 도시를 고르세요. 주간 손님이 많고 라이벌이 적은 곳이 좋아요. 너무 가까운 곳은 기차를 타서 손님이 적어요.</p>
+            <div className="al-empty-main al-nr-empty">
+              <RoutesEmptyArt />
+              <p className="al-muted">왼쪽에서 갈 도시를 고르세요. 막대가 긴(주간 손님이 많은) 곳, 라이벌이 적은 곳이 좋아요. 너무 가까운 곳은 기차를 타서 손님이 적어요.</p>
+            </div>
           ) : (
             <>
-              <h4>
-                {CITY[from].name} ⇄ {CITY[to].name} <small>{km(dist(from, to))}</small>
+              <h4 className="al-ra al-nr-title">
+                <span className="al-ra-city">{CITY[from].name}</span>
+                <RouteArc distance={dist(from, to)} height={40} />
+                <span className="al-ra-city">{CITY[to].name}</span>
               </h4>
-              <p className="al-muted">
-                {AIRPORT_INFO[airportClass(CITY[to], year)].name}
-                {needBranch.length > 0 && ` · 지점 새로 열기: ${needBranch.map((c) => `${CITY[c].name} ${fmtMoney(branchCost(c, state.q))} (유지비 달 ${fmtMoney(branchUpkeep(c, state.q))})`).join(', ')}`}
+              <p className="al-nr-facts">
+                <span className="al-chip-static">
+                  <FinIcon kind="tower" size={13} /> {AIRPORT_INFO[airportClass(CITY[to], year)].name}
+                </span>
+                {needBranch.length === 0 ? (
+                  <span className="al-chip-static al-pos">
+                    <FinIcon kind="building" size={13} /> 두 도시 모두 지점이 있어요
+                  </span>
+                ) : (
+                  needBranch.map((c) => (
+                    <span key={c} className="al-chip-static" title={`유지비 달 ${fmtMoney(branchUpkeep(c, state.q))}`}>
+                      <FinIcon kind="building" size={13} /> {CITY[c].name} 지점 새로 열기 {fmtMoney(branchCost(c, state.q))} · 유지비 달 {fmtMoney(branchUpkeep(c, state.q))}
+                    </span>
+                  ))
+                )}
               </p>
               {options.length === 0 ? (
                 <p className="al-why">지금 이 노선에 띄울 수 있는 비행기가 없어요. (거리·공항 크기·슬롯을 확인하세요)</p>
@@ -679,12 +863,23 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                       <PlaneImage model={o.m.id} paint={{ main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] }} className="al-plane-chip al-plane-chip-big" />
                       <span className="al-opt-text">
                         <b>{o.m.name}</b>
-                        <small>
-                          주 {o.freq}회 · {o.m.seats}석 · 탑승률 {pct(o.e.lf)}
-                        </small>
-                        <small>
-                          이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/달
-                        </small>
+                        <span className="al-chips">
+                          <span className="al-chip-static">주 {o.freq}회</span>
+                          <span className="al-chip-static">
+                            <RouteIcon kind="seat" size={12} /> {o.m.seats}석
+                          </span>
+                        </span>
+                        <span className="al-opt-bars">
+                          <span title={`탑승률 ${pct(o.e.lf)}`}>
+                            <LoadMeter lf={o.e.lf} /> <small>탑승률 {pct(o.e.lf)}</small>
+                          </span>
+                          <span title="달 이익 어림 (가장 좋은 것에 견준 막대)">
+                            <Meter value={Math.max(0, o.e.profit) / bestProfit} tone={o.e.profit < 0 ? 'bad' : 'good'} label={`달 이익 ${signedMoney(o.e.profit)}`} />{' '}
+                            <small>
+                              이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/달
+                            </small>
+                          </span>
+                        </span>
                       </span>
                       <span className="al-two">
                         <ActButton
@@ -714,19 +909,29 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
               )}
               {mine.length > 0 && (
                 <>
-                  <h5>내 비행기로 열기</h5>
+                  <h5 className="al-fin-sub">
+                    <FinIcon kind="parked" size={16} /> 내 비행기로 열기 <small>리스료는 이미 내는 중</small>
+                  </h5>
                   <ul className="al-options">
                     {mine.map((o) => (
                       <li key={o.p.id}>
                         <PlaneImage model={o.m.id} paint={{ main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] }} className="al-plane-chip al-plane-chip-big" />
                         <span className="al-opt-text">
                           <b>{o.m.name}</b>
-                          <small>
-                            {o.p.legs.length === 0 ? '쉬는 중' : `남는 시간으로`} 주 {o.freq}회 · 탑승률 {pct(o.e.lf)}
-                          </small>
-                          <small>
-                            이 노선 이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/달 <span className="al-muted">(리스료는 이미 내는 중)</span>
-                          </small>
+                          <span className="al-chips">
+                            <span className={`al-chip-static${o.p.legs.length === 0 ? ' al-pos' : ''}`}>{o.p.legs.length === 0 ? '쉬는 중' : '남는 시간으로'}</span>
+                            <span className="al-chip-static">주 {o.freq}회</span>
+                          </span>
+                          <span className="al-opt-bars">
+                            <span title={`탑승률 ${pct(o.e.lf)}`}>
+                              <LoadMeter lf={o.e.lf} /> <small>탑승률 {pct(o.e.lf)}</small>
+                            </span>
+                            <span>
+                              <small>
+                                이 노선 이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/달
+                              </small>
+                            </span>
+                          </span>
                         </span>
                         <ActButton small blocker={why} onClick={() => openWith(o, o.p.id)}>
                           이 비행기로 열기
@@ -740,7 +945,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                 <ActButton blocker={why} onClick={openRouteOnly} testId="al-open-route-only">
                   노선만 열기 (비행기는 나중에)
                 </ActButton>
-                <p className="al-muted al-tip">이익은 라이벌이 지금 그대로일 때의 어림이에요. 계절과 사건에 따라 달라져요.</p>
+                <MoreInfo>이익은 라이벌이 지금 그대로일 때의 어림이에요. 계절과 사건에 따라 달라져요. 너무 가까운 도시는 기차를 타는 손님이 많아서 비행기 손님이 적어요.</MoreInfo>
               </div>
             </>
           )}

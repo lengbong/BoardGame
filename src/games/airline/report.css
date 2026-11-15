@@ -1,0 +1,844 @@
+/* 📈 보고서 · 📰 뉴스 (ReportView.tsx) */
+
+/* 보고서 위 작은 탭 · 표로 보기 단추 */
+.al-rep-tabs .al-subtab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.al-rep-tabs .al-subtab:not(.al-on) .al-sicon {
+  color: var(--accent);
+}
+.al-rep-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* 줄 안의 막대 */
+.al-barcell {
+  display: block;
+  flex: 1;
+  min-width: 30px;
+  width: 100%;
+}
+.al-barcell svg {
+  display: block;
+}
+.al-bc-track {
+  fill: var(--surface-2);
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.al-bc-good {
+  fill: var(--al-good);
+}
+.al-bc-warn {
+  fill: var(--al-warn);
+}
+.al-bc-bad {
+  fill: var(--al-bad);
+}
+.al-bc-blue {
+  fill: var(--al-blue);
+}
+.al-bc-gain {
+  fill: var(--al-gain);
+}
+.al-bc-loss {
+  fill: var(--al-loss);
+}
+.al-bc-muted {
+  fill: color-mix(in srgb, var(--text-muted) 45%, var(--surface));
+}
+.al-sw-good {
+  background: var(--al-good);
+}
+.al-sw-warn {
+  background: var(--al-warn);
+}
+.al-sw-bad {
+  background: var(--al-bad);
+}
+.al-sw-blue {
+  background: var(--al-blue);
+}
+
+/* 노선마다 최근 열두 달 */
+.al-rm-list,
+.al-yr-list,
+.al-ops-list,
+.al-rk-list,
+.al-xh-list,
+.al-cmp,
+.al-cmp-stats,
+.al-wx,
+.al-feed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.al-rm-list li {
+  display: grid;
+  grid-template-columns: minmax(110px, 1.3fr) minmax(130px, 1.3fr) 92px 74px minmax(110px, 1fr) 70px;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.al-rm-head {
+  padding-top: 0 !important;
+  font-size: 12px !important;
+  color: var(--text-muted);
+}
+.al-rm-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.al-rm-name {
+  font-weight: 600;
+}
+.al-rm-lf,
+.al-rm-ontime {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.al-rm-ontime small:not(.al-rm-mlabel) {
+  min-width: 34px;
+  text-align: right;
+  color: var(--text-muted);
+}
+.al-rm-profit {
+  text-align: right;
+}
+.al-rm-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+}
+.al-rm-mlabel {
+  display: none;
+}
+
+/* 해마다 결산 */
+.al-yr-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.al-yr-row {
+  display: grid;
+  grid-template-columns: 110px minmax(160px, 2fr) 100px 110px auto;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 13px;
+}
+.al-yr-now {
+  box-shadow: inset 3px 0 0 var(--al-blue);
+}
+.al-yr-year {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.al-yr-year .al-flag {
+  margin-left: 2px;
+}
+.al-yr-money {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.al-yr-bar {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 64px;
+  align-items: center;
+  gap: 6px;
+}
+.al-yr-bar small {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+.al-yr-num {
+  text-align: right;
+}
+.al-yr-profit,
+.al-yr-pax > span {
+  display: flex;
+  flex-direction: column;
+}
+.al-yr-profit small,
+.al-yr-pax small {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.al-yr-profit b {
+  font-size: 15px;
+}
+.al-yr-pax {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.al-yr-pax > .al-sicon {
+  color: var(--text-muted);
+}
+.al-yr-rings {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.al-yr-rings small {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-right: 6px;
+}
+.al-gb-hover {
+  fill: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+}
+
+/* 운항 상황판 */
+.al-ops-tiles {
+  margin: 0 0 4px;
+}
+.al-kpi-warnish .al-sicon {
+  color: var(--al-warn);
+}
+.al-ops-legend {
+  margin: 0 0 6px;
+}
+.al-ops-list li {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) minmax(180px, 2fr) minmax(150px, 1.2fr);
+  align-items: center;
+  gap: 6px 14px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.al-ops-name {
+  font-weight: 600;
+}
+.al-ops-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.al-ops-counts {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.al-ops-cause {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+.al-ops-ground {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--al-warn) 16%, var(--surface));
+  font-size: 11.5px;
+}
+.al-cause-icon {
+  color: var(--text-muted);
+}
+.al-cause-weather {
+  color: var(--al-blue);
+}
+.al-cause-bad {
+  color: var(--al-bad);
+}
+.al-wx {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.al-wx > li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+}
+.al-wx > li.al-wx-warn {
+  border-color: color-mix(in srgb, var(--al-blue) 40%, var(--surface));
+}
+.al-wx-month {
+  font-size: 16px;
+}
+.al-wx-clear {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.al-wx-sun {
+  color: var(--al-warn);
+}
+.al-wx-cities {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.al-wx-city {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+}
+
+/* 분기: 잘 된·안 된 노선 */
+.al-rk-sub {
+  margin: 8px 0 2px !important;
+}
+.al-rk-list li {
+  display: grid;
+  grid-template-columns: minmax(90px, auto) minmax(0, 1.4fr) minmax(70px, 1fr) 64px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.al-rk-list li > b {
+  text-align: right;
+}
+.al-rk-route small {
+  font-size: 11.5px;
+}
+li.al-row-mine {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.al-tone-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+.al-tone-badge svg {
+  flex: none;
+}
+.al-tb-good {
+  background: color-mix(in srgb, var(--al-good) 16%, var(--surface));
+}
+.al-tb-good svg {
+  fill: var(--al-good);
+}
+.al-tb-bad {
+  background: color-mix(in srgb, var(--al-bad) 14%, var(--surface));
+}
+.al-tb-bad svg {
+  fill: var(--al-bad);
+}
+.al-tb-big {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+}
+.al-tb-big svg {
+  fill: var(--accent);
+}
+
+/* 분기: 갈아타는 손님 */
+.al-xh-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.al-xh-list li {
+  display: grid;
+  grid-template-columns: 90px minmax(120px, 1.2fr) minmax(0, 1.2fr) minmax(0, 2fr);
+  align-items: center;
+  gap: 6px 12px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.al-xh-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.al-xh-bar small {
+  min-width: 56px;
+  text-align: right;
+}
+.al-xh-cos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+.al-xh-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.al-xh-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* 분기: 회사 비교 카드 */
+.al-cmp {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 10px;
+}
+.al-cmp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.al-cmp-card.al-row-mine {
+  border-color: var(--accent);
+  box-shadow: none;
+}
+.al-cmp-out {
+  opacity: 0.6;
+}
+.al-cmp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.al-cmp-name {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+}
+.al-cmp-name small {
+  font-size: 11.5px;
+}
+.al-cmp-value {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+}
+.al-cmp-value small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.al-cmp-value b {
+  font-size: 22px;
+  font-weight: 800;
+}
+.al-cmp-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.al-cmp-stats li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.al-cmp-stats b {
+  margin-left: auto;
+  color: var(--text);
+  white-space: nowrap;
+}
+.al-cmp-stats b.al-neg {
+  color: var(--al-bad);
+}
+.al-cmp-stats b.al-pos {
+  color: var(--al-good);
+}
+.al-cmp-stats .al-rdots {
+  margin-left: auto;
+}
+.al-medal {
+  flex: none;
+}
+.al-medal-ribbon {
+  fill: var(--al-blue);
+  opacity: 0.75;
+}
+.al-medal-disc {
+  fill: #c9ced6;
+}
+.al-medal-ring {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 1.5;
+}
+.al-medal-num {
+  fill: #1a1a19;
+  font-size: 13px;
+  font-weight: 800;
+}
+.al-medal-1 .al-medal-disc {
+  fill: #e8b923;
+}
+.al-medal-2 .al-medal-disc {
+  fill: #c3c9d1;
+}
+.al-medal-3 .al-medal-disc {
+  fill: #d08b4f;
+}
+.al-medal-n .al-medal-disc,
+.al-medal-out .al-medal-disc {
+  fill: var(--border);
+}
+.al-medal-n .al-medal-num,
+.al-medal-out .al-medal-num {
+  fill: var(--text);
+}
+.al-medal-n .al-medal-ribbon,
+.al-medal-out .al-medal-ribbon {
+  fill: var(--text-muted);
+}
+.al-rdot-on {
+  fill: var(--al-good);
+}
+.al-rdot-off {
+  fill: var(--border);
+}
+
+/* ---------------------------------------------------------------- 📰 뉴스: 해마다 묶은 시간 줄 */
+.al-feed {
+  --nk-weather: #2a78d6;
+  --nk-company: #eb6834;
+  --nk-money: #eda100;
+  --nk-plane: #6250d6;
+  --nk-travel: #1baf7a;
+  --nk-world: #e87ba4;
+  --nk-challenge: #008300;
+  --nk-other: #8a8178;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .al-feed {
+    --nk-weather: #3987e5;
+    --nk-company: #d95926;
+    --nk-money: #c98500;
+    --nk-plane: #9085e9;
+    --nk-travel: #199e70;
+    --nk-world: #d55181;
+    --nk-challenge: #0ca30c;
+    --nk-other: #9a9086;
+  }
+}
+:root[data-theme='dark'] .al-feed {
+  --nk-weather: #3987e5;
+  --nk-company: #d95926;
+  --nk-money: #c98500;
+  --nk-plane: #9085e9;
+  --nk-travel: #199e70;
+  --nk-world: #d55181;
+  --nk-challenge: #0ca30c;
+  --nk-other: #9a9086;
+}
+.al-feed-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.al-feed-head > .al-sicon {
+  color: var(--accent);
+}
+.al-feed-head small {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.al-feed-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.al-feed-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 4px;
+}
+.al-feed-chip.al-on .al-nk {
+  background: rgba(255, 255, 255, 0.9);
+}
+.al-nk {
+  --nk: var(--nk-other);
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 28%;
+  background: color-mix(in srgb, var(--nk) 18%, var(--surface));
+  color: color-mix(in srgb, var(--nk) 80%, var(--text));
+}
+.al-nk-weather {
+  --nk: var(--nk-weather);
+}
+.al-nk-company {
+  --nk: var(--nk-company);
+}
+.al-nk-money {
+  --nk: var(--nk-money);
+}
+.al-nk-plane {
+  --nk: var(--nk-plane);
+}
+.al-nk-travel {
+  --nk: var(--nk-travel);
+}
+.al-nk-world {
+  --nk: var(--nk-world);
+}
+.al-nk-challenge {
+  --nk: var(--nk-challenge);
+}
+.al-feed-year {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.al-feed-yearhead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 6px 0 2px !important;
+  padding: 4px 0;
+  background: var(--bg, var(--surface-2));
+  font-size: 16px !important;
+}
+.al-feed-yearhead span {
+  padding: 2px 12px;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--surface);
+  font-weight: 800;
+}
+.al-feed-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* 세로 시간 줄 */
+.al-feed-list::before {
+  content: '';
+  position: absolute;
+  left: 49px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--border);
+}
+.al-feed-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 38px 24px minmax(0, 1fr);
+  align-items: start;
+}
+.al-feed-month {
+  padding-top: 13px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-align: right;
+}
+.al-feed-dot {
+  justify-self: center;
+  margin-top: 14px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 3px solid var(--text-muted);
+  box-shadow: 0 0 0 2px var(--bg, var(--surface-2));
+  z-index: 1;
+}
+.al-feed-dot-good {
+  border-color: var(--al-good);
+}
+.al-feed-dot-bad {
+  border-color: var(--al-bad);
+}
+.al-feed-dot-big {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.al-feed-card {
+  display: flex;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.al-news-for .al-feed-card {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--al-warn) 45%, transparent);
+}
+.al-feed-item.al-news-for {
+  box-shadow: none;
+}
+.al-feed-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+.al-feed-title .al-flag {
+  margin-left: 0;
+}
+.al-feed-title small {
+  font-size: 12px;
+}
+.al-feed-text {
+  margin: 3px 0 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.al-clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.al-feed-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+  margin-top: 2px;
+}
+.al-feed-actions:empty {
+  display: none;
+}
+.al-feed-city {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* 좁은 화면 */
+@media (max-width: 760px) {
+  .al-rm-head {
+    display: none !important;
+  }
+  .al-rm-list li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 10px;
+    padding: 8px 4px;
+  }
+  .al-rm-name {
+    grid-column: 1;
+  }
+  .al-rm-profit {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .al-rm-lf {
+    grid-column: 1;
+  }
+  .al-rm-spark {
+    grid-column: 2;
+    justify-self: end;
+  }
+  .al-rm-ontime {
+    grid-column: 1;
+  }
+  .al-rm-cancel {
+    grid-column: 2;
+  }
+  .al-rm-mlabel {
+    display: inline;
+    color: var(--text-muted);
+  }
+  .al-yr-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .al-yr-money,
+  .al-yr-rings {
+    grid-column: 1 / -1;
+  }
+  .al-yr-profit {
+    grid-column: 2;
+    grid-row: 1;
+    text-align: right;
+  }
+  .al-ops-list li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .al-wx {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .al-rk-list li {
+    grid-template-columns: minmax(0, 1fr) 64px;
+  }
+  .al-rk-list .al-barcell {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+  .al-rk-co {
+    grid-column: 1;
+  }
+  .al-rk-route {
+    grid-column: 1;
+  }
+  .al-rk-list li > b {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .al-xh-list li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .al-feed-list::before {
+    left: 41px;
+  }
+  .al-feed-item {
+    grid-template-columns: 30px 22px minmax(0, 1fr);
+  }
+  .al-feed-card {
+    flex-wrap: wrap;
+  }
+  .al-feed-card .al-news-photo {
+    display: none;
+  }
+}

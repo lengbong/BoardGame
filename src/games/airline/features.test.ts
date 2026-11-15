@@ -9,6 +9,7 @@ import { SCENARIO_IDS, allianceScore, makeChoice } from './choices';
 import { goalMet, gradeYear, newGoals } from './goals';
 import { CRISIS_MONTHS, MAX_PLANES, actor, applyAction, choiceBlocker, createGame, hubCandidates, proposeBlocker, routeOnPair, runMonth } from './rules';
 import { computeQuarter, networks } from './simulate';
+import { allianceOf } from './alliances';
 import { isValidState, parseSaved } from './storage';
 import { colorDistance, coColors, gameHub, pickColors, usableColor } from './brand';
 import { CITY } from './cities';
@@ -85,14 +86,13 @@ describe('갈아타는 손님', () => {
     expect(computeQuarter(back).xfers.some((x) => [x.a, x.b].includes('tokyo') && [x.a, x.b].includes('osaka'))).toBe(false);
   });
 
-  it('제휴(코드셰어)하면 두 회사 노선을 이어 갈아타는 손님을 함께 태운다', () => {
+  it('동맹(예전 제휴)을 맺으면 두 회사 노선을 이어 갈아타는 손님을 함께 태운다', () => {
     const s = twoHumans();
     addRoute(s, 0, 'seoul', 'tokyo', 'a330-300', 14);
     addRoute(s, 1, 'seoul', 'bangkok', 'a330-300', 7);
     const pair = (st: AirlineState) => computeQuarter(st).xfers.filter((x) => x.companies.length === 2);
     expect(pair(s)).toHaveLength(0);
-    s.companies[0].partner = 1;
-    s.companies[1].partner = 0;
+    s.alliances = [{ id: 999, name: '시험 동맹', members: [0, 1], since: s.t }];
     expect(networks(s)).toEqual([[0, 1]]);
     const joint = pair(s);
     expect(joint.length).toBeGreaterThan(0);
@@ -100,8 +100,8 @@ describe('갈아타는 손님', () => {
   });
 });
 
-describe('제휴 제안', () => {
-  it('사람에게 제안하면 결정 사건이 오고, 받아들이면 제휴, 끝낼 수도 있다', () => {
+describe('동맹 제안', () => {
+  it('사람에게 제안하면 결정 사건이 오고, 받아들이면 동맹, 나올 수도 있다', () => {
     let s = twoHumans();
     s = act(s, { type: 'propose', to: 1 });
     expect(proposeBlocker(s, 0, 1)).toContain('석 달에 한 번');
@@ -109,12 +109,11 @@ describe('제휴 제안', () => {
     s = act(s, { type: 'endTurn' });
     expect(actor(s)).toBe(1);
     s = act(s, { type: 'choose', option: 0 });
-    expect(s.companies[0].partner).toBe(1);
-    expect(s.companies[1].partner).toBe(0);
-    expect(s.news.some((n) => n.title.includes('제휴'))).toBe(true);
+    expect(allianceOf(s, 0)?.members.sort()).toEqual([0, 1]);
+    expect(s.news.some((n) => n.title.includes('동맹'))).toBe(true);
     s = act(s, { type: 'endAlliance' });
-    expect(s.companies[0].partner).toBeNull();
-    expect(s.companies[1].partner).toBeNull();
+    expect(allianceOf(s, 0)).toBeNull();
+    expect(allianceOf(s, 1)).toBeNull();
   });
 
   it('컴퓨터는 겹치는 노선이 많으면 거절하고, 함께 가는 도시가 많으면 받아들인다', () => {
@@ -125,7 +124,7 @@ describe('제휴 제안', () => {
     }
     expect(allianceScore(s, 0, 1)).toBeGreaterThan(0);
     const yes = applyAction(s, { type: 'propose', to: 1 });
-    expect(yes.companies[1].partner).toBe(0);
+    expect(allianceOf(yes, 1)?.members).toContain(0);
     const t = createGame(setup(['human', 'ai-normal'], {}, ['seoul', 'busan']), seededRandom(2));
     addRoute(t, 0, 'seoul', 'tokyo', 'a320', 7);
     addRoute(t, 1, 'seoul', 'tokyo', 'a320', 7);
@@ -133,7 +132,7 @@ describe('제휴 제안', () => {
     addRoute(t, 1, 'busan', 'osaka', 'a320', 7);
     expect(allianceScore(t, 0, 1)).toBeLessThanOrEqual(0);
     const no = applyAction(t, { type: 'propose', to: 1 });
-    expect(no.companies[1].partner).toBeNull();
+    expect(allianceOf(no, 1)).toBeNull();
     expect(no.events.some((e) => e.type === 'alliance' && !e.ok)).toBe(true);
   });
 });

@@ -2,6 +2,7 @@ import { MODEL, leadTime } from './aircraft';
 import { MAX_ROUTES } from './limits';
 import { CAMPAIGN_INFO, MEDIA_INFO, mediaOf } from './ads';
 import { cabinPresets, sameCabin } from './cabin';
+import { MAX_MEMBERS, allianceOf } from './alliances';
 import { charterBlocker, charterPlaneIds, charterProfit, openCharters } from './charters';
 import { checkAtOf, inCheck } from './condition';
 import { countFacility, facilityBlocker, facilityCost } from './facilities';
@@ -355,11 +356,12 @@ export class Planner {
   }
 
   private maybePropose(): void {
-    if (this.c.partner !== null || this.s.q - this.s.startQ < 8 || this.rng() > 0.12) return;
+    const al = allianceOf(this.s, this.ci);
+    if ((al && al.members.length >= MAX_MEMBERS) || this.s.q - this.s.startQ < 8 || this.rng() > 0.12) return;
     let best = -1;
     let score = 1;
     this.s.companies.forEach((t, ti) => {
-      if (ti === this.ci || t.out || t.partner !== null) return;
+      if (ti === this.ci || t.out) return;
       const sc = allianceScore(this.s, this.ci, ti);
       if (sc > score) {
         score = sc;

@@ -5,6 +5,7 @@ import { MODEL } from './aircraft';
 import { MEDIA } from './ads';
 import { BUSINESS_KINDS } from './business';
 import { cabinBlocker, defaultCabin } from './cabin';
+import { migratePartners } from './alliances';
 import { AWARD_KINDS } from './awards';
 import { CHALLENGE } from './challenges';
 import { MAX_TANK } from './fuel';
@@ -174,6 +175,18 @@ export function isValidState(v: unknown): v is AirlineState {
   if (!Array.isArray(s.ledger) || !s.ledger.every(okReport)) return false;
   if (!Array.isArray(s.months) || !s.months.every((m) => isObj(m) && isInt(m.t) && Array.isArray(m.value) && m.value.length === n)) return false;
   if (!Array.isArray(s.years) || !s.years.every((y) => isObj(y) && isInt(y.year) && Array.isArray(y.companies))) return false;
+  // 항공 동맹 (예전 저장에는 없다): 회사마다 동맹 하나, 동맹마다 둘~셋
+  if (s.alliances !== undefined) {
+    if (!Array.isArray(s.alliances)) return false;
+    const seen = new Set<number>();
+    for (const a of s.alliances) {
+      if (!isObj(a) || !isInt(a.id) || typeof a.name !== 'string' || !isInt(a.since) || !Array.isArray(a.members) || a.members.length < 2 || a.members.length > 3) return false;
+      for (const m of a.members) {
+        if (!isIndex(m, n) || seen.has(m)) return false;
+        seen.add(m);
+      }
+    }
+  }
   // 전세기 의뢰 (예전 저장에는 없다)
   if (s.charters !== undefined && !(Array.isArray(s.charters) && s.charters.every((o) => isObj(o) && isInt(o.id) && isCity(o.a) && isCity(o.b) && isInt(o.pax) && o.pax > 0 && isNum(o.pay) && typeof o.title === 'string' && typeof o.icon === 'string' && isInt(o.listed) && isInt(o.expires) && (o.by === undefined || isIndex(o.by, n)) && (o.plane === undefined || isInt(o.plane)) && (o.t === undefined || isInt(o.t))))) return false;
   // 연말 시상식 (예전 저장에는 없다)
@@ -271,6 +284,8 @@ export function parseSaved(v: unknown): SavedAirlineGame | null {
   const saved = { ...(v as unknown as SavedAirlineGame) };
   saved.state = migrateV3(fillMissing(migrateV2(saved.state))) as AirlineState;
   if (!isValidSetup(saved.setup) || !isValidState(saved.state)) return null;
+  // 예전 1:1 제휴는 동맹으로
+  saved.state = migratePartners(saved.state);
   const options = parseOptions(saved.state.options);
   // 항공사 자료가 바뀌어 없어진 항공사는 가상 항공사로 (이름·색은 그대로)
   const companies = saved.state.companies.map((c) => ({

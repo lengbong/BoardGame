@@ -452,7 +452,7 @@ export interface Company {
   choice: Choice | null;
   /** 다음 결정 사건이 올 달 */
   nextChoiceT: number;
-  /** 제휴(코드셰어) 상대 회사 */
+  /** 예전 1:1 제휴(코드셰어) 상대. 이제는 동맹(AirlineState.alliances)을 쓰고 늘 null이다 (예전 저장은 불러올 때 옮긴다) */
   partner: number | null;
   /** 올해 목표 */
   goals: YearGoal[];
@@ -755,6 +755,16 @@ export interface YearReport {
   companies: CompanyReport[];
 }
 
+/** 항공 동맹 (alliances.ts) */
+export interface Alliance {
+  id: number;
+  name: string;
+  /** 회사 번호 (둘~셋) */
+  members: number[];
+  /** 만든 달 */
+  since: number;
+}
+
 /** 전세기 의뢰 (charters.ts) */
 export interface CharterOffer {
   id: number;
@@ -972,6 +982,8 @@ export interface AirlineState {
   awards?: AwardYear[];
   /** 전세기 의뢰 게시판 (예전 저장에는 없다) */
   charters?: CharterOffer[];
+  /** 항공 동맹 (예전 저장에는 없다: 1:1 제휴는 불러올 때 동맹으로 옮긴다) */
+  alliances?: Alliance[];
   nextId: number;
   result: GameResult | null;
   challenge: ChallengeProgress | null;

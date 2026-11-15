@@ -1,3 +1,4 @@
+import { MAX_MEMBERS, allianceOf } from './alliances';
 import { withJosa } from '../../lib/korean';
 import { availableModels, MODEL } from './aircraft';
 import { CITIES, CITY, REGION_INFO, airportClass, citySize, dist, pairKey } from './cities';
@@ -389,14 +390,10 @@ export function makeChoice(state: AirlineState, ci: number, rng: Rng): Draft | n
   return null;
 }
 
-/** 제휴했을 때 서로 좋은 정도 (받는 쪽 to가 보기에). 0보다 크면 받아들인다 */
-export function allianceScore(state: AirlineState, from: number, to: number): number {
+/** 두 회사가 서로 맞는 정도 (지점이 많이 겹치고 노선이 덜 겹칠수록, 크기가 비슷할수록) */
+function pairScore(state: AirlineState, from: number, to: number): number {
   const a = state.companies[from];
   const b = state.companies[to];
-  if (!a || !b || a.out || b.out || from === to) return -99;
-  if (a.partner !== null || b.partner !== null) return -99;
-  // 저가항공은 제휴(코드셰어)를 하지 않는다 (bizmodel.ts)
-  if (a.bizModel === 'lcc' || b.bizModel === 'lcc') return -99;
   const shared = a.branches.filter((x) => b.branches.includes(x)).length;
   const bPairs = new Set(b.routes.map((r) => pairKey(r.a, r.b)));
   const overlap = a.routes.filter((r) => bPairs.has(pairKey(r.a, r.b))).length;
@@ -407,17 +404,49 @@ export function allianceScore(state: AirlineState, from: number, to: number): nu
   return Math.min(5, shared) * 1 - overlap * 1.5 - small - sameHubRegion + 0.5;
 }
 
-/** 제휴 제안 사건 (사람 회사가 받는다) */
-export function allianceChoice(state: AirlineState, from: number, _to: number): Draft {
+/**
+ * from이 to에게 동맹을 제안할 때 to 쪽(동맹이면 그 회사들 모두)이 반기는 정도. 0보다 크면 받아들인다.
+ * 둘 다 동맹이 없으면 새 동맹, 한쪽만 있으면 그 동맹에 들어간다. 둘 다 동맹이거나 자리가 없으면 −99.
+ */
+export function allianceScore(state: AirlineState, from: number, to: number): number {
   const a = state.companies[from];
+  const b = state.companies[to];
+  if (!a || !b || a.out || b.out || from === to) return -99;
+  // 저가항공은 동맹(코드셰어)에 들지 않는다 (bizmodel.ts)
+  if (a.bizModel === 'lcc' || b.bizModel === 'lcc') return -99;
+  const af = allianceOf(state, from);
+  const at = allianceOf(state, to);
+  if (af && at) return -99;
+  const host = af ?? at;
+  if (host && host.members.length >= MAX_MEMBERS) return -99;
+  const live = (ids: number[]) => ids.filter((i) => !state.companies[i]?.out);
+  const sideA = af ? live(af.members) : [from];
+  const sideB = at ? live(at.members) : [to];
+  let sum = 0;
+  for (const x of sideA) for (const y of sideB) sum += pairScore(state, x, y);
+  // 회사가 많을수록 새 회원을 까다롭게 고른다
+  return sum / (sideA.length * sideB.length) - (sideA.length + sideB.length - 2) * 0.5;
+}
+
+/** 동맹 제안 사건 (사람 회사가 받는다) */
+export function allianceChoice(state: AirlineState, from: number, to: number): Draft {
+  const a = state.companies[from];
+  const af = allianceOf(state, from);
+  const at = allianceOf(state, to);
+  const names = (ids: number[]) => ids.map((i) => state.companies[i].name).join('·');
+  const text = af
+    ? `${withJosa(a.name, '이/가')} 자기네 ${af.name}(${names(af.members)})에 들어오라고 해요.`
+    : at
+      ? `${withJosa(a.name, '이/가')} 우리 ${at.name}에 들어오고 싶어 해요 (본사 ${CITY[a.hub].name}).`
+      : `${withJosa(a.name, '이/가')} 함께 항공 동맹을 만들자고 해요 (본사 ${CITY[a.hub].name}).`;
   return {
     scenario: 'alliance',
     icon: '🤝',
-    title: `${a.name}의 제휴 제안`,
-    text: `${withJosa(a.name, '이/가')} 공동 운항(코드셰어)을 하자고 해요 (본사 ${CITY[a.hub].name}). 제휴하면 서로의 노선을 이어 갈아타는 손님을 함께 태우고, 둘 다 지점이 있는 도시에서 손님이 조금 늘어요.`,
+    title: af ? `${af.name} 초대` : at ? `${a.name}의 동맹 가입 신청` : `${a.name}의 동맹 제안`,
+    text: `${text} 동맹 회사들의 노선을 이어 갈아타는 손님을 함께 태우고, 동맹 회사도 지점이 있는 도시에서 손님이 5%, 동맹 마일리지로 모든 노선 손님이 회사 하나마다 1.5% 늘어요.`,
     from,
     options: [
-      { label: '받아들이기', desc: '제휴 시작 (언제든 끝낼 수 있어요)', cost: 0, ai: 1, effects: [{ kind: 'alliance', with: from }] },
+      { label: '받아들이기', desc: '동맹 (언제든 나올 수 있어요)', cost: 0, ai: 1, effects: [{ kind: 'alliance', with: from }] },
       decline('거절하기'),
     ],
   };

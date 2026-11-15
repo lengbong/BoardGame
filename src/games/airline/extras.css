@@ -361,3 +361,16 @@
 .al-charter-taken {
   font-size: 12px;
 }
+
+/* ---------------------------------------------------------------- 항공 동맹 */
+.al-alliance-members {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 14px;
+}
+.al-alliance-join {
+  color: var(--text-muted);
+  font-size: 12px;
+}

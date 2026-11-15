@@ -227,3 +227,19 @@ describe('공항에 비행기 세우기', () => {
     expect(empty.every((v) => v.company === null)).toBe(true);
   });
 });
+
+describe('위에서 본 기종 모양', () => {
+  it('실제 길이·날개폭으로 가벼운 경로를 만든다', async () => {
+    const { planeTop } = await import('./planeTop');
+    const jumbo = planeTop('b747-400');
+    expect(jumbo?.len).toBeCloseTo(70.6);
+    expect(jumbo?.span).toBeCloseTo(64.4);
+    for (const d of [jumbo!.body, jumbo!.wings, jumbo!.engines, jumbo!.fin, jumbo!.crown]) expect(d).toMatch(/^M-?\d/);
+    // 네 발 엔진기는 엔진 덮개 네 개, 꼬리 엔진기는 두 개
+    expect(jumbo!.engines.match(/M/g)).toHaveLength(4);
+    expect(planeTop('dc9')!.engines.match(/M/g)).toHaveLength(2);
+    // 모양 전체가 가벼워야 한다 (3D 그림은 수십 KB)
+    expect(Object.values(jumbo!).join('').length).toBeLessThan(1500);
+    expect(planeTop('없는기종')).toBeNull();
+  });
+});

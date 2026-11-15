@@ -95,8 +95,14 @@
   font-weight: 700;
   pointer-events: none;
 }
-.al-apt-plane image {
-  filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.7));
+/* 이착륙하는 비행기는 도면 위에 겹친 다른 SVG에 (움직일 때 도면을 다시 그리지 않게) */
+.al-apt-movers {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  will-change: transform;
 }
 .al-apt-plane-glow {
   opacity: 0.38;
@@ -107,9 +113,9 @@
 .al-apt-plane-dim .al-apt-plane-glow {
   display: none;
 }
-.al-apt-shadow image {
-  filter: brightness(0);
-  opacity: 0.35;
+.al-apt-shadow {
+  fill: #000;
+  opacity: 0.3;
 }
 
 /* ---------------------------------------------------------------- 도시 칸 카드 */
@@ -138,7 +144,7 @@
   background: var(--ap-out);
   cursor: zoom-in;
 }
-.al-apt-thumb svg {
+.al-apt-thumb .al-apt-base {
   display: block;
   width: 100%;
   height: 100%;
@@ -185,6 +191,12 @@
 .al-apt-overlay {
   z-index: 60;
 }
+/* 게임 화면의 창 뒤 흐림(backdrop-filter)은 이착륙 비행기가 움직일 때마다 화면 전체를 다시 흐리게 해서
+   아주 버벅거린다. 공항 창은 흐림 없이 더 짙은 바탕으로 */
+:root[data-al-ops] .overlay.al-apt-overlay {
+  backdrop-filter: none;
+  background: rgba(2, 6, 14, 0.84);
+}
 .al-apt-modal.result-card {
   width: min(1200px, 100%);
   height: min(860px, calc(100vh - 32px));
@@ -230,14 +242,14 @@
   background: var(--ap-out);
   border: 1px solid var(--al-glass-line, var(--border));
 }
-.al-apt-stage > svg {
+.al-apt-stage > .al-apt-base {
   display: block;
   width: 100%;
   height: 100%;
   cursor: grab;
   touch-action: none;
 }
-.al-apt-stage > svg:active {
+.al-apt-stage > .al-apt-base:active {
   cursor: grabbing;
 }
 .al-apt-tools {

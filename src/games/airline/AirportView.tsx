@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { SEAT_SHAPES } from './Art';
-import { AirportScene } from './AirportArt';
+import { AirportLayers } from './AirportArt';
 import { airportShortName, cityAirports, runwayLength, type CityAirport } from './airports';
 import { parkPlanes, trafficQueue, visitingPlanes } from './airportScene';
 import { coColors } from './brand';
@@ -98,6 +98,7 @@ export function AirportCard({
   icao,
   onPick,
   onOpen,
+  paused = false,
 }: {
   state: AirlineState;
   viewer: number;
@@ -107,6 +108,8 @@ export function AirportCard({
   icao?: string;
   onPick: (icao: string) => void;
   onOpen: () => void;
+  /** 큰 창이 열려 있으면 카드의 이착륙은 쉰다 (가려져 안 보이니까) */
+  paused?: boolean;
 }) {
   const { aps, ap, main, visiting, planes, traffic, paintOf } = useAirportScene(state, viewer, city, icao);
   const boxRef = useRef<HTMLButtonElement>(null);
@@ -132,9 +135,16 @@ export function AirportCard({
       </h4>
       <AirportTabs aps={aps} current={ap.info.icao} city={city} onPick={onPick} />
       <button ref={boxRef} type="button" className="al-apt-thumb" style={{ aspectRatio: `${ratio}` }} onClick={onOpen} aria-label={`${ap.info.name} 도면 크게 보기`} data-testid="al-airport-open">
-        <svg viewBox={`0 0 ${map.w} ${map.h}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`${ap.info.name} 위에서 본 모습`}>
-          <AirportScene map={map} planes={planes} paintOf={paintOf} traffic={traffic} animate={fx && !reduced} k={k} />
-        </svg>
+        <AirportLayers
+          map={map}
+          planes={planes}
+          paintOf={paintOf}
+          traffic={traffic}
+          animate={fx && !reduced && !paused}
+          k={k}
+          viewBox={`0 0 ${map.w} ${map.h}`}
+          label={`${ap.info.name} 위에서 본 모습`}
+        />
         <span className="al-apt-hint" aria-hidden="true">
           🔍 크게 보기
         </span>
@@ -251,13 +261,26 @@ export function AirportModal({
   useEffect(() => {
     const el = svgRef.current;
     if (!el) return;
+    // 휠 눈금이 빨리 들어와도 한 프레임에 한 번만 다시 그린다
+    let f = 1;
+    let at: { x: number; y: number } | null = null;
+    let raf = 0;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const p = toMap(e.clientX, e.clientY);
-      zoomBy(e.deltaY < 0 ? 0.85 : 1 / 0.85, p?.x, p?.y);
+      f *= e.deltaY < 0 ? 0.85 : 1 / 0.85;
+      at = toMap(e.clientX, e.clientY);
+      if (!raf)
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          zoomBy(f, at?.x, at?.y);
+          f = 1;
+        });
     };
     el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, [toMap, zoomBy, map]);
 
   const drag = useRef<{ x: number; y: number; view: View; id: number; moved: boolean } | null>(null);
@@ -314,19 +337,22 @@ export function AirportModal({
         <AirportTabs aps={aps} current={ap.info.icao} city={city} onPick={onPick} />
         <div className="al-apt-modal-body">
           <div className="al-apt-stage" ref={stageRef}>
-            <svg
-              ref={svgRef}
+            <AirportLayers
+              map={map}
+              planes={planes}
+              paintOf={paintOf}
+              traffic={traffic}
+              animate={fx && !reduced}
+              k={k}
+              detail
+              focus={focus}
               viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
-              preserveAspectRatio="xMidYMid meet"
-              role="img"
-              aria-label={`${ap.info.name} 도면: 끌어서 옮기고, 휠이나 +·− 단추로 크게 볼 수 있어요`}
+              label={`${ap.info.name} 도면: 끌어서 옮기고, 휠이나 +·− 단추로 크게 볼 수 있어요`}
+              svgRef={svgRef}
               onPointerDown={onDown}
               onPointerMove={onMove}
               onPointerUp={onUp}
-              onPointerCancel={onUp}
-            >
-              <AirportScene map={map} planes={planes} paintOf={paintOf} traffic={traffic} animate={fx && !reduced} k={k} detail focus={focus} />
-            </svg>
+            />
             <div className="al-apt-tools" role="toolbar" aria-label="도면 보기">
               <button type="button" className="al-map-btn" onClick={() => zoomBy(0.7)} aria-label="확대 (+)" title="확대 (+)">
                 ＋

@@ -116,7 +116,7 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
             ✕
           </button>
         </header>
-        <AirportCard key={city} state={state} viewer={viewer} city={city} fx={fx} icao={aptIcao} onPick={pickApt} onOpen={() => setAirportOpen(true)} />
+        <AirportCard key={city} state={state} viewer={viewer} city={city} fx={fx} icao={aptIcao} onPick={pickApt} onOpen={() => setAirportOpen(true)} paused={airportOpen} />
         {airportOpen && <AirportModal state={state} viewer={viewer} city={city} fx={fx} icao={aptIcao} onPick={pickApt} onClose={() => setAirportOpen(false)} />}
         <div className="al-mp-tiles">
           <div className="al-mp-tile">

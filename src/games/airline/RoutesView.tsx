@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import './routes.css';
 import { coColors } from './brand';
-import { MODEL, availableModels } from './aircraft';
+import { MODEL } from './aircraft';
 import { openSuggestion, type Candidate } from './ai';
 import { SEAT_SHAPES } from './Art';
 import { PlaneImage } from './PlaneImage';
@@ -38,6 +38,9 @@ import { SparkBars, Sparkline } from './Charts';
 import { causeInfo } from './ReportView';
 import { DaySchedule } from './DaySchedule';
 import { TimetableCard } from './TimetableCard';
+import { FaresCard } from './FaresCard';
+import { modelsFor } from './bizmodel';
+import { capacityText } from './freighters';
 import { ActButton, CoName, LoadMeter, Meter, Stepper } from './ui';
 import { FinIcon, ProgressRing } from './FinanceArt';
 import { MoreInfo, StaffIcon } from './StaffArt';
@@ -203,7 +206,7 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
     const out: { m: ModelDef; freq: number; gain: number }[] = [];
     const base = draftsOf(state, me, r.id);
     const left = Math.min(slotCapacity(state, viewer, r.a) - slotsUsed(me, r.a), slotCapacity(state, viewer, r.b) - slotsUsed(me, r.b));
-    for (const m of availableModels(year)) {
+    for (const m of modelsFor(me, year)) {
       if (m.range < d || airportClass(CITY[r.a], year) < m.runway || airportClass(CITY[r.b], year) < m.runway) continue;
       const f = Math.min(maxFreq(m, d), left);
       if (f < 1) continue;
@@ -404,6 +407,7 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
             hasPlanes={planes.length > 0}
             rivals={rivals.map(({ c, i, rt }) => ({ key: String(i), fare: rt!.fare, color: coColors(c).main, name: c.name }))}
           />
+          <FaresCard state={state} viewer={viewer} canAct={canAct} perform={perform} apply={apply} route={r} est={est} />
           <TimetableCard state={state} viewer={viewer} canAct={canAct} perform={perform} route={r} />
         </div>
         <div className="al-editor-right">
@@ -778,7 +782,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
     const out: { m: ModelDef; freq: number; e: RouteEstimate }[] = [];
     const left = Math.min(slotCapacity(state, viewer, from) - slotsUsed(me, from), slotCapacity(state, viewer, to) - slotsUsed(me, to));
     const dem = pairDemand(state, from, to);
-    for (const m of availableModels(year)) {
+    for (const m of modelsFor(me, year)) {
       if (m.range < d || airportClass(CITY[from], year) < m.runway || airportClass(CITY[to], year) < m.runway) continue;
       const max = Math.min(maxFreq(m, d), left);
       if (max < 1) continue;
@@ -978,7 +982,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                             <span className="al-chips">
                               <span className="al-chip-static">주 {o.freq}회</span>
                               <span className="al-chip-static">
-                                <RouteIcon kind="seat" size={12} /> {o.m.seats}석
+                                <RouteIcon kind="seat" size={12} /> {capacityText(o.m)}
                               </span>
                             </span>
                             <span className="al-opt-bars">

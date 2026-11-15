@@ -151,7 +151,14 @@ export interface ModelDef {
   /** 같은 계열 (조종사 자격·부품을 함께 쓴다: 정비·승무원비 할인) */
   family: string;
   note: string;
+  /** 화물기 한 편에 싣는 짐 (톤). 여객기는 없음 (배 아래 짐칸은 cargo.ts에서 따로 셈한다) */
+  cargo?: number;
+  /** 화물기의 바탕이 된 여객기 (그림) */
+  base?: string;
 }
+
+/** 사업 모델: 풀서비스·저가항공·화물 전문 (bizmodel.ts) */
+export type BizModel = 'full' | 'lcc' | 'cargo';
 
 /** 일반석 앞뒤 간격: 0 촘촘, 1 보통, 2 넓게 */
 export type Pitch = 0 | 1 | 2;
@@ -332,14 +339,29 @@ export interface RouteStats {
   cancel: number;
   /** 최근 열두 달 [탑승률, 이익] (그래프) */
   hist: [number, number][];
+  /** 등급마다 [일등석, 비즈니스석, 일반석]: 한 방향 주간 손님·좌석, 달 수입 (classes.ts) */
+  cls?: ClassSplit;
+  /** 화물: 한 방향 주간 톤·실을 수 있는 톤, 달 수입 */
+  cargo?: { t: number; cap: number; rev: number };
+}
+
+/** 등급마다 [일등석, 비즈니스석, 일반석] 손님·좌석(한 방향 주간)과 수입 */
+export interface ClassSplit {
+  pax: [number, number, number];
+  seats: [number, number, number];
+  rev: [number, number, number];
 }
 
 export interface Route {
   id: number;
   a: string;
   b: string;
-  /** 운임 조정 (%) −30 … +30 */
+  /** 일반석 운임 조정 (%) −30 … +30 */
   fare: number;
+  /** 비즈니스석·일등석·화물 운임 조정 (%) −30 … +30 (없으면 0) */
+  fareC?: number;
+  fareF?: number;
+  fareK?: number;
   /** 연 달 */
   since: number;
   stats: RouteStats | null;
@@ -466,6 +488,10 @@ export interface Company {
   checkAt?: number;
   /** 공항 시설 (없으면 없음) */
   facilities?: Facility[];
+  /** 사업 모델 (풀서비스·저가항공·화물 전문) */
+  bizModel: BizModel;
+  /** 바꾸는 중인 사업 모델 (t 달에 바뀐다) */
+  bizModelNext?: { model: BizModel; t: number } | null;
 }
 
 /** 광고 매체 (ads.ts) */
@@ -524,6 +550,8 @@ export interface AirlineSetup {
   hubs: (string | null)[];
   /** 자리마다 고른 실제 항공사 id (실제 항공사 모드). null이면 저절로 고른다 */
   airlines: (string | null)[];
+  /** 자리마다 고른 사업 모델. null이면 풀서비스 (컴퓨터는 저절로) */
+  models?: (BizModel | null)[];
 }
 
 /** 사건의 효과 (until 달이 되면 없어진다) */
@@ -555,7 +583,20 @@ export interface NewsItem {
 
 /** 회사 한 곳의 한 기간(달·분기·해) 손익 (억) */
 export interface CompanyReport {
+  /** 운항 수입 = 여객 운임 + 화물 + 부가 수입 */
   ticket: number;
+  /** 그 가운데 화물 수입 (배 아래 짐칸 + 화물기) */
+  cargo: number;
+  /** 그 가운데 부가 수입 (저가항공의 짐·좌석 지정·기내 판매) */
+  ancillary: number;
+  /** 실은 화물·실을 수 있던 화물 (톤, 양방향) */
+  cargoT: number;
+  cargoCap: number;
+  /** 일등석·비즈니스석 손님 (양방향)과 그 운임 수입 */
+  paxF: number;
+  paxC: number;
+  revF: number;
+  revC: number;
   side: number;
   fuel: number;
   crew: number;
@@ -776,7 +817,10 @@ export type AirlineAction =
   | { type: 'choose'; option: number }
   | { type: 'propose'; to: number }
   | { type: 'endAlliance' }
-  | { type: 'setFare'; route: number; fare: number }
+  /** 운임 조정. cls가 없으면 일반석, c 비즈니스석·f 일등석·k 화물 */
+  | { type: 'setFare'; route: number; fare: number; cls?: 'c' | 'f' | 'k' }
+  /** 사업 모델 바꾸기 (돈이 들고 몇 달 뒤에 바뀐다. 지금 모델을 고르면 바꾸기를 그만둔다) */
+  | { type: 'setBizModel'; model: BizModel }
   | { type: 'setAds'; region: RegionId; amount: number }
   | { type: 'setMedia'; region: RegionId; media: AdMedia }
   | { type: 'campaign'; kind: CampaignKind; region?: RegionId }
@@ -854,8 +898,8 @@ export interface LogEntry {
 export type Phase = 'manage' | 'gameover';
 
 export interface AirlineState {
-  /** 저장 형식 판 (2판 저장은 3판으로 바꿔 읽는다) */
-  version: 3;
+  /** 저장 형식 판 (2·3판 저장은 4판으로 바꿔 읽는다) */
+  version: 4;
   options: AirlineOptions;
   /** 시작한 해 */
   startYear: number;

@@ -29,6 +29,7 @@ import {
 } from './simulate';
 import { AllianceLink, AssetBar, CostBars, FinIcon, LoanMeter, MoneyFlow, OutlookBars, ProgressRing, TargetBar, WrenchPips, type FinIconKind } from './FinanceArt';
 import { MoreInfo } from './StaffArt';
+import { BizModelCard, INCOME_PARTS } from './BizModelCard';
 import { mLabel, monthsText, qOfM, yearOf } from './time';
 import type { AdMedia, AirlineAction, AirlineState, CompanyReport, Mod, ModKind, RegionId } from './types';
 import { ActButton, CoName, Meter, Stepper } from './ui';
@@ -42,10 +43,6 @@ interface FinanceViewProps {
 
 const notMine = '내 차례에만 할 수 있어요';
 
-const INCOME: { key: keyof CompanyReport; name: string }[] = [
-  { key: 'ticket', name: '운임 수입' },
-  { key: 'side', name: '부대사업 수입' },
-];
 const COSTS: { key: keyof CompanyReport; name: string; icon: FinIconKind }[] = [
   { key: 'fuel', name: '연료비', icon: 'fuel' },
   { key: 'staff', name: '직원 임금·초과 근무', icon: 'people' },
@@ -102,7 +99,8 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
   const mods = me.mods.filter((m) => m.until > state.t);
   // 손익 그림: 지난달 값(없으면 이번 달 어림)
   const base = rep ?? next;
-  const inParts = INCOME.map((x) => ({ name: x.name, v: num(base, x.key) }));
+  // 들어온 돈: 여객 운임·화물·부가 수입·부대사업 (BizModelCard.tsx)
+  const inParts = INCOME_PARTS.map((x) => ({ name: x.name, v: base ? x.get(base) : 0 }));
   const inTotal = inParts.reduce((t, x) => t + x.v, 0);
   const profit = base ? base.profit : 0;
   const costRows = COSTS.map((x) => ({ key: x.key, name: x.name, icon: x.icon, v: num(base, x.key), est: next && rep ? num(next, x.key) : undefined, estOnly: !rep }))
@@ -186,11 +184,11 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
               </tr>
             </thead>
             <tbody>
-              {INCOME.map((x) => (
+              {INCOME_PARTS.filter((x) => x.key === 'ticket' || x.key === 'side' || Math.round(rep ? x.get(rep) : 0) !== 0 || Math.round(next ? x.get(next) : 0) !== 0).map((x) => (
                 <tr key={x.key}>
                   <th>{x.name}</th>
-                  <td className="al-pos">{rep ? `+${fmtMoney(rep[x.key] as number)}` : '—'}</td>
-                  {next && <td className="al-pos">+{fmtMoney(next[x.key] as number)}</td>}
+                  <td className="al-pos">{rep ? `+${fmtMoney(x.get(rep))}` : '—'}</td>
+                  {next && <td className="al-pos">+{fmtMoney(x.get(next))}</td>}
                 </tr>
               ))}
               {COSTS.filter((x) => Math.round((rep?.[x.key] as number) ?? 0) !== 0 || Math.round((next?.[x.key] as number) ?? 0) !== 0).map((x) => (
@@ -298,6 +296,8 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
         </div>
         <MoreInfo>한도는 내 비행기 가치의 절반 + 처음 믿어 주는 돈이에요. 한도의 80%를 넘게 빌리면 금리가 2%p 올라가요.</MoreInfo>
       </section>
+
+      <BizModelCard state={state} viewer={viewer} canAct={canAct} perform={perform} />
 
       <section className="al-card al-alliance">
         <h4 className="al-fin-title">

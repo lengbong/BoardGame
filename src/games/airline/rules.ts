@@ -3,6 +3,8 @@ import { MODEL, MODELS, isAvailable, leadTime } from './aircraft';
 import { CAMPAIGN_INFO, MEDIA_INFO, adTarget, mediaOf } from './ads';
 import { BUSINESS_INFO } from './business';
 import { cabinBlocker, defaultCabin, sameCabin } from './cabin';
+import { BIZ_CHANGE_MONTHS, BIZ_INFO, assignBizModels, bizCabinBlocker, bizChangeCost, bizModelBlocker, bizModelFit, bizModelOf, cabinFor, settleBizModel } from './bizmodel';
+import { CLASS_FARE_MAX, CLASS_FARE_MIN } from './classes';
 import { blockText, branchPolitics, makerPolitics, politicalNews, polity, routePolitics } from './politics';
 import { AIRLINE_AWARD_DEMAND, AIRLINE_AWARD_MONTHS, AWARD_INFO, yearAwards } from './awards';
 import { CHALLENGE, challengeDeadline, checkChallenge } from './challenges';
@@ -190,6 +192,7 @@ function newCompany(seat: SeatIndex, kind: Company['kind'], name: string, hub: s
     morale: 65,
     academy: false,
     shock: 0,
+    bizModel: 'full',
   };
 }
 
@@ -197,7 +200,7 @@ function baseState(options: AirlineOptions, year: number, companies: Company[]):
   const t = mOf(year, 1);
   const q = qOfM(t);
   return {
-    version: 3,
+    version: 4,
     options,
     startYear: year,
     t,
@@ -296,11 +299,13 @@ export function createGame(setup: AirlineSetup, rng: Rng = Math.random): Airline
     c.color = colors[k];
     return c;
   });
+  // 사업 모델 (고른 대로, 가끔 컴퓨터 하나는 저가항공·화물 전문: bizmodel.ts)
+  assignBizModels(companies, setup, year, rng);
   let state = baseState(opts, year, companies);
   state = addNews(state, {
     icon: '✈️',
     title: `${year}년, 하늘길 경영을 시작해요`,
-    text: `하늘을 두고 겨루는 회사: ${companies.map((c) => `${c.name}(본사 ${CITY[c.hub].name})`).join(', ')}`,
+    text: `하늘을 두고 겨루는 회사: ${companies.map((c) => `${c.name}(본사 ${CITY[c.hub].name}${c.bizModel !== 'full' ? `, ${BIZ_INFO[c.bizModel].name}` : ''})`).join(', ')}${companies.some((c) => c.airline && c.bizModel !== 'full') ? ' (사업 모델은 게임 속 이야기)' : ''}`,
     tone: 'big',
   });
   state = announceYear(state);
@@ -567,7 +572,7 @@ export function cabinChangeBlocker(state: AirlineState, ci: number, planeId: num
   const c = state.companies[ci];
   const p = c.planes.find((x) => x.id === planeId);
   if (!p) return '없는 비행기예요';
-  const why = cabinBlocker(MODEL[p.model], cabin);
+  const why = cabinBlocker(MODEL[p.model], cabin) ?? bizCabinBlocker(c, cabin);
   if (why) return why;
   const targets = cabinTargets(c, p, cabin, all);
   if (targets.length === 0) return '지금과 같은 배치예요';
@@ -611,6 +616,8 @@ export function buyBlocker(state: AirlineState, ci: number, modelId: string, lea
   const c = state.companies[ci];
   const m = MODEL[modelId];
   if (!m) return '없는 기종이에요';
+  const fit = bizModelFit(c, m);
+  if (fit) return fit;
   if (!isAvailable(m, yearNow(state))) return yearNow(state) < m.intro ? `${m.intro}년에 나와요` : '생산이 끝난 기종이에요';
   if (fleetCount(c) >= MAX_PLANES) return `비행기는 주문까지 ${MAX_PLANES}대까지예요`;
   const pol = historyOn(state) ? makerPolitics(c.hub, m, yearNow(state)) : null;
@@ -625,6 +632,8 @@ export function usedBlocker(state: AirlineState, ci: number, listing: number): s
   const c = state.companies[ci];
   const u = state.market.find((x) => x.id === listing);
   if (!u) return '이미 팔린 비행기예요';
+  const fit = bizModelFit(c, MODEL[u.model]);
+  if (fit) return fit;
   if (fleetCount(c) >= MAX_PLANES) return `비행기는 주문까지 ${MAX_PLANES}대까지예요`;
   const pol = historyOn(state) ? makerPolitics(c.hub, MODEL[u.model], yearNow(state)) : null;
   if (pol) return pol;
@@ -656,6 +665,8 @@ export function assignBlocker(state: AirlineState, ci: number, planeId: number, 
   if (!r) return '없는 노선이에요';
   const m = MODEL[p.model];
   const d = dist(r.a, r.b);
+  const fit = bizModelFit(c, m);
+  if (fit) return fit;
   if (m.range < d) return `항속 거리가 모자라요 (${m.range.toLocaleString()}km < ${d.toLocaleString()}km)`;
   const year = yearNow(state);
   for (const city of [r.a, r.b]) {
@@ -680,7 +691,7 @@ export function bestFreq(state: AirlineState, ci: number, planeId: number, route
   const r = routeById(c, routeId);
   if (!p || !r) return 0;
   const m = MODEL[p.model];
-  if (m.range < dist(r.a, r.b)) return 0;
+  if (m.range < dist(r.a, r.b) || bizModelFit(c, m)) return 0;
   const year = yearNow(state);
   if (airportClass(CITY[r.a], year) < m.runway || airportClass(CITY[r.b], year) < m.runway) return 0;
   let f = maxFreqFor(c, p, routeId);
@@ -773,6 +784,7 @@ export function proposeBlocker(state: AirlineState, ci: number, to: number): str
   const t = state.companies[to];
   if (!t || to === ci) return '제휴할 회사를 골라요';
   if (t.out) return '운항을 멈춘 회사예요';
+  if (bizModelOf(c) === 'lcc' || bizModelOf(t) === 'lcc') return '저가항공은 제휴(코드셰어)를 하지 않아요';
   if (c.partner !== null) return '이미 제휴한 회사가 있어요';
   if (t.partner !== null) return `${withJosa(t.name, '은/는')} 다른 회사와 제휴 중이에요`;
   if (state.t - c.lastProposal < 3) return '제휴 제안은 석 달에 한 번이에요';
@@ -969,7 +981,7 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
       const deposit = depositFor(state, ci, m.id);
       const s = edit(state, ci, (c, s) => {
         c.cash -= deposit;
-        c.planes.push({ id: s.nextId, model: m.id, leased: true, rent, deposit, since: s.t, legs: [], cabin: defaultCabin(m), meal: c.service, got: s.t, cond: 100 });
+        c.planes.push({ id: s.nextId, model: m.id, leased: true, rent, deposit, since: s.t, legs: [], cabin: cabinFor(c, m), meal: c.service, got: s.t, cond: 100 });
         s.nextId += 1;
         c.taken += 1;
         c.stats.bought += 1;
@@ -983,7 +995,7 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
       const u = state.market.find((x) => x.id === action.listing)!;
       const s = edit(state, ci, (c, s) => {
         c.cash -= u.price;
-        c.planes.push({ id: s.nextId, model: u.model, leased: false, rent: 0, deposit: 0, since: s.t - Math.round(u.age * 12), legs: [], cabin: defaultCabin(MODEL[u.model]), meal: c.service, got: s.t, cond: usedCond(u.age) });
+        c.planes.push({ id: s.nextId, model: u.model, leased: false, rent: 0, deposit: 0, since: s.t - Math.round(u.age * 12), legs: [], cabin: cabinFor(c, MODEL[u.model]), meal: c.service, got: s.t, cond: usedCond(u.age) });
         s.nextId += 1;
         c.taken += 1;
         c.stats.bought += 1;
@@ -1035,10 +1047,30 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
     case 'setFare': {
       const r = routeById(c0, action.route);
       const fare = Math.round(action.fare);
+      if (action.cls) {
+        // 비즈니스석·일등석·화물 운임 (classes.ts)
+        const key = action.cls === 'c' ? 'fareC' : action.cls === 'f' ? 'fareF' : action.cls === 'k' ? 'fareK' : null;
+        if (!r || !key || !(fare >= CLASS_FARE_MIN && fare <= CLASS_FARE_MAX) || fare === (r[key] ?? 0)) return state;
+        return edit(state, ci, (c) => {
+          routeById(c, action.route)![key] = fare;
+        });
+      }
       if (!r || fare < FARE_MIN || fare > FARE_MAX || fare === r.fare) return state;
       return edit(state, ci, (c) => {
         routeById(c, action.route)!.fare = fare;
       });
+    }
+    case 'setBizModel': {
+      if (bizModelBlocker(c0, action.model)) return state;
+      if (action.model === bizModelOf(c0)) {
+        return addLog(edit(state, ci, (c) => (c.bizModelNext = null)), seat, `${c0.name}: 사업 모델 바꾸기를 그만뒀어요`);
+      }
+      const cost = bizChangeCost(c0, action.model);
+      const s = edit(state, ci, (c, s) => {
+        c.cash -= cost;
+        c.bizModelNext = { model: action.model, t: s.t + BIZ_CHANGE_MONTHS };
+      });
+      return addLog(s, seat, `${c0.name}: ${BIZ_INFO[action.model].name}(으)로 바꾸기 시작 (${mLabel(state.t + BIZ_CHANGE_MONTHS)}, −${fmtMoney(cost)})`);
     }
     case 'setAds': {
       const amount = Math.round(action.amount);
@@ -1322,9 +1354,10 @@ export function choiceBlocker(state: AirlineState, ci: number, option: number): 
   for (const e of o.effects) {
     if (e.kind === 'alliance') {
       const other = state.companies[e.with];
-      if (!other || other.out || other.partner !== null || c.partner !== null) return '이제는 제휴할 수 없어요';
+      if (!other || other.out || other.partner !== null || c.partner !== null || bizModelOf(c) === 'lcc' || bizModelOf(other) === 'lcc') return '이제는 제휴할 수 없어요';
     }
     if (e.kind === 'order' && fleetCount(c) >= MAX_PLANES) return `비행기는 주문까지 ${MAX_PLANES}대까지예요`;
+    if (e.kind === 'order' && MODEL[e.model] && bizModelFit(c, MODEL[e.model])) return bizModelFit(c, MODEL[e.model]);
   }
   return null;
 }
@@ -1564,6 +1597,8 @@ export function runMonth(state: AirlineState, rng: Rng = Math.random): AirlineSt
         cancel: st.cancel,
         hist,
         ...(st.premLf !== undefined ? { premLf: st.premLf } : {}),
+        ...(st.cls ? { cls: st.cls } : {}),
+        ...(st.cargo ? { cargo: st.cargo } : {}),
       };
     }
     // 정시 운항률·평판·광고 (석 달에 걸쳐 천천히)
@@ -2002,12 +2037,15 @@ function startMonth(state: AirlineState, t: number, rng: Rng): AirlineState {
     }
     const due = c.orders.filter((o) => o.due <= t);
     for (const o of due) {
-      c.planes.push({ id: s.nextId, model: o.model, leased: false, rent: 0, deposit: 0, since: t, legs: [], cabin: defaultCabin(MODEL[o.model]), meal: c.service, got: t, cond: 100 });
+      c.planes.push({ id: s.nextId, model: o.model, leased: false, rent: 0, deposit: 0, since: t, legs: [], cabin: cabinFor(c, MODEL[o.model]), meal: c.service, got: t, cond: 100 });
       s.nextId += 1;
       c.stats.bought += 1;
       c.acc.bought += 1;
     }
     c.orders = c.orders.filter((o) => o.due > t);
+    // 사업 모델 바꾸기가 끝난 달 (bizmodel.ts)
+    const changed = settleBizModel(companies, ci, t);
+    if (changed) s = addNews(s, changed);
     if (due.length && c.kind === 'human') {
       s = addNews(s, { icon: '📦', title: `${c.name}: 새 비행기 인도`, text: `주문한 ${due.map((o) => MODEL[o.model].name).join(', ')}이 도착했어요. 노선에 넣어 주세요.`, tone: 'good', for: [ci] });
     }

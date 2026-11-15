@@ -395,6 +395,8 @@ export function allianceScore(state: AirlineState, from: number, to: number): nu
   const b = state.companies[to];
   if (!a || !b || a.out || b.out || from === to) return -99;
   if (a.partner !== null || b.partner !== null) return -99;
+  // 저가항공은 제휴(코드셰어)를 하지 않는다 (bizmodel.ts)
+  if (a.bizModel === 'lcc' || b.bizModel === 'lcc') return -99;
   const shared = a.branches.filter((x) => b.branches.includes(x)).length;
   const bPairs = new Set(b.routes.map((r) => pairKey(r.a, r.b)));
   const overlap = a.routes.filter((r) => bPairs.has(pairKey(r.a, r.b))).length;

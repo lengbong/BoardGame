@@ -1,6 +1,7 @@
 import type { ShapeKind } from '../../components/shapes';
 import { MODEL } from './aircraft';
 import { SHAPES } from './aircraftShapes';
+import { FREIGHTER_SHAPES } from './freighterShapes';
 import { NEUTRAL_LIVERY, companyLivery, renderPlaneSvg, svgDataUrl, type Livery } from './plane3d';
 
 /** 회사 칠 (없으면 흰 몸통 + 파란 줄) */
@@ -15,7 +16,7 @@ const cache = new Map<string, string>();
 
 /** 기종 그림 data URL (칠마다 한 번만 그린다) */
 export function planeImageUrl(model: string, paint?: Paint | null): string | undefined {
-  const shape = SHAPES[model];
+  const shape = SHAPES[model] ?? FREIGHTER_SHAPES[model];
   if (!shape) return undefined;
   const key = paint ? `${model}|${paint.main}|${paint.dark}|${paint.shape ?? ''}` : model;
   const hit = cache.get(key);

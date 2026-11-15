@@ -1,4 +1,6 @@
-import { MODEL, availableModels, leadTime } from './aircraft';
+import { MODEL, leadTime } from './aircraft';
+import { classAdvice } from './advisorClasses';
+import { planModelsFor } from './bizmodel';
 import { Planner, bestTimes, suggestRoutes, openSuggestion } from './ai';
 import { ACADEMY_COST, STAFF_GROUPS, STAFF_INFO, hireCost, hireTime, staffCap, staffNeed, staffPipe } from './staff';
 import { weather } from './calendar';
@@ -653,6 +655,9 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     if (g) out.push({ key: `goal-${g.kind}`, icon: '🎯', title: `올해 목표가 눈앞이에요: ${g.text}`, detail: `지금 ${Math.round(goalProgress(state, ci, g) * 100)}%. 이루면 ${fmtMoney(g.reward.cash)}과 평판 +${g.reward.rep}.`, weight: 90 });
   }
 
+  // 10. 등급별 운임·화물 운임·사업 모델 (advisorClasses.ts)
+  out.push(...classAdvice(state, ci));
+
   // 할 일이 별로 없으면: 자동 진행 안내
   if (c.routes.length >= 3 && !c.choice && out.filter((a) => a.apply).length <= 1) {
     out.push({ key: 'auto', icon: '⏩', title: '한동안 맡겨 두기', detail: '지금은 크게 고칠 곳이 없어요. ‘결정할 일이 생길 때까지 자동 진행’을 누르면 결정할 일·큰 사건·돈 걱정·라이벌 소식이 생길 때까지 달을 넘겨요.', label: '자동 진행', weight: 30 });
@@ -692,7 +697,7 @@ function bestLeaseFor(state: AirlineState, ci: number, routeId: number): { model
   const before = estimateExisting(state, ci, r).profit;
   const pl = planner(state, ci);
   let best: { model: string; freq: number; gain: number } | null = null;
-  for (const m of availableModels(year)) {
+  for (const m of planModelsFor(c, year)) {
     if (m.range < d || airportClass(CITY[r.a], year) < m.runway || airportClass(CITY[r.b], year) < m.runway) continue;
     if (buyBlocker(state, ci, m.id, true)) continue;
     const freq = Math.max(1, Math.round(maxFreq(m, d) * 0.6));
@@ -726,7 +731,7 @@ function replacementFor(state: AirlineState, ci: number, planeId: number): { mod
   const onRoute = c.planes.filter((x) => legFreq(x, r.id) > 0);
   const drafts = draftsOf(state, c, r.id);
   let best: { model: string; gain: number } | null = null;
-  for (const m of availableModels(year)) {
+  for (const m of planModelsFor(c, year)) {
     if (m.range < d || airportClass(CITY[r.a], year) < m.runway || airportClass(CITY[r.b], year) < m.runway) continue;
     if (buyBlocker(state, ci, m.id, true)) continue;
     const draft = drafts.filter((_, i) => onRoute[i]?.id !== p.id);

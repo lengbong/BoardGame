@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { MODEL } from './aircraft';
+import { isFreighter } from './freighters';
 import {
   MEAL_COST,
   MEAL_ICONS,
@@ -133,6 +134,22 @@ export function CabinEditor({ state, viewer, plane, canAct, perform, onClose }: 
   const set = (k: keyof Cabin, v: number) => setDraft((d) => ({ ...d, [k]: v }));
   const mealOutlook = (lv: number) => cabinOutlook(state, viewer, plane.id, plane.cabin, lv);
 
+  if (isFreighter(m)) {
+    return (
+      <div className="al-cabin" data-testid={`al-cabin-${plane.id}`}>
+        <div className="al-cabin-head">
+          <h5 className="al-fl-cabin-title">
+            <FleetIcon kind="box" size={16} /> {m.name} · 화물 {m.cargo}톤
+          </h5>
+          <button type="button" className="btn btn-small btn-ghost" onClick={onClose}>
+            닫기
+          </button>
+        </div>
+        <p className="al-muted">화물기는 좌석이 없고 짐만 실어요. 화물 운임은 노선 화면의 ‘등급별 운임’에서 정해요.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="al-cabin" data-testid={`al-cabin-${plane.id}`}>
       <div className="al-cabin-head">
@@ -263,6 +280,7 @@ export function CabinEditor({ state, viewer, plane, canAct, perform, onClose }: 
 /** 좌석만 짧게 (예: '93석 (비즈 17 · 일반 76, 보통)') — 기내식은 따로 아이콘과 함께 쓴다 */
 export function cabinSeatText(plane: Plane): string {
   const m = MODEL[plane.model];
+  if (isFreighter(m)) return `화물 ${m.cargo}톤`;
   if (fixedCabin(m)) return `${m.seats}석 (한 등급)`;
   const c = plane.cabin;
   const parts = [c.first > 0 ? `일등 ${c.first}` : '', c.business > 0 ? `비즈 ${c.business}` : '', `일반 ${economySeats(m, c)}`].filter(Boolean);
@@ -272,6 +290,7 @@ export function cabinSeatText(plane: Plane): string {
 /** 비행기 카드에 쓰는 한 줄 요약 */
 export function cabinSummary(plane: Plane): string {
   const m = MODEL[plane.model];
+  if (isFreighter(m)) return `화물 ${m.cargo}톤`;
   if (fixedCabin(m)) return `${m.seats}석 (한 등급) · ${MEAL_ICONS[plane.meal]} ${MEAL_NAMES[plane.meal]}`;
   const c = plane.cabin;
   const parts = [c.first > 0 ? `일등 ${c.first}` : '', c.business > 0 ? `비즈 ${c.business}` : '', `일반 ${economySeats(m, c)}`].filter(Boolean);

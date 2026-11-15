@@ -79,6 +79,8 @@ export interface PlaneShape {
   planform?: readonly (readonly [number, number, number])[];
   /** 창문 줄 수 대신 쓰는 값 (없으면 decks) */
   windows?: number;
+  /** 화물기: 손님 창문 없이 큰 짐 문 (freighterShapes.ts) */
+  freighter?: boolean;
 }
 
 /** 칠 색 */
@@ -421,13 +423,22 @@ function decals(B: Builder, s: PlaneShape, sec: (u: number) => Section, liv: Liv
   const wz = 0.24 * H;
   const wu0 = s.sst ? ln * 1.0 : ln * 1.05;
   const wu1 = L - lt * (s.sst ? 0.8 : 0.72);
-  if (win >= 2) {
+  if (s.freighter) {
+    // 화물기: 손님 창문 대신 큰 짐 문 (747은 날개 뒤, 나머지는 날개 앞)
+    const u = s.hump ? L * 0.62 : ln * 1.15;
+    const c = sec(u);
+    const w = Math.max(2.6, s.dia * 0.62);
+    const zA = c.zc - 0.12 * c.b;
+    const zB = c.zc + 0.78 * c.b;
+    const pts: Vec[] = [surfaceAt(sec, u, zA, 1.016), surfaceAt(sec, u + w, zA, 1.016), surfaceAt(sec, u + w, zB, 1.016), surfaceAt(sec, u, zB, 1.016), surfaceAt(sec, u, zA, 1.016)];
+    B.strokes.push({ pts, color: '#5f6d7d', width: 0.2, layer: 11, unit: 3, order: 0 });
+  } else if (win >= 2) {
     winRow(-0.18 * H, wu0 + 0.5, wu1);
     winRow(0.5 * H, wu0 + 1.5, wu1 - lt * 0.1);
   } else {
     winRow(wz, wu0, wu1);
   }
-  if (s.hump) {
+  if (s.hump && !s.freighter) {
     const pts: Vec[] = [];
     const uA = s.len * 0.075;
     const uB = s.len * (s.hump - 0.04);

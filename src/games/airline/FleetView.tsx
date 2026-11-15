@@ -29,6 +29,9 @@ import { DaySchedule } from './DaySchedule';
 import { ArrivalTimeline, FleetIcon, HoursBar, SpecBars, toneOfUse, type FleetIconKind } from './FleetArt';
 import { FinIcon, ProgressRing } from './FinanceArt';
 import { PlaneImage } from './PlaneImage';
+import { FreighterShop } from './FreighterShop';
+import { bizModelOf } from './bizmodel';
+import { availableFreighters } from './freighters';
 import { MoreInfo } from './StaffArt';
 import { ActButton } from './ui';
 
@@ -52,13 +55,13 @@ type Tab = 'hangar' | 'shop' | 'used' | 'day';
 export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRoutes }: FleetViewProps) {
   const me = state.companies[viewer];
   const [tab, setTab] = useState<Tab>(me.planes.length === 0 && me.orders.length === 0 ? 'shop' : 'hangar');
-  const [size, setSize] = useState<SizeClass | 'all'>('all');
+  const [size, setSize] = useState<SizeClass | 'all' | 'cargo'>(bizModelOf(me) === 'cargo' ? 'cargo' : 'all');
   const [cabinFor, setCabinFor] = useState<number | null>(null);
   const year = yearOf(state.q);
   const color = coColors(me);
   const paint = { main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] };
   const planes = [...me.planes].sort((a, b) => (a.legs.length === 0 ? 0 : 1) - (b.legs.length === 0 ? 0 : 1) || planeHours(me, a) - planeHours(me, b));
-  const models = availableModels(year).filter((m) => size === 'all' || sizeClass(m) === size);
+  const models = size === 'cargo' ? [] : availableModels(year).filter((m) => size === 'all' || sizeClass(m) === size);
   const soon = MODELS.filter((m) => m.intro > year && m.intro <= year + 4);
   const delivered = deliveriesThisQuarter(state, viewer);
   const families = familyCounts(me);
@@ -342,9 +345,9 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
       {tab === 'shop' && (
         <div className="al-shop">
           <div className="al-sort" role="group" aria-label="크기">
-            {(['all', 'small', 'medium', 'large'] as const).map((k) => (
-              <button key={k} type="button" className={`al-chip${size === k ? ' al-on' : ''}`} onClick={() => setSize(k)}>
-                {k === 'all' ? `전체 ${availableModels(year).length}` : k === 'small' ? '작은 (120석 아래)' : k === 'medium' ? '중간 (230석 아래)' : '큰 비행기'}
+            {(['all', 'small', 'medium', 'large', 'cargo'] as const).map((k) => (
+              <button key={k} type="button" className={`al-chip${size === k ? ' al-on' : ''}`} onClick={() => setSize(k)} data-testid={`al-size-${k}`}>
+                {k === 'all' ? `전체 ${availableModels(year).length}` : k === 'small' ? '작은 (120석 아래)' : k === 'medium' ? '중간 (230석 아래)' : k === 'large' ? '큰 비행기' : `📦 화물기 ${availableFreighters(year).length}`}
               </button>
             ))}
             <span className="al-muted al-shop-note">
@@ -360,6 +363,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
             </span>
           </div>
           <MoreInfo>값은 그 해 값을 오늘 돈으로 어림한 것이에요. 주문하면 값을 먼저 내고 몇 달 기다려야 하지만 내 것이 되어 나중에 팔 수 있어요. 리스는 바로 받아 쓸 수 있고, 돌려줄 때 보증금을 돌려받지만 위약금으로 한 달 치를 내요.</MoreInfo>
+          {size === 'cargo' && <FreighterShop state={state} viewer={viewer} canAct={canAct} perform={perform} />}
           <ul className="al-cards">
             {models.map((m) => {
               const eff = BEST_FUEL / fuelPerSeat(m);

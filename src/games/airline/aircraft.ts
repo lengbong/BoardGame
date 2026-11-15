@@ -1,4 +1,5 @@
 import type { BodyType, ModelDef } from './types';
+import { FREIGHTERS } from './freighters';
 
 /**
  * 실제 기종 목록. 좌석(흔한 2등급 배치)·항속 거리·속도·처음 운항한 해·생산을 마친 해는 대략 맞춘 근삿값이고,
@@ -187,7 +188,8 @@ export const MODELS: readonly ModelDef[] = ROWS.map(([id, name, maker, body, eng
   note,
 }));
 
-export const MODEL: Record<string, ModelDef> = Object.fromEntries(MODELS.map((m) => [m.id, m]));
+/** id로 찾기 (화물기 포함: freighters.ts) */
+export const MODEL: Record<string, ModelDef> = Object.fromEntries([...MODELS, ...FREIGHTERS].map((m) => [m.id, m]));
 
 /** 그 해에 새로 사거나 리스할 수 있는 기종 */
 export function availableModels(year: number): ModelDef[] {

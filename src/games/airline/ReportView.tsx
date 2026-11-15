@@ -148,7 +148,7 @@ function MonthView({ state, viewer }: { state: AirlineState; viewer: number }) {
           <ProfitBars
             data={ledger.map((l) => {
               const r = l.companies[viewer];
-              return { label: mShort(l.t), value: r.profit, detail: [`수입 ${fmtMoney(r.ticket + r.side)}`, `비용 ${fmtMoney(costOf(r))}`, `손님 ${fmtPax(r.pax)}`, `정시율 ${r.flights > 0 ? pct(r.onTime) : '—'}`] };
+              return { label: mShort(l.t), value: r.profit, detail: [`수입 ${fmtMoney(r.ticket + r.side)}`, ...(r.cargo ? [`그중 화물 ${fmtMoney(r.cargo)}`] : []), `비용 ${fmtMoney(costOf(r))}`, `손님 ${fmtPax(r.pax)}`, `정시율 ${r.flights > 0 ? pct(r.onTime) : '—'}`] };
             })}
             format={signedMoney}
             axisFormat={axisMoney}

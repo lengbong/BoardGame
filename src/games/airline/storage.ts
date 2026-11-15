@@ -9,6 +9,7 @@ import { AWARD_KINDS } from './awards';
 import { CHALLENGE } from './challenges';
 import { MAX_TANK } from './fuel';
 import { FACILITY_KINDS } from './facilities';
+import { isValidV4Company, migrateV3, parseModels } from './migrate4';
 import { CITY, REGIONS } from './cities';
 import { REAL_AIRLINE } from './realAirlines';
 import { STAFF_GROUPS, emptyStaff, staffNeed } from './staff';
@@ -145,6 +146,8 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
   if (!isInt(k.service) || k.service < 1 || k.service > 5 || !isNum(k.reputation)) return false;
   if (!Array.isArray(k.businesses) || !k.businesses.every((b) => isObj(b) && isCity(b.city) && BUSINESS_KINDS.includes(b.kind) && isNum(b.cost))) return false;
   if (typeof k.out !== 'boolean' || !isInt(k.crisis) || !isObj(k.stats)) return false;
+  // 사업 모델·등급 운임 (4판)
+  if (!isValidV4Company(k)) return false;
   return true;
 }
 
@@ -152,7 +155,7 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
 export function isValidState(v: unknown): v is AirlineState {
   if (!isObj(v)) return false;
   const s = v as unknown as AirlineState;
-  if (s.version !== 3) return false;
+  if (s.version !== 4) return false;
   if (!isInt(s.nextId) || !isInt(s.t) || !isInt(s.startT) || s.startT > s.t || s.q !== Math.floor(s.t / 3) || s.startQ !== Math.floor(s.startT / 3) || !isInt(s.startYear)) return false;
   if (s.phase !== 'manage' && s.phase !== 'gameover') return false;
   if (!Array.isArray(s.companies) || s.companies.length < 1 || s.companies.length > 4) return false;
@@ -235,9 +238,9 @@ export function migrateV2(v: unknown): unknown {
   return s;
 }
 
-/** 3판 저장에 나중에 생긴 값(직원·시간표)이 없으면 채운다 */
+/** 3·4판 저장에 나중에 생긴 값(직원·시간표)이 없으면 채운다 */
 export function fillMissing(v: unknown): unknown {
-  if (!isObj(v) || v.version !== 3 || !Array.isArray(v.companies)) return v;
+  if (!isObj(v) || (v.version !== 3 && v.version !== 4) || !Array.isArray(v.companies)) return v;
   const s = JSON.parse(JSON.stringify(v)) as Record<string, any>;
   const year = isInt(s.t) ? Math.floor(s.t / 12) : 2000;
   for (const c of s.companies) {
@@ -264,7 +267,7 @@ export function fillMissing(v: unknown): unknown {
 export function parseSaved(v: unknown): SavedAirlineGame | null {
   if (!isObj(v)) return null;
   const saved = { ...(v as unknown as SavedAirlineGame) };
-  saved.state = fillMissing(migrateV2(saved.state)) as AirlineState;
+  saved.state = migrateV3(fillMissing(migrateV2(saved.state))) as AirlineState;
   if (!isValidSetup(saved.setup) || !isValidState(saved.state)) return null;
   const options = parseOptions(saved.state.options);
   // 항공사 자료가 바뀌어 없어진 항공사는 가상 항공사로 (이름·색은 그대로)
@@ -275,7 +278,7 @@ export function parseSaved(v: unknown): SavedAirlineGame | null {
     planes: c.planes.map((p) => ({ ...p, cabin: p.cabin ?? defaultCabin(MODEL[p.model]), meal: p.meal ?? c.service })),
   }));
   return {
-    setup: { ...saved.setup, hubs: saved.setup.hubs ?? [null, null, null, null], airlines: parseAirlines(saved.setup.airlines), options: parseOptions(saved.setup.options) },
+    setup: { ...saved.setup, hubs: saved.setup.hubs ?? [null, null, null, null], airlines: parseAirlines(saved.setup.airlines), models: parseModels(saved.setup.models), options: parseOptions(saved.setup.options) },
     state: { ...saved.state, companies, options, events: [] },
     savedAt: isNum(saved.savedAt) ? saved.savedAt : Date.now(),
   };
@@ -301,7 +304,7 @@ export function clearSavedAirlineGame(): void {
 export function loadAirlineSetup(): AirlineSetup {
   const s = loadJson<AirlineSetup>(SETUP_KEY);
   if (!isValidSetup(s)) return DEFAULT_SETUP;
-  return { seats: s.seats, options: parseOptions(s.options), hubs: s.hubs ?? [null, null, null, null], airlines: parseAirlines(s.airlines) };
+  return { seats: s.seats, options: parseOptions(s.options), hubs: s.hubs ?? [null, null, null, null], airlines: parseAirlines(s.airlines), models: parseModels(s.models) };
 }
 
 export function saveAirlineSetup(setup: AirlineSetup): void {

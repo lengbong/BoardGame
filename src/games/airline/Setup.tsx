@@ -22,6 +22,7 @@ import { REAL_AIRLINE, airlinesAt } from './realAirlines';
 import { AIRLINE_TITLE } from './song';
 import type { AiStyle, AirlineOptions, AirlineSetup, MoneyLevel, NameMode, StartEra } from './types';
 import { IataBadge } from './ui';
+import { BizModelSetup, humanModels } from './BizModelCard';
 import { Meter } from './ui';
 
 interface SetupProps {
@@ -200,7 +201,7 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
       });
       return;
     }
-    onStart({ ...setup, hubs, airlines });
+    onStart({ ...setup, hubs, airlines, models: humanModels(setup) });
   };
 
   const setAirline = (seat: number, id: string | null) => {
@@ -403,6 +404,8 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
             </ul>
             {choosing !== null && <HubChooser era={opt.era} taken={hubs.filter((h, i) => h && i !== choosing) as string[]} value={hubs[choosing]} onPick={(c) => setHub(choosing, c)} />}
           </section>
+
+          <BizModelSetup setup={setup} onChange={(models) => setSetup((s) => ({ ...s, models }))} />
         </>
       ) : (
         <section className="setup-section">
@@ -563,6 +566,16 @@ function HowTo() {
         </li>
         <li>
           <b>계절과 운항 현장</b>: 손님은 달마다 달라요 — 하와이·방콕은 겨울, 지중해는 여름, 설·추석·여름방학·연말엔 여행이 늘어요 (지도 위 날짜 옆에 이번 달 손님 분위기가 나와요). 날씨(동아시아 태풍 7~9월, 북쪽 폭설 12~2월, 남아시아 몬순 6~9월, 안개)와 낡은 비행기·정비·혼잡 때문에 <b>지연·결항·회항·기체 점검</b>이 생겨요. 재무 화면의 <b>정비 수준</b>·<b>예비 승무원</b>과, 노선에 넣지 않은 <b>예비기</b>로 줄일 수 있어요. 정시 운항률은 평판과 손님에 영향을 줘요. 모두 게임 속 이야기이고 사고는 없어요.
+        </li>
+        <li>
+          <b>💺 등급별 운임</b>: 노선마다 <b>일등석·비즈니스석·일반석·화물</b> 운임을 따로 정해요 (−30~+30%). 고급 좌석을 찾는 손님은 사업 손님일수록, 멀리 갈수록, 요즘일수록 많아요. 비즈니스석은 1979년 무렵 생겼고 그
+          전에는 일등석이 흔했어요. 너무 비싸거나 자리가 차면 아래 등급으로 내려가고, 일반석이 차면 남은 고급 좌석에 일반석 값으로 앉아요. 노선 화면 ‘등급별 운임’의 <b>💡 추천 운임</b>이 이익이 가장 큰 값을
+          찾아 줘요.
+        </li>
+        <li>
+          <b>🎒 사업 모델과 📦 화물</b>: 회사마다 <b>풀서비스</b>·<b>저가항공</b>(한 등급 촘촘한 좌석, 싼 비용, 빠른 회전, 짐·좌석 값 부가 수입 — 갈아타기·제휴·화물은 없고, 1978년 규제가 풀린 뒤 싼 표 관광 손님이 늘어요)·<b>화물 전문</b>(화물기만) 가운데
+          하나로 시작하고, 재무 화면에서 돈과 여섯 달을 들여 바꿀 수 있어요. 짐은 도시 경제·무역 도시·거리·시대로 정해지고 10~12월에 가장 많으며 기름값이 오르면 줄어요. 넓은 동체 여객기는 배 아래 짐칸에 짐을 많이
+          싣고, 707-320C부터 747-8F까지 실제 화물기(수치는 근삿값)도 들일 수 있어요.
         </li>
         <li>
           <b>👥 직원과 조직</b>: 비행기를 띄우려면 <b>조종사·객실 승무원·정비사·지상직</b>이 있어야 해요. 필요한 사람 수는 비행시간·좌석·비행기 나이·지점·손님 수로 정해지고, 뽑으면 바로 오지 않아요 (조종사 4~5달, 정비사 2~3달, 객실 승무원 1~2달, 지상직 1달 — 훈련원이 있으면 더 빨라요). 모자라면 15%까지는 초과 근무로 버티지만 그 넘게는 <b>결항</b>이 나요. <b>임금 수준</b>·초과 근무·회사 성장이 <b>조직 만족도</b>를 움직이고, 만족도가 정시 운항·서비스에 닿으며 너무 낮으면 <b>파업</b>이 날 수 있어요. 인사 화면에서 뽑고, 내보내고, 임금을 정해요.

@@ -358,7 +358,7 @@ describe('컴퓨터 성향과 기타', () => {
   it('시작 분기 정보', () => {
     const s = twoHumans();
     expect(s.q).toBe(qOf(2003, 1));
-    expect(s.version).toBe(3);
+    expect(s.version).toBe(4);
     expect(isValidState(JSON.parse(JSON.stringify(s)))).toBe(true);
   });
 });
@@ -374,11 +374,18 @@ describe('실제 항공사', () => {
       for (let seed = 1; seed <= 6; seed++) {
         const s = createGame(realSetup(['human', 'ai-normal', 'ai-easy', 'ai-normal'], [], era), seededRandom(seed * 31 + era));
         const flying = new Set(airlinesAt(era).map((a) => a.id));
-        const ids = s.companies.map((c) => c.airline);
+        // 컴퓨터 하나는 가끔 저가항공·화물 전문이 되어 지어낸 이름을 쓴다 (bizmodel.ts)
+        const real = s.companies.filter((c) => c.bizModel === 'full');
+        for (const c of s.companies.filter((x) => x.bizModel !== 'full')) {
+          expect(c.kind).not.toBe('human');
+          expect(c.airline).toBeNull();
+        }
+        expect(real.length).toBeGreaterThanOrEqual(3);
+        const ids = real.map((c) => c.airline);
         expect(ids.every((id) => id !== null && flying.has(id))).toBe(true);
-        expect(new Set(ids).size).toBe(4);
+        expect(new Set(ids).size).toBe(real.length);
         expect(new Set(s.companies.map((c) => c.hub)).size).toBe(4);
-        for (const c of s.companies) expect(c.name).toBe(REAL_AIRLINE[c.airline!].name);
+        for (const c of real) expect(c.name).toBe(REAL_AIRLINE[c.airline!].name);
         const cols = s.companies.map((c) => coColors(c).main);
         for (let i = 0; i < cols.length; i++) for (let j = i + 1; j < cols.length; j++) expect(colorDistance(cols[i], cols[j])).toBeGreaterThanOrEqual(30);
       }

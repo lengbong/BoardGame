@@ -127,7 +127,8 @@ describe('저장과 이어하기', () => {
     const saved = parseSaved({ setup, state: v2, savedAt: 5 });
     expect(saved).not.toBeNull();
     const s3 = saved!.state;
-    expect(s3.version).toBe(3);
+    // 2판 → 3판 → 4판(등급별 운임·사업 모델)
+    expect(s3.version).toBe(4);
     expect(s3.t).toBe(v2.q * 3);
     expect(s3.q).toBe(v2.q);
     expect(s3.startT).toBe(v2.startQ * 3);

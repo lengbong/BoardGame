@@ -31,8 +31,8 @@ export const REAL_AIRLINES: readonly RealAirline[] = [
     colors: ['#6cace4', '#003876'], note: '1962~1969년에는 나라가 운영한 대한항공공사',
   },
   {
-    id: 'asiana', name: '아시아나항공', nameEn: 'Asiana Airlines', iata: 'OZ', founded: 1988, hub: 'seoul', region: 'eastasia',
-    colors: ['#a2aab0', '#c8102e'], note: '2024년 대한항공의 자회사가 됐어요 (두 회사를 합칠 계획이 있어요)',
+    id: 'asiana', name: '아시아나항공', nameEn: 'Asiana Airlines', iata: 'OZ', founded: 1988, defunct: 2024, hub: 'seoul', region: 'eastasia',
+    colors: ['#a2aab0', '#c8102e'], note: '2024년 12월 대한항공에 인수돼 자회사가 됐어요 (게임에서는 이때 대한항공에 합쳐져요)',
   },
   { id: 'jal', name: '일본항공', nameEn: 'Japan Airlines', iata: 'JL', founded: 1951, hub: 'tokyo', region: 'eastasia', colors: ['#e60012', '#222222'] },
   {
@@ -72,8 +72,8 @@ export const REAL_AIRLINES: readonly RealAirline[] = [
     colors: ['#111111', '#00b2a9'], note: '1940년 TEAL(태즈먼 제국 항공)로 시작해 1965년 지금 이름으로',
   },
   {
-    id: 'hawaiian', name: '하와이안항공', nameEn: 'Hawaiian Airlines', iata: 'HA', founded: 1941, hub: 'honolulu', region: 'seaoc',
-    colors: ['#5a2d82', '#e0457b'], note: '1929년 인터아일랜드 항공으로 시작. 2024년 알래스카항공과 한 회사가 됨',
+    id: 'hawaiian', name: '하와이안항공', nameEn: 'Hawaiian Airlines', iata: 'HA', founded: 1941, defunct: 2024, hub: 'honolulu', region: 'seaoc',
+    colors: ['#5a2d82', '#e0457b'], note: '1929년 인터아일랜드 항공으로 시작. 2024년 9월 알래스카항공에 인수돼 한 회사가 됨',
   },
 
   // ---------------------------------------------------------------- 남아시아·중동

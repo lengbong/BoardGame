@@ -1,6 +1,8 @@
 import { CITY } from './cities';
 import { REAL_AIRLINE, REAL_AIRLINES, type RealAirline } from './realAirlines';
 import { usableColor } from './brand';
+import { AIRLINE_FATES, PREDECESSOR, entryT, fateIn } from './airlineHistory';
+import { mOf, monthOf, yearOfM } from './time';
 import type { AirlineOptions, RegionId } from './types';
 
 /**
@@ -44,42 +46,46 @@ export const FUTURE_AIRLINES: readonly FutureAirline[] = [
 
 export const FUTURE_AIRLINE: Record<string, FutureAirline> = Object.fromEntries(FUTURE_AIRLINES.map((a) => [a.id, a]));
 
-/** 이름만 바뀐 회사: 앞 회사가 없어지는 해에 뒤 회사 이름으로 이어 난다 */
-export const RENAMES: Record<string, string> = {
-  boac: 'britishairways',
-  airlanka: 'srilankan',
-  swissair: 'swiss',
-  alitalia: 'ita',
-  lan: 'latam',
-};
+/**
+ * 이름만 바뀐 회사: 앞 회사가 없어지는 달에 뒤 회사 이름으로 이어 난다.
+ * 실제 역사(이름 바꾸기·합병·문 닫기)는 보통 판과 같은 표(airlineHistory.ts)를 쓴다.
+ */
+export const RENAMES: Record<string, string> = Object.fromEntries(AIRLINE_FATES.filter((f) => f.kind === 'rename' && f.into).map((f) => [f.id, f.into!]));
 
-/** 다른 회사에 합쳐진 회사 (실제 역사) */
-const MERGES: Record<string, string> = {
-  twa: 'american',
-  northwest: 'delta',
-};
-
-/** 예측해서 지어낸 미래의 합병 (게임 속 이야기) */
+/** 예측해서 지어낸 미래의 합병 (게임 속 이야기, 그 해 1월) */
 export const PREDICTED_MERGERS: readonly { id: string; year: number; into: string }[] = [
-  { id: 'asiana', year: 2027, into: 'korean' },
   { id: 'ita', year: 2034, into: 'lufthansa' },
-  { id: 'hawaiian', year: 2038, into: 'united' },
   { id: 'kenya', year: 2058, into: 'ethiopian' },
 ];
 
-export type Fate = { kind: 'rename'; into: string } | { kind: 'merge'; into: string; predicted?: boolean } | { kind: 'close' };
+export type Fate =
+  | { kind: 'rename'; into: string; why?: string }
+  | { kind: 'merge'; into: string; predicted?: boolean; why?: string }
+  /** intoName: 판 밖(목록에 없는) 회사에 합쳐졌다 */
+  | { kind: 'close'; intoName?: string; why?: string };
 
-/** 이 실제 항공사가 이 해 1월에 맞는 운명 (없으면 그대로 난다) */
-export function fateAt(airline: string, year: number): Fate | null {
-  const a = REAL_AIRLINE[airline];
-  if (!a) return null;
-  if (a.defunct === year) {
-    if (RENAMES[airline]) return { kind: 'rename', into: RENAMES[airline] };
-    if (MERGES[airline]) return { kind: 'merge', into: MERGES[airline] };
-    return { kind: 'close' };
+/** 이 실제 항공사가 이 달(t)에 맞는 운명: 실제 역사는 그 달에, 예측한 미래의 합병은 그 해 1월에 (없으면 그대로 난다) */
+export function fateAt(airline: string, t: number): Fate | null {
+  const f = fateIn(airline, t);
+  if (f) {
+    if (f.kind === 'rename' && f.into) return { kind: 'rename', into: f.into, why: f.why };
+    if (f.kind === 'merge' && f.into) return { kind: 'merge', into: f.into, why: f.why };
+    return { kind: 'close', ...(f.intoName ? { intoName: f.intoName } : {}), why: f.why };
   }
-  const p = PREDICTED_MERGERS.find((m) => m.id === airline && m.year === year);
+  if (monthOf(t) !== 1) return null;
+  const p = PREDICTED_MERGERS.find((m) => m.id === airline && m.year === yearOfM(t));
   return p ? { kind: 'merge', into: p.into, predicted: true } : null;
+}
+
+/** 쉬던 회사가 날기 시작하는 달: 실제 항공사는 날기 시작한 달, 예측한 미래 항공사는 그 해 1월 */
+export function joinT(c: { airline: string | null; joinYear?: number }): number {
+  const year = c.joinYear ?? 0;
+  return c.airline ? entryT(c.airline, year) : mOf(year, 1);
+}
+
+/** 앞 회사(문을 닫은 뒤 뒤를 이은 회사의 앞 회사)가 아직 날고 있으면 뒤 회사는 기다린다 */
+export function waitsForPredecessor(airline: string | null, flying: readonly (string | null)[]): boolean {
+  return !!airline && !!PREDECESSOR[airline] && flying.includes(PREDECESSOR[airline]);
 }
 
 /** 지도·배지에 쓸 색: 주된 색 → 곁들인 색 순서로 쓸 만한 첫 색 */

@@ -421,7 +421,7 @@ export interface CompanyStats {
 }
 
 export interface Company {
-  /** 세계 항공사 모드: 아직 생기지 않은 항공사 (out도 참). joinYear 해 1월에 날기 시작한다 */
+  /** 세계 항공사 모드: 아직 생기지 않은 항공사 (out도 참). joinYear 해의 날기 시작한 달(world.ts joinT)에 나온다 */
   dormant?: boolean;
   joinYear?: number;
   /** 세계 항공사 모드: 돈이 모자라 구조 조정을 한 달 (컴퓨터 회사는 한 번은 살아난다) */

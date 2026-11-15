@@ -11,7 +11,8 @@ import { REAL_AIRLINE, REAL_AIRLINES, airlinesAt, type RealAirline } from './rea
 import { extendRivalBook, fixRivalBook } from './relations';
 import { baseValue, companyValue, emptyReport, planeAge, planeValue, yearProfit } from './simulate';
 import { buyoutCost } from './stocks';
-import { monthOf, mOf, yearOfM } from './time';
+import { AIRLINE_FATES, FATE, PREDECESSOR, entryMonth, fateT, type AirlineFate } from './airlineHistory';
+import { monthOf, yearOfM } from './time';
 import type { AirlineState, BizModel, Choice, Company, IndustryEntry, NewsItem, QuarterReport, RegionId, SeatIndex } from './types';
 
 /*
@@ -55,74 +56,6 @@ const LOG_MAX = 80;
 export const industryOn = (state: Pick<AirlineState, 'options'>) => state.options.industry !== false && !state.options.world;
 /** 실제 항공사의 역사를 따르는지: 실제 항공사 이름 + 실제 역사 + 시장 변화 */
 export const realHistoryOn = (state: Pick<AirlineState, 'options'>) => industryOn(state) && state.options.names === 'real' && state.options.history !== false;
-
-// ------------------------------------------------------------------ 실제 항공사의 역사 (값은 어림)
-
-export interface AirlineFate {
-  /** 실제 항공사 id (realAirlines.ts) */
-  id: string;
-  year: number;
-  month: number;
-  /** cease: 문을 닫는다, merge: 다른 회사에 합쳐진다, rename: 이름을 바꾼다 */
-  kind: 'cease' | 'merge' | 'rename';
-  /** 합친 회사나 새 이름의 실제 항공사 id */
-  into?: string;
-  /** 목록에 없는 회사에 합쳐졌으면 그 이름 */
-  intoName?: string;
-  /** 까닭 (실제 역사를 짧게) */
-  why: string;
-}
-
-export const AIRLINE_FATES: readonly AirlineFate[] = [
-  { id: 'boac', year: 1974, month: 4, kind: 'rename', into: 'britishairways', why: '영국유럽항공(BEA)과 합쳐 영국항공이 됐어요.' },
-  { id: 'airlanka', year: 1999, month: 1, kind: 'rename', into: 'srilankan', why: '에어랑카가 이름을 스리랑카항공으로 바꿨어요.' },
-  { id: 'lan', year: 2016, month: 5, kind: 'rename', into: 'latam', why: '브라질 TAM과 합쳐 라탐항공이 됐어요.' },
-  { id: 'panam', year: 1991, month: 12, kind: 'cease', why: '석유 파동과 규제 완화 뒤 빚이 쌓이고, 걸프 전쟁으로 손님이 줄었어요.' },
-  { id: 'twa', year: 2001, month: 4, kind: 'merge', into: 'american', why: '오랜 적자와 빚에 시달렸어요.' },
-  { id: 'swissair', year: 2001, month: 10, kind: 'cease', why: '다른 항공사 주식을 너무 많이 사들여 빚이 커졌어요.' },
-  { id: 'varig', year: 2006, month: 7, kind: 'cease', why: '빚과 경영난이 오래 이어졌어요.' },
-  { id: 'northwest', year: 2010, month: 1, kind: 'merge', into: 'delta', why: '9·11 뒤 손님이 줄어 오랫동안 회생 절차를 밟았어요.' },
-  { id: 'alitalia', year: 2021, month: 10, kind: 'cease', why: '오랜 적자에 코로나19까지 겹쳤어요.' },
-  { id: 'hawaiian', year: 2024, month: 9, kind: 'merge', intoName: '알래스카항공', why: '코로나19 뒤 손님이 늦게 돌아왔어요.' },
-  { id: 'asiana', year: 2024, month: 12, kind: 'merge', into: 'korean', why: '코로나19 뒤 빚이 커졌어요.' },
-];
-
-export const FATE: Record<string, AirlineFate> = Object.fromEntries(AIRLINE_FATES.map((f) => [f.id, f]));
-export const fateT = (f: AirlineFate) => mOf(f.year, f.month);
-
-/** 앞 회사가 판에서 날고 있으면 들어오지 않는 뒤 회사 (이름을 바꾸거나, 문을 닫은 뒤 뒤를 이은 회사) */
-export const PREDECESSOR: Record<string, string> = {
-  britishairways: 'boac',
-  srilankan: 'airlanka',
-  latam: 'lan',
-  swiss: 'swissair',
-  ita: 'alitalia',
-};
-
-/** 실제 항공사가 날기 시작한 달 (없으면 그 해 1월) */
-export const ENTRY_MONTH: Record<string, number> = {
-  airnewzealand: 4,
-  korean: 3,
-  egyptair: 10,
-  singapore: 10,
-  malaysia: 10,
-  aeromexico: 6,
-  gulfair: 1,
-  britishairways: 4,
-  kenya: 2,
-  airlanka: 9,
-  emirates: 10,
-  asiana: 12,
-  airchina: 7,
-  chinaeastern: 6,
-  vietnam: 4,
-  qatar: 1,
-  srilankan: 1,
-  swiss: 4,
-  latam: 5,
-  ita: 10,
-};
-export const entryMonth = (id: string) => ENTRY_MONTH[id] ?? 1;
 
 // ------------------------------------------------------------------ 작은 도움
 

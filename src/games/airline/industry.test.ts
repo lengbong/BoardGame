@@ -5,7 +5,6 @@ import { defaultCabin } from './cabin';
 import { MODEL } from './aircraft';
 import {
   ENTRY_GRACE,
-  FATE,
   FATE_LEAD,
   MAX_ACTIVE,
   MAX_COMPANIES,
@@ -14,13 +13,13 @@ import {
   enterMarket,
   entryChance,
   failCompany,
-  fateT,
   foundersAt,
   historyMonth,
   industryMonth,
   isYoung,
   type EntrantPlan,
 } from './industry';
+import { FATE, fateT } from './airlineHistory';
 import { personaOf } from './personality';
 import { emptyRightsBook } from './rights';
 import { emptyStakes } from './stocks';

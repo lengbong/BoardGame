@@ -5,11 +5,12 @@ import { SHAPES } from './aircraftShapes';
 import { aiTurn } from './ai';
 import { CITIES, CITY, airportClass, citySize } from './cities';
 import { FREIGHTERS } from './freighters';
-import { REAL_AIRLINE, airlinesAt } from './realAirlines';
+import { AIRLINE_FATES, FATE, PREDECESSOR } from './airlineHistory';
+import { REAL_AIRLINE, REAL_AIRLINES, airlinesAt } from './realAirlines';
 import { applyAction, createGame, endT, listedCompanies, runMonth, shownCompanies, SHOWN_COMPANIES } from './rules';
 import { fareFactor, travelFactor } from './simulate';
 import { parseOptions, parseSaved, serializeSave } from './storage';
-import { mOf, qOf, yearOfM } from './time';
+import { mOf, qOf, qOfM } from './time';
 import type { AirlineOptions, AirlineSetup, AirlineState, SeatKind } from './types';
 import { FUTURE_AIRLINES, LAST_YEAR, PREDICTED_MERGERS, RENAMES, fateAt, worldRoster, worldRouteCap } from './world';
 
@@ -60,14 +61,17 @@ describe('세계 항공사 모드: 새 게임', () => {
     expect(s.companies[emirates]).toMatchObject({ dormant: true, out: true, joinYear: 1985 });
     expect(listedCompanies(s)).not.toContain(emirates);
     const n = s.companies.length;
-    s = skipTo(s, 1985);
+    // 실제 항공사는 날기 시작한 달에 나온다 (에미레이트항공 1985년 10월)
+    s = skipTo(s, 1985, 9);
+    expect(s.companies[emirates].dormant).toBe(true);
+    s = skipTo(s, 1985, 10);
     expect(s.companies).toHaveLength(n);
     expect(s.companies[emirates].out).toBe(false);
     expect(s.companies[emirates].dormant).toBeFalsy();
     expect(s.companies[asiana].out).toBe(true);
     expect(s.news.some((x) => x.title === '새 항공사: 에미레이트항공')).toBe(true);
     expect(s.order).toContain(emirates);
-    s = skipTo(s, 1988);
+    s = skipTo(s, 1988, 12);
     expect(s.companies[asiana].out).toBe(false);
   });
 
@@ -110,7 +114,7 @@ describe('세계 항공사 모드: 역사대로 바뀌는 항공사', () => {
     const boac = s.companies.findIndex((c) => c.airline === 'boac');
     expect(boac).toBeGreaterThan(0);
     expect(s.companies.some((c) => c.airline === 'britishairways')).toBe(false);
-    s = skipTo(s, 1974);
+    s = skipTo(s, 1974, 4);
     // 아무도 경영하지 않아 돈이 떨어져 멈췄을 수 있다: 그때는 이름을 바꾸지 않는다
     if (!s.companies[boac].out) expect(s.companies[boac]).toMatchObject({ airline: 'britishairways', name: '영국항공' });
   });
@@ -118,11 +122,12 @@ describe('세계 항공사 모드: 역사대로 바뀌는 항공사', () => {
   it('팬암은 1991년에 역사 속으로 사라지고, 사람이 맡은 항공사는 그대로 난다', () => {
     const base = createGame(setup({ era: 1983, history: true }, 'korean'), seededRandom(1));
     const panam = base.companies.findIndex((c) => c.airline === 'panam');
-    // 1990년 12월로 바로 건너뛴다 (경영 없이 여러 해를 보내면 돈이 떨어지니)
-    const t = mOf(1990, 12);
+    // 1991년 11월로 바로 건너뛴다 (경영 없이 여러 해를 보내면 돈이 떨어지니). 팬암은 1991년 12월에 운항을 마쳤다
+    const t = mOf(1991, 11);
     let s: AirlineState = { ...base, t, q: Math.floor(t / 3) };
+    expect(s.companies[panam].out).toBe(false);
     s = runMonth(s, seededRandom(4));
-    expect(yearOfM(s.t)).toBe(1991);
+    expect(s.t).toBe(mOf(1991, 12));
     expect(s.companies[panam].out).toBe(true);
     expect(s.news.some((x) => x.title === '팬암, 역사 속으로')).toBe(true);
 
@@ -135,7 +140,7 @@ describe('세계 항공사 모드: 역사대로 바뀌는 항공사', () => {
   it('실제 역사를 끄면 사라지지 않는다', () => {
     const base = createGame(setup({ era: 1983, history: false }, 'korean'), seededRandom(1));
     const panam = base.companies.findIndex((c) => c.airline === 'panam');
-    const t = mOf(1990, 12);
+    const t = mOf(1991, 11);
     const s = runMonth({ ...base, t, q: Math.floor(t / 3) }, seededRandom(4));
     expect(s.companies[panam].out).toBe(false);
   });
@@ -160,11 +165,22 @@ describe('세계 항공사 모드: 역사대로 바뀌는 항공사', () => {
   }, 120000);
 
   it('운명표: 이름 바꾸기·합병·폐업, 그리고 예측한 미래의 합병', () => {
-    expect(fateAt('boac', 1974)).toEqual({ kind: 'rename', into: 'britishairways' });
-    expect(fateAt('boac', 1973)).toBeNull();
-    expect(fateAt('twa', 2001)).toEqual({ kind: 'merge', into: 'american' });
-    expect(fateAt('panam', 1991)).toEqual({ kind: 'close' });
-    expect(fateAt('asiana', 2027)).toEqual({ kind: 'merge', into: 'korean', predicted: true });
+    // 실제 역사는 보통 판과 같은 표(airlineHistory.ts)를 그 달에 따른다
+    expect(fateAt('boac', mOf(1974, 4))).toMatchObject({ kind: 'rename', into: 'britishairways' });
+    expect(fateAt('boac', mOf(1974, 3))).toBeNull();
+    expect(fateAt('twa', mOf(2001, 4))).toMatchObject({ kind: 'merge', into: 'american' });
+    expect(fateAt('panam', mOf(1991, 12))).toMatchObject({ kind: 'close' });
+    expect(fateAt('panam', mOf(1991, 1))).toBeNull();
+    // 스위스에어·알리탈리아는 문을 닫고, 뒤를 이은 회사는 따로 생긴다
+    expect(fateAt('swissair', mOf(2001, 10))).toMatchObject({ kind: 'close' });
+    expect(fateAt('alitalia', mOf(2021, 10))).toMatchObject({ kind: 'close' });
+    expect(RENAMES.swissair).toBeUndefined();
+    // 실제 인수 시점(2024): 아시아나는 대한항공에, 하와이안은 판 밖의 알래스카항공에
+    expect(fateAt('asiana', mOf(2024, 12))).toMatchObject({ kind: 'merge', into: 'korean' });
+    expect(fateAt('asiana', mOf(2024, 12))).not.toHaveProperty('predicted');
+    expect(fateAt('asiana', mOf(2027, 1))).toBeNull();
+    expect(fateAt('hawaiian', mOf(2024, 9))).toMatchObject({ kind: 'close', intoName: '알래스카항공' });
+    expect(fateAt('ita', mOf(2034, 1))).toEqual({ kind: 'merge', into: 'lufthansa', predicted: true });
     for (const [from, to] of Object.entries(RENAMES)) {
       expect(REAL_AIRLINE[from].defunct).toBe(REAL_AIRLINE[to].founded);
     }
@@ -318,5 +334,52 @@ describe('게임 길이와 2100년까지의 세계', () => {
     expect(citySize(CITY.lagos, 2100) / citySize(CITY.lagos, 2030)).toBeGreaterThan(citySize(CITY.london, 2100) / citySize(CITY.london, 2030));
     expect(travelFactor(qOf(2100, 1))).toBeGreaterThan(travelFactor(qOf(2045, 1)));
     expect(fareFactor(qOf(2100, 1))).toBeLessThan(fareFactor(qOf(2045, 1)));
+  });
+});
+
+describe('두 모드가 함께 쓰는 실제 역사 (airlineHistory.ts)', () => {
+  it('운명표와 실제 항공사 명단이 맞는다: 없어지는 항공사는 모두 까닭이 있고, 시작 명단에서 빠지는 해는 운명의 해(또는 다음 해)', () => {
+    for (const f of AIRLINE_FATES) {
+      const a = REAL_AIRLINE[f.id];
+      expect(a, f.id).toBeTruthy();
+      expect([f.year, f.year + 1], f.id).toContain(a.defunct);
+      expect(f.month).toBeGreaterThanOrEqual(1);
+      expect(f.month).toBeLessThanOrEqual(12);
+      if (f.into) expect(REAL_AIRLINE[f.into], f.into).toBeTruthy();
+      expect(f.why.length).toBeGreaterThan(5);
+    }
+    for (const a of REAL_AIRLINES) if (a.defunct !== undefined) expect(FATE[a.id], a.id).toBeTruthy();
+    // 뒤를 이은 회사는 앞 회사가 빠지는 해에 생긴다
+    for (const [to, from] of Object.entries(PREDECESSOR)) expect(REAL_AIRLINE[to].founded, to).toBe(REAL_AIRLINE[from].defunct);
+  });
+
+  it('아시아나·하와이안은 2024년에 인수돼 2026년 판에는 따로 나오지 않는다', () => {
+    const ids = (y: number) => airlinesAt(y).map((a) => a.id);
+    expect(ids(2023)).toEqual(expect.arrayContaining(['asiana', 'hawaiian']));
+    expect(ids(2026)).not.toContain('asiana');
+    expect(ids(2026)).not.toContain('hawaiian');
+    const roster = worldRoster(2026, 2100, null).map((e) => e.airline);
+    expect(roster).not.toContain('asiana');
+    expect(roster).not.toContain('hawaiian');
+  });
+
+  it('스위스에어가 문을 닫은 뒤에야 스위스국제항공이 생기고, 사람이 스위스에어를 맡아 날고 있으면 생기지 않는다', () => {
+    const jump = (s: AirlineState, year: number, month: number) => runMonth({ ...s, t: mOf(year, month), q: qOfM(mOf(year, month)) }, seededRandom(4));
+    let s = createGame(setup({ era: 1983 }, 'korean'), seededRandom(1));
+    const sr = s.companies.findIndex((c) => c.airline === 'swissair');
+    const lx = s.companies.findIndex((c) => c.airline === 'swiss');
+    expect(s.companies[lx].dormant).toBe(true);
+    s = jump(s, 2001, 9);
+    expect(s.companies[sr]).toMatchObject({ out: true, fate: '2001년 문을 닫음' });
+    expect(s.companies[lx].dormant).toBe(true);
+    s = jump(s, 2002, 3);
+    expect(s.t).toBe(mOf(2002, 4));
+    expect(s.companies[lx]).toMatchObject({ out: false, name: '스위스국제항공' });
+
+    let m = createGame(setup({ era: 1983 }, 'swissair'), seededRandom(1));
+    const lx2 = m.companies.findIndex((c) => c.airline === 'swiss');
+    m = jump(m, 2002, 3);
+    expect(m.companies[0]).toMatchObject({ airline: 'swissair', out: false });
+    expect(m.companies[lx2].dormant).toBe(true);
   });
 });

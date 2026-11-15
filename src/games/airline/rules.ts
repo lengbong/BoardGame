@@ -24,7 +24,7 @@ import { FUEL_SELL_RATE, TANK_LEVELS, addFuel, autoBuyTons, buyFuelBlocker, fuel
 import { addMonth, closeQuarter, freshAcc, goalMet, gradeYear, newGoals } from './goals';
 import { MAX_PLANES, MAX_ROUTES } from './limits';
 import { REAL_AIRLINE, airlinesAt } from './realAirlines';
-import { FUTURE_AIRLINE, LAST_YEAR, RESCUE_GAP, brandColor, fateAt, worldEndYear, worldRoster } from './world';
+import { FUTURE_AIRLINE, LAST_YEAR, RESCUE_GAP, brandColor, fateAt, joinT, waitsForPredecessor, worldEndYear, worldRoster } from './world';
 import { ACADEMY_COST, PAY_MAX, PAY_MIN, STAFF_GROUPS, STAFF_INFO, emptyStaff, fireCost, hireCost, hireTime, moraleTarget, staffCap, staffNeed, staffPipe, staffTotal } from './staff';
 import { bandCaps, bandCounts, bandUsed, defaultTimes, routeCurfew } from './timetable';
 import { rightsAssignBlocker, rightsMonth, rightsRoom, rightsRouteBlocker } from './rights';
@@ -398,44 +398,54 @@ export function listedCompanies(state: Pick<AirlineState, 'companies'>): number[
 }
 
 /**
- * 세계 항공사 모드의 새해 (world.ts): 새 항공사가 날기 시작하고,
- * 실제 역사(와 예측한 미래)대로 이름이 바뀌고, 합쳐지고, 문을 닫는다. 사람 회사는 건드리지 않는다.
+ * 세계 항공사 모드의 한 달 (world.ts): 실제 역사(airlineHistory.ts)대로 그 달에 이름이 바뀌고, 합쳐지고, 문을 닫으며
+ * (예측한 미래의 합병은 그 해 1월), 새 항공사는 날기 시작한 달에 나온다. 사람 회사는 건드리지 않는다.
  */
-function worldYear(state: AirlineState, t: number): AirlineState {
+function worldMonth(state: AirlineState, t: number): AirlineState {
   const year = yearOfM(t);
+  const flying = () => s.companies.filter((c) => !c.out).map((c) => c.airline);
+  const due = (c: Company) => !c.out && c.kind !== 'human' && !!c.airline && historyOn(state) && fateAt(c.airline, t) !== null;
+  const joins = (c: Company) => !!c.dormant && t >= joinT(c);
+  // 이번 달에 할 일이 없으면 그대로 (회사를 모두 베끼지 않게)
+  if (!state.companies.some((c) => due(c) || joins(c))) return state;
   let s: AirlineState = { ...state, companies: state.companies.map(cloneCompany) };
-  if (historyOn(s)) {
-    for (let ci = 0; ci < s.companies.length; ci++) {
-      const c = s.companies[ci];
-      if (c.out || c.kind === 'human' || !c.airline) continue;
-      const fate = fateAt(c.airline, year);
-      if (!fate) continue;
-      const tale = c.airline && fate.kind === 'merge' && fate.predicted ? ' (예측해서 지어낸 미래 이야기예요)' : '';
-      if (fate.kind === 'rename') {
-        const into = REAL_AIRLINE[fate.into];
-        const old = c.name;
-        c.name = into.name;
-        c.airline = into.id;
-        c.color = brandColor(into.colors) ?? c.color;
-        s = addNews(s, { icon: '🔁', title: `${withJosa(old, '이/가')} ${withJosa(into.name, '으로/로')} 새 출발`, text: `${old}의 뒤를 이어 ${withJosa(into.name, '이/가')} 날기 시작했어요. 노선과 비행기는 그대로 이어받아요.`, tone: 'info', company: ci });
-        continue;
-      }
-      const j = fate.kind === 'merge' ? s.companies.findIndex((x) => x.airline === fate.into && !x.out) : -1;
-      if (j >= 0 && s.companies[j].kind !== 'human') {
-        s = mergeCompanies(s, j, ci, { why: 'world', rate: 0, story: `${withJosa(c.name, '이/가')} ${s.companies[j].name}에 합쳐졌어요. 노선 ${c.routes.length}개와 비행기 ${c.planes.length}대를 ${withJosa(s.companies[j].name, '이/가')} 넘겨받았어요.${tale}` });
-        s = { ...s, companies: s.companies.map(cloneCompany) };
-        continue;
-      }
-      const real = REAL_AIRLINE[c.airline];
-      s = shutDown(s, ci, t, {
-        title: `${c.name}, 역사 속으로`,
-        text: `${real.note ? `${real.note}. ` : ''}${withJosa(c.name, '이/가')} 운항을 마쳤어요. 쓰던 공항 슬롯과 노선이 비었어요 — 새 노선을 열 기회예요!${tale}`,
-      });
+  for (let ci = 0; ci < s.companies.length; ci++) {
+    const c = s.companies[ci];
+    if (!due(c)) continue;
+    const fate = fateAt(c.airline!, t)!;
+    const tale = fate.kind === 'merge' && fate.predicted ? ' (예측해서 지어낸 미래 이야기예요)' : '';
+    const why = fate.why ? `${fate.why} ` : '';
+    if (fate.kind === 'rename') {
+      const into = REAL_AIRLINE[fate.into];
+      const old = c.name;
+      c.name = into.name;
+      c.airline = into.id;
+      c.color = brandColor(into.colors) ?? c.color;
+      s = addNews(s, { icon: '🔁', title: `${withJosa(old, '이/가')} ${withJosa(into.name, '으로/로')} 새 출발`, text: `${why}${old}의 뒤를 이어 ${withJosa(into.name, '이/가')} 날기 시작했어요. 노선과 비행기는 그대로 이어받아요.`, tone: 'info', company: ci });
+      continue;
     }
+    const j = fate.kind === 'merge' ? s.companies.findIndex((x) => x.airline === fate.into && !x.out) : -1;
+    if (j >= 0 && s.companies[j].kind !== 'human') {
+      s = mergeCompanies(s, j, ci, { why: 'world', rate: 0, story: `${why}${withJosa(c.name, '이/가')} ${s.companies[j].name}에 합쳐졌어요. 노선 ${c.routes.length}개와 비행기 ${c.planes.length}대를 ${withJosa(s.companies[j].name, '이/가')} 넘겨받았어요.${tale}` });
+      s = { ...s, companies: s.companies.map(cloneCompany) };
+      continue;
+    }
+    // 판 밖 회사(또는 사람 회사)에 합쳐지면 이 판에서 빠진다
+    const into = fate.kind === 'close' ? fate.intoName : fate.kind === 'merge' ? REAL_AIRLINE[fate.into]?.name : undefined;
+    const real = REAL_AIRLINE[c.airline!];
+    s = shutDown(
+      s,
+      ci,
+      t,
+      into
+        ? { icon: '🤝', title: `${c.name}, ${into}에 합쳐져요`, text: `${why}${withJosa(c.name, '이/가')} ${into}에 합쳐져 이 판에서 빠졌어요. 쓰던 공항 슬롯과 노선이 비었어요 — 새 노선을 열 기회예요!${tale}`, fate: `${into}에 합쳐짐` }
+        : { title: `${c.name}, 역사 속으로`, text: `${why || (real?.note ? `${real.note}. ` : '')}${withJosa(c.name, '이/가')} 운항을 마쳤어요. 쓰던 공항 슬롯과 노선이 비었어요 — 새 노선을 열 기회예요!${tale}`, fate: `${year}년 문을 닫음` },
+    );
   }
   for (let ci = 0; ci < s.companies.length; ci++) {
     const c = s.companies[ci];
-    if (!c.dormant || (c.joinYear ?? Infinity) > year) continue;
+    // 문을 닫은 앞 회사의 뒤를 이은 회사는, 앞 회사가 아직 날고 있으면(사람이 맡았거나) 기다린다
+    if (!joins(c) || waitsForPredecessor(c.airline, flying())) continue;
     c.dormant = false;
     c.out = false;
     delete c.joinYear;
@@ -2520,7 +2530,7 @@ function startMonth(state: AirlineState, t: number, rng: Rng): AirlineState {
     s = addNews(s, { icon: '⛽', title: '기름값 폭풍!', text: '기름값이 갑자기 거의 두 배로 뛰었어요. 연료를 많이 먹는 비행기는 큰 손해를 봐요.', tone: 'bad' });
   }
   if (monthOf(t) === 1) s = announceYear(s);
-  if (monthOf(t) === 1 && s.options.world) s = worldYear(s, t);
+  if (s.options.world) s = worldMonth(s, t);
   // 올림픽·엑스포
   for (const e of fixedEventsAt(t)) {
     s = addNews(s, {

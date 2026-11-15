@@ -8,6 +8,7 @@ import { fmtMoney, signedMoney } from './format';
 import { FuelCard } from './FuelCard';
 import { CheckPolicy } from './ConditionArt';
 import { FacilityCard } from './FacilityCard';
+import { TrophyShelf } from './AwardsArt';
 import { facilitiesWorth } from './facilities';
 import { tankWorth } from './fuel';
 import { GRADE_INFO, goalProgress } from './goals';
@@ -425,6 +426,10 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
             <p className="al-muted">{me.reviews[me.reviews.length - 1].text}</p>
           </>
         )}
+        <h5 className="al-fin-sub">
+          <FinIcon kind="trophy" size={16} /> 트로피 진열장 <small>해마다 12월 시상식</small>
+        </h5>
+        <TrophyShelf state={state} ci={viewer} />
       </section>
 
       <section className="al-card al-ads">

@@ -711,6 +711,23 @@ export interface YearReport {
   companies: CompanyReport[];
 }
 
+/** 연말 시상식 (awards.ts) */
+export type AwardKind = 'airline' | 'punctual' | 'service' | 'growth' | 'hub';
+
+export interface Award {
+  kind: AwardKind;
+  company: number;
+  /** 상을 정한 값 (정시율·평판·성장률·환승 손님·점수) */
+  value: number;
+  /** 짧은 까닭 ('정시 운항률 91%') */
+  text: string;
+}
+
+export interface AwardYear {
+  year: number;
+  items: Award[];
+}
+
 /** 그래프용 분기 기록 */
 export interface HistoryPoint {
   q: number;
@@ -880,6 +897,8 @@ export interface AirlineState {
   ledger: QuarterReport[];
   /** 해마다 결산 */
   years: YearReport[];
+  /** 해마다 연말 시상식 (예전 저장에는 없다) */
+  awards?: AwardYear[];
   nextId: number;
   result: GameResult | null;
   challenge: ChallengeProgress | null;

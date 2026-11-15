@@ -73,6 +73,9 @@ const Q = 3;
  */
 const STARTUP_PLANES = 4;
 
+/** 한 차례에 쓸 곳을 찾아 주는 쉬는 비행기 수 */
+const IDLE_PER_TURN = 30;
+
 /** 오래 제자리인 작은 회사가 길을 트려고 받아들이는 새 노선의 달 손해 (억) */
 const STUCK_LOSS = 4;
 
@@ -503,6 +506,12 @@ export class Planner {
     // 보통 컴퓨터는 비행기가 많으면 내 비행기 몇 대를 예비기로 남겨 둔다 (기체 점검·결항을 메운다)
     const flying = this.c.planes.filter((p) => p.legs.length > 0).length;
     let spares = this.normal ? Math.floor(flying * 0.05) : 0;
+    // 쓸 곳을 찾지 못한 기종(내 것·리스 따로)은 같은 차례에 다시 찾지 않는다.
+    // 손님이 크게 줄어 노선을 많이 닫은 뒤에는 쉬는 비행기가 백 대 넘게 생겨, 같은 기종마다 같은 계산을 되풀이하느라 한 차례가 0.5초 가까이 걸렸다.
+    const useless = new Set<string>();
+    // 한 차례에 살펴보는 쉬는 비행기 수 (나머지는 다음 달에). 큰 사건 뒤 노선망을 한꺼번에 되살리면
+    // 한 차례에 노선 80개를 여느라 화면이 멈춘 듯했다. 몇 달에 걸쳐 되살리는 편이 실제와도 비슷하다
+    let budget = IDLE_PER_TURN;
     for (const p0 of idlePlanes(this.c)) {
       const p = planeById(this.c, p0.id);
       if (!p) continue;
@@ -511,14 +520,19 @@ export class Planner {
         spares--;
         continue;
       }
-      const best = this.bestExistingLeg(p.id, false);
-      if (best && best.gain > -planeFixed(p) * 0.3) {
-        this.act({ type: 'assign', plane: p.id, route: best.route, freq: best.freq });
-        continue;
+      if (budget-- <= 0) break;
+      const key = `${p.model}|${p.leased}`;
+      if (!useless.has(key)) {
+        const best = this.bestExistingLeg(p.id, false);
+        if (best && best.gain > -planeFixed(p) * 0.3) {
+          this.act({ type: 'assign', plane: p.id, route: best.route, freq: best.freq });
+          continue;
+        }
+        // 새 노선에 써 보기
+        const cand = this.c.routes.length < MAX_ROUTES ? this.bestCandidates(6, m).find((x) => x.model.id === m.id && x.profit > 0) : undefined;
+        if (cand && this.openCandidate(cand, p.id)) continue;
+        useless.add(key);
       }
-      // 새 노선에 써 보기
-      const cand = this.c.routes.length < MAX_ROUTES ? this.bestCandidates(6, m).find((x) => x.model.id === m.id && x.profit > 0) : undefined;
-      if (cand && this.openCandidate(cand, p.id)) continue;
       // 내 비행기가 갈 곳이 없으면 같은 계열 리스기 자리와 바꾼다 (리스료를 아낀다)
       if (!p.leased && this.swapWithLease(p.id)) continue;
       // 쓸 데가 없으면 판다 (리스는 돌려준다)

@@ -229,3 +229,72 @@
 .al-fac-main small {
   font-size: 11.5px;
 }
+
+/* ---------------------------------------------------------------- 연말 시상식 */
+.al-medal {
+  flex: none;
+}
+.al-medal-dim {
+  filter: grayscale(1);
+  opacity: 0.35;
+}
+.al-ceremony {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(226, 177, 60, 0.16), rgba(226, 177, 60, 0.04));
+  border: 1px solid rgba(226, 177, 60, 0.45);
+}
+.al-ceremony h4 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+.al-ceremony ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.al-ceremony li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+  border-radius: 8px;
+}
+.al-ceremony li.al-on {
+  background: color-mix(in srgb, var(--al-co, var(--accent)) 14%, transparent);
+}
+.al-ceremony-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 13px;
+}
+.al-ceremony-gain {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.al-shelf {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+.al-shelf-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+}
+.al-ceremony-main > span {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+}
+.al-ceremony-main small {
+  white-space: nowrap;
+}

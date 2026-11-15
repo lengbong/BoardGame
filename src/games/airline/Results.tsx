@@ -5,6 +5,7 @@ import { CHALLENGE } from './challenges';
 import { CITY } from './cities';
 import { fmtMoney, fmtPax, pct, signedMoney } from './format';
 import { GRADE_INFO } from './goals';
+import { AwardCeremony } from './AwardsArt';
 import { rankings } from './rules';
 import { companyValue, regionsServed } from './simulate';
 import { qLabel } from './time';
@@ -110,6 +111,7 @@ export function QuarterReport({ state, report, viewer, onClose, onDetail }: { st
             </div>
           </div>
         )}
+        {review && <AwardCeremony state={state} year={review.year} viewer={viewer} />}
         {r.xferPax > 0 && (
           <p className="al-qr-sub">
             🔁 갈아탄 손님 {fmtPax(r.xferPax)} — 본사(허브)를 거쳐 두 노선을 이어 탔어요.

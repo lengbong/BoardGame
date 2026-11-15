@@ -5,6 +5,7 @@ import { MODEL } from './aircraft';
 import { MEDIA } from './ads';
 import { BUSINESS_KINDS } from './business';
 import { cabinBlocker, defaultCabin } from './cabin';
+import { AWARD_KINDS } from './awards';
 import { CHALLENGE } from './challenges';
 import { MAX_TANK } from './fuel';
 import { FACILITY_KINDS } from './facilities';
@@ -170,6 +171,8 @@ export function isValidState(v: unknown): v is AirlineState {
   if (!Array.isArray(s.ledger) || !s.ledger.every(okReport)) return false;
   if (!Array.isArray(s.months) || !s.months.every((m) => isObj(m) && isInt(m.t) && Array.isArray(m.value) && m.value.length === n)) return false;
   if (!Array.isArray(s.years) || !s.years.every((y) => isObj(y) && isInt(y.year) && Array.isArray(y.companies))) return false;
+  // 연말 시상식 (예전 저장에는 없다)
+  if (s.awards !== undefined && !(Array.isArray(s.awards) && s.awards.every((y) => isObj(y) && isInt(y.year) && Array.isArray(y.items) && y.items.every((a) => isObj(a) && AWARD_KINDS.includes(a.kind) && isIndex(a.company, n) && isNum(a.value) && typeof a.text === 'string')))) return false;
   if (!s.news.every((x) => isObj(x) && isInt(x.t))) return false;
   if (s.challenge !== null && !(isObj(s.challenge) && typeof s.challenge.id === 'string' && CHALLENGE[s.challenge.id] && isIndex(s.challenge.company, n))) return false;
   if (s.result !== null && !(isObj(s.result) && Array.isArray(s.result.winners))) return false;

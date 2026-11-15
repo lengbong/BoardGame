@@ -4,6 +4,7 @@ import { CAMPAIGN_INFO, MEDIA_INFO, adTarget, mediaOf } from './ads';
 import { BUSINESS_INFO } from './business';
 import { cabinBlocker, defaultCabin, sameCabin } from './cabin';
 import { blockText, branchPolitics, makerPolitics, politicalNews, polity, routePolitics } from './politics';
+import { AIRLINE_AWARD_DEMAND, AIRLINE_AWARD_MONTHS, AWARD_INFO, yearAwards } from './awards';
 import { CHALLENGE, challengeDeadline, checkChallenge } from './challenges';
 import { CHECK_POLICIES, condOf, dueForCheck, inCheck, monthlyWear, restoredCond, usedCond } from './condition';
 import { FACILITY_INFO, FACILITY_REFUND, companyCheckCost, extraCheckSlots, facilityBlocker, facilityCost, wearMult } from './facilities';
@@ -1678,6 +1679,29 @@ export function runMonth(state: AirlineState, rng: Rng = Math.random): AirlineSt
     for (const [ci, c] of s.companies.entries()) {
       const r = monthReport.companies[ci].review;
       if (r && !c.out) s = addLog(s, c.seat, `📋 ${c.name} ${r.year}년 경영 평가 ${r.grade} (목표 ${r.met}/${r.total})`);
+    }
+    // 연말 시상식: 부문마다 상, 받은 회사는 평판이 오르고 올해의 항공사는 한 해 동안 손님이 조금 는다
+    const awards = yearAwards(s, year, yr.companies, s.years.find((y) => y.year === year - 1)?.companies);
+    if (awards.items.length > 0) {
+      s = { ...s, awards: [...(s.awards ?? []), awards].slice(-40) };
+      for (const a of awards.items) {
+        const c = s.companies[a.company];
+        c.reputation = clampRep(c.reputation + AWARD_INFO[a.kind].rep);
+        if (a.kind === 'airline') {
+          c.mods.push({ id: s.nextId, kind: 'demand', value: AIRLINE_AWARD_DEMAND, until: t + 1 + AIRLINE_AWARD_MONTHS, label: `🏆 ${year}년 올해의 항공사` });
+          s.nextId += 1;
+        }
+        s = addLog(s, c.seat, `${AWARD_INFO[a.kind].icon} ${c.name}: ${year}년 ${AWARD_INFO[a.kind].name} (${a.text})`);
+      }
+      const winners = humansAmong(s, [...new Set(awards.items.map((a) => a.company))]);
+      s = addNews(s, {
+        icon: '🏆',
+        title: `${year}년 하늘길 시상식`,
+        text: awards.items.map((a) => `${AWARD_INFO[a.kind].icon} ${AWARD_INFO[a.kind].name}: ${s.companies[a.company].name} (${a.text})`).join(' · '),
+        tone: 'good',
+        for: winners.length ? winners : undefined,
+        company: awards.items[0].company,
+      });
     }
   }
 

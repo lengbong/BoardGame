@@ -5,6 +5,7 @@ import { BUSINESS_INFO, BUSINESS_KINDS } from './business';
 import { FacilityRow } from './FacilityCard';
 import { allianceOf, alliesOf } from './alliances';
 import { LandmarkIcon } from './Art';
+import { AirportCard, AirportModal } from './AirportView';
 import { SEASON_NAMES, WEATHER_INFO, leisureMonthMult, weather } from './calendar';
 import { AIRPORT_INFO, CITIES, CITY, FEE_INFO, REGION_INFO, airportClass, citySize, dist, pairKey } from './cities';
 import { FIXED_EVENTS, FIXED_ICON } from './events';
@@ -36,6 +37,8 @@ interface Common {
   onAuto?: () => void;
   /** 안 되는 까닭을 알림으로 보여 준다 */
   onSay?: (text: string) => void;
+  /** 움직이는 연출을 켰는지 (공항 이착륙) */
+  fx?: boolean;
 }
 
 const notMine = '내 차례에만 할 수 있어요';
@@ -49,8 +52,9 @@ export function InfoPanel(props: Common & { selected: Selection }) {
 
 // ------------------------------------------------------------------ 도시
 
-function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city }: Common & { city: string }) {
+function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city, fx = true }: Common & { city: string }) {
   const c = CITY[city];
+  const [airportOpen, setAirportOpen] = useState(false);
   const year = yearOf(state.q);
   const me = state.companies[viewer];
   const size = citySize(c, year);
@@ -108,6 +112,8 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
             ✕
           </button>
         </header>
+        <AirportCard key={city} state={state} viewer={viewer} city={city} fx={fx} onOpen={() => setAirportOpen(true)} />
+        {airportOpen && <AirportModal state={state} viewer={viewer} city={city} fx={fx} onClose={() => setAirportOpen(false)} />}
         <div className="al-mp-tiles">
           <div className="al-mp-tile">
             <StatRing value={size / 10} text={size.toFixed(1)} tone="blue" size={44} label={`도시 크기 ${size.toFixed(1)} / 10`} />

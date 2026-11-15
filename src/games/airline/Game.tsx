@@ -565,6 +565,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
           onOpenChoice={() => setChoiceOpen(true)}
           onAuto={() => startAuto('event')}
           onSay={sayNope}
+          fx={delays.fx}
         />
       </div>
     );

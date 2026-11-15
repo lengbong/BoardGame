@@ -33,6 +33,41 @@ export function planeImageUrl(model: string, paint?: Paint | null): string | und
   return url;
 }
 
+/** 공항 그림에 세운 다른 항공사 비행기 (회사 색이 없는 옅은 회색) */
+const GREY_LIVERY: Livery = {
+  body: '#e3e8ee',
+  belly: '#cdd4dc',
+  cheat: '#a9b3bf',
+  tail: '#bcc5cf',
+  engine: '#b4bdc8',
+  window: '#5a687b',
+};
+
+const topCache = new Map<string, string>();
+
+/**
+ * 위에서 내려다본 기종 그림 (공항 도면용). 코가 왼쪽(−x)을 보고, 그림 가로 = 전체 길이, 세로 = 날개폭.
+ * paint가 없으면 회색 (다른 항공사).
+ */
+export function planeTopUrl(model: string, paint?: Paint | null): string | undefined {
+  const shape = SHAPES[model] ?? FREIGHTER_SHAPES[model];
+  if (!shape) return undefined;
+  const key = paint ? `${model}|${paint.main}|${paint.dark}|${paint.shape ?? ''}` : `${model}|grey`;
+  const hit = topCache.get(key);
+  if (hit) return hit;
+  const livery: Livery = paint ? companyLivery(paint.main, paint.dark, paint.shape) : GREY_LIVERY;
+  const url = svgDataUrl(renderPlaneSvg(shape, livery, { width: Math.round(shape.len * 4), height: Math.round(shape.span * 4), pad: 0, camera: { yaw: 0, pitch: 90, roll: 0 } }));
+  topCache.set(key, url);
+  if (topCache.size > CACHE_MAX) topCache.delete(topCache.keys().next().value as string);
+  return url;
+}
+
+/** 기종의 길이·날개폭 (m) */
+export function planeSize(model: string): { len: number; span: number } | undefined {
+  const shape = SHAPES[model] ?? FREIGHTER_SHAPES[model];
+  return shape ? { len: shape.len, span: shape.span } : undefined;
+}
+
 interface PlaneImageProps {
   model: string;
   paint?: Paint | null;

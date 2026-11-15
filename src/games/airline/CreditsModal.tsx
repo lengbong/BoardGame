@@ -32,6 +32,13 @@ export function CreditsModal({ onClose }: { onClose: () => void }) {
           도시·항공사 사진은 위키미디어 공용(Wikimedia Commons)에서 자유 라이선스로 공개된 사진을 작게 줄여 썼어요. 사진마다 지은이와 라이선스는 아래와 같아요. 항공사 로고는 쓰지 않았어요. 사진이 없는 곳은 직접 그린 그림을
           보여 줘요. 기종 그림은 사진 대신 실제 길이·날개폭·엔진 자리를 바탕으로 직접 그린 그림이에요.
         </p>
+        <p className="al-muted" data-testid="al-credits-osm">
+          🛫 도시를 누르면 나오는 공항 도면(활주로·유도로·터미널·주기장·바닷가)은 오픈스트리트맵 자료로 그렸어요. 지도 데이터 ©{' '}
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">
+            OpenStreetMap 기여자
+          </a>
+          , ODbL 1.0. 문 닫은 옛 공항(카이탁·엘리니콘)은 남은 땅 모양과 옛 지도를 보고 어림해 그렸어요.
+        </p>
         <div className="al-sort" role="group" aria-label="종류">
           {KINDS.map((k) => (
             <button key={k.id} type="button" className={`al-chip${kind === k.id ? ' al-on' : ''}`} onClick={() => setKind(k.id)}>

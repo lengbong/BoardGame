@@ -1,0 +1,356 @@
+/* 🗺️ 지도 탭 아래 정보 칸 (경영 비서·도시·노선) — SVG 그림 */
+
+.al-mp-h3,
+.al-mp-h4 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.al-mp-h3 > .al-sicon,
+.al-mp-h4 > .al-sicon {
+  color: var(--accent);
+}
+.al-mp-inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.al-mp-inline .al-meter {
+  width: 46px;
+}
+
+/* 경영 비서 아이콘 */
+.al-tip-icon.al-mp-tip-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+  font-size: 20px;
+}
+
+/* 숫자 고리 셋 */
+.al-mp-rings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px 4px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.al-mp-rings figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.al-mp-rings figcaption {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.al-mp-ring-text {
+  font-size: 12px;
+}
+
+/* 내 회사 한눈에: 아이콘 줄 */
+.al-mp-facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.al-mp-facts li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.al-mp-facts b {
+  color: var(--text);
+}
+.al-mp-facts .al-sicon {
+  color: var(--accent);
+}
+.al-mp-goals {
+  gap: 4px;
+}
+.al-goal-list.al-mp-goals li {
+  font-size: 12.5px;
+}
+.al-mp-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+}
+.al-mp-note > .al-sicon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--accent);
+}
+.al-info .al-through .al-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 도시·노선 숫자 칸 */
+.al-mp-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 6px;
+  margin: 10px 0 0;
+}
+.al-mp-tile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  min-width: 0;
+}
+.al-mp-tile > span:last-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.al-mp-tile small {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.al-mp-tile b {
+  font-size: 14.5px;
+}
+.al-mp-tile b small {
+  font-weight: 400;
+}
+.al-mp-tile .al-up {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--al-good);
+  font-weight: 700;
+}
+.al-mp-tile-grow {
+  flex: 1;
+}
+.al-mp-tile-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--accent);
+}
+.al-mp-ink-gold {
+  color: var(--al-warn);
+}
+.al-mp-ink-warn {
+  color: var(--al-bad);
+}
+.al-mp-tile-warn {
+  border-color: color-mix(in srgb, var(--al-bad) 45%, var(--surface));
+}
+.al-mp-usebar {
+  display: block;
+  width: 100%;
+  margin-top: 3px;
+}
+.al-mp-usebar svg {
+  display: block;
+}
+.al-mp-use {
+  stroke: none;
+}
+
+/* 별 */
+.al-mp-stars {
+  display: block;
+  margin: 2px 0 1px;
+}
+.al-mp-star-off {
+  fill: var(--border);
+}
+.al-mp-star-on {
+  fill: #e8a900;
+}
+
+/* 손님 성격·성수기 */
+.al-mp-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 18px;
+  margin-top: 10px;
+}
+.al-mp-fig {
+  margin: 0;
+  min-width: 0;
+}
+.al-mp-fig figcaption {
+  margin-bottom: 4px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.al-mp-fig figcaption small {
+  font-weight: 400;
+}
+.al-mp-biz {
+  fill: var(--al-blue);
+}
+.al-mp-fun {
+  fill: var(--al-c-svc);
+}
+.al-mp-biz-ink {
+  color: var(--al-blue);
+}
+.al-mp-fun-ink {
+  color: var(--al-c-svc);
+}
+.al-mp-season-lo {
+  fill: color-mix(in srgb, var(--accent) 35%, var(--surface));
+}
+.al-mp-season-hi {
+  fill: color-mix(in srgb, var(--accent) 65%, var(--surface));
+}
+.al-mp-season-now {
+  fill: var(--accent);
+}
+.al-mp-season-val {
+  fill: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+}
+.al-mp-news {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+}
+.al-mp-news > .al-sicon {
+  color: var(--accent);
+}
+
+/* 목록 안 작은 막대 (행선지 손님·갈아타는 손님) */
+/* 줄마다 같은 칸을 쓰게 (막대가 한 줄로 맞게) */
+.al-dests.al-mp-bars {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(40px, 1fr) minmax(0, max-content);
+  column-gap: 8px;
+  row-gap: 3px;
+}
+.al-dests.al-mp-bars li {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+.al-mp-bar-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+.al-mp-mini {
+  display: block;
+  min-width: 0;
+}
+.al-mp-mini svg {
+  display: block;
+}
+.al-mp-mini-fill {
+  fill: var(--al-blue);
+}
+.al-mp-mini-mine {
+  fill: var(--al-good);
+}
+.al-mp-mini-xfer {
+  fill: var(--accent);
+}
+.al-mp-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* 노선 */
+.al-mp-route-art {
+  flex: none;
+}
+.al-mp-route-bg {
+  fill: var(--surface-2);
+  stroke: var(--border);
+}
+.al-mp-route-path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.2;
+  stroke-dasharray: 3 3.5;
+  stroke-linecap: round;
+}
+.al-mp-route-dot {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 2.4;
+}
+.al-mp-route-plane {
+  fill: var(--text);
+}
+.al-mp-tiles-route {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.al-mp-share svg {
+  display: block;
+}
+.al-mp-share-in {
+  fill: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.35);
+  stroke-width: 2px;
+}
+.al-route-info .al-ops {
+  margin-top: 10px;
+}
+.al-mp-why {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 10px;
+  font-size: 13px;
+}
+.al-mp-why li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.al-mp-why .al-sicon {
+  color: var(--accent);
+}
+
+@media (max-width: 640px) {
+  .al-mp-charts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .al-mp-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

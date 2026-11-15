@@ -6,6 +6,7 @@ import { CITY } from './cities';
 import { fmtMoney, fmtPax, pct, signedMoney } from './format';
 import { GRADE_INFO } from './goals';
 import { AwardCeremony } from './AwardsArt';
+import { FameResult } from './AchievementsView';
 import { rankings } from './rules';
 import { companyValue, regionsServed } from './simulate';
 import { qLabel } from './time';
@@ -220,6 +221,7 @@ export function GameOver({ state, onRestart, onChangeSetup, onExit, onLook }: Ga
             );
           })}
         </ol>
+        <FameResult state={state} />
         <div className="result-actions">
           <button type="button" className="btn btn-primary" onClick={onRestart} data-testid="al-restart">
             같은 설정으로 다시 하기

@@ -8,6 +8,7 @@ import { useTimers } from '../../lib/useTimers';
 import type { GameSettings } from '../common/settings';
 import { coColors, realOf } from './brand';
 import { aiManage, type AiLevel } from './ai';
+import { useFameTracker } from './AchievementsView';
 import { CompanyBadge, SEAT_SHAPES } from './Art';
 import { ChoiceModal } from './ChoiceModal';
 import { CITY, dist, pairKey } from './cities';
@@ -118,6 +119,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
 
   const kinds = game.companies.map((c) => c.kind);
   useRecordOutcome('airline', game.phase === 'gameover', () => soloOutcome(kinds, game.result && game.result.winners.length > 0 ? game.result.winners : [-1]));
+  const fameUi = useFameTracker(game, settings.speed);
 
   const act = actor(game);
   const actorCo = act >= 0 ? game.companies[act] : null;
@@ -662,6 +664,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
           🏆 결과 다시 보기
         </button>
       )}
+      {fameUi}
     </div>
   );
 }

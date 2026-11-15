@@ -12,6 +12,7 @@ import { AlliancePanel } from './AlliancePanel';
 import { StockCard } from './StockCard';
 import { RightsCard } from './RightsCard';
 import { TrophyShelf } from './AwardsArt';
+import { AchievementStrip } from './AchievementsView';
 import { facilitiesWorth } from './facilities';
 import { tankWorth } from './fuel';
 import { GRADE_INFO, goalProgress } from './goals';
@@ -383,6 +384,7 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
           <FinIcon kind="trophy" size={16} /> 트로피 진열장 <small>해마다 12월 시상식</small>
         </h5>
         <TrophyShelf state={state} ci={viewer} />
+        <AchievementStrip />
       </section>
 
       <section className="al-card al-ads">

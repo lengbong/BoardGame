@@ -18,6 +18,7 @@ import { mLabel } from './time';
 import { AirlinePicker, AirlinePhoto, airlineYears } from './AirlinePicker';
 import { gameHub } from './brand';
 import { CreditsModal } from './CreditsModal';
+import { FameCard } from './AchievementsView';
 import { REAL_AIRLINE, airlinesAt } from './realAirlines';
 import { AIRLINE_TITLE } from './song';
 import type { AiStyle, AirlineOptions, AirlineSetup, MoneyLevel, NameMode, StartEra } from './types';
@@ -259,6 +260,8 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
           </button>
         </section>
       )}
+
+      <FameCard />
 
       <section className="setup-section">
         <h2>어떻게 할까요?</h2>

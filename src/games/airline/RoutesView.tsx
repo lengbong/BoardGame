@@ -677,37 +677,39 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                   {options.map((o) => (
                     <li key={o.m.id}>
                       <PlaneImage model={o.m.id} paint={{ main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] }} className="al-plane-chip al-plane-chip-big" />
-                      <span className="al-opt-text">
-                        <b>{o.m.name}</b>
-                        <small>
-                          주 {o.freq}회 · {o.m.seats}석 · 탑승률 {pct(o.e.lf)}
-                        </small>
-                        <small>
-                          이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/달
-                        </small>
-                      </span>
-                      <span className="al-two">
-                        <ActButton
-                          small
-                          primary
-                          blocker={why ?? buyBlocker(state, viewer, o.m.id, true)}
-                          onClick={() => openWith(o, 'lease')}
-                          title={(() => {
-                            const dep = depositFor(state, viewer, o.m.id);
-                            return `달 리스료 ${fmtMoney(leaseRent(state, o.m))}${dep > 0 ? `, 보증금 ${fmtMoney(dep)} (돌려줄 때 돌려받아요)` : ', 첫해 보증금 없음'}`;
+                      <div className="al-opt-body">
+                        <span className="al-opt-text">
+                          <b>{o.m.name}</b>
+                          <small>
+                            주 {o.freq}회 · {o.m.seats}석 · 탑승률 {pct(o.e.lf)}
+                          </small>
+                          <small>
+                            이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/달
+                          </small>
+                        </span>
+                        <span className="al-two">
+                          <ActButton
+                            small
+                            primary
+                            blocker={why ?? buyBlocker(state, viewer, o.m.id, true)}
+                            onClick={() => openWith(o, 'lease')}
+                            title={(() => {
+                              const dep = depositFor(state, viewer, o.m.id);
+                              return `달 리스료 ${fmtMoney(leaseRent(state, o.m))}${dep > 0 ? `, 보증금 ${fmtMoney(dep)} (돌려줄 때 돌려받아요)` : ', 첫해 보증금 없음'}`;
+                            })()}
+                          >
+                            리스로 열기
+                          </ActButton>
+                          {(() => {
+                            const used = state.market.find((u) => u.model === o.m.id);
+                            return used ? (
+                              <ActButton small blocker={why ?? usedBlocker(state, viewer, used.id)} onClick={() => openWith(o, 'used')} title={`${used.age}년 된 중고`}>
+                                중고 {fmtMoney(used.price)}
+                              </ActButton>
+                            ) : null;
                           })()}
-                        >
-                          리스로 열기
-                        </ActButton>
-                        {(() => {
-                          const used = state.market.find((u) => u.model === o.m.id);
-                          return used ? (
-                            <ActButton small blocker={why ?? usedBlocker(state, viewer, used.id)} onClick={() => openWith(o, 'used')} title={`${used.age}년 된 중고`}>
-                              중고 {fmtMoney(used.price)}
-                            </ActButton>
-                          ) : null;
-                        })()}
-                      </span>
+                        </span>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -719,18 +721,20 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                     {mine.map((o) => (
                       <li key={o.p.id}>
                         <PlaneImage model={o.m.id} paint={{ main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] }} className="al-plane-chip al-plane-chip-big" />
-                        <span className="al-opt-text">
-                          <b>{o.m.name}</b>
-                          <small>
-                            {o.p.legs.length === 0 ? '쉬는 중' : `남는 시간으로`} 주 {o.freq}회 · 탑승률 {pct(o.e.lf)}
-                          </small>
-                          <small>
-                            이 노선 이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/달 <span className="al-muted">(리스료는 이미 내는 중)</span>
-                          </small>
-                        </span>
-                        <ActButton small blocker={why} onClick={() => openWith(o, o.p.id)}>
-                          이 비행기로 열기
-                        </ActButton>
+                        <div className="al-opt-body">
+                          <span className="al-opt-text">
+                            <b>{o.m.name}</b>
+                            <small>
+                              {o.p.legs.length === 0 ? '쉬는 중' : `남는 시간으로`} 주 {o.freq}회 · 탑승률 {pct(o.e.lf)}
+                            </small>
+                            <small>
+                              이 노선 이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/달 <span className="al-muted">(리스료는 이미 내는 중)</span>
+                            </small>
+                          </span>
+                          <ActButton small blocker={why} onClick={() => openWith(o, o.p.id)}>
+                            이 비행기로 열기
+                          </ActButton>
+                        </div>
                       </li>
                     ))}
                   </ul>

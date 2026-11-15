@@ -61,6 +61,9 @@ export type AiLevel = 'ai-easy' | 'ai-normal';
 /** 어림(달 값)을 예전 분기 기준 문턱과 견줄 때 곱하는 수 */
 const Q = 3;
 
+/** 노선이 이보다 적으면 갓 시작한 회사로 보고 새 노선을 너그럽게 연다 */
+const STARTUP_ROUTES = 4;
+
 /**
  * 컴퓨터 항공사. 한 분기 경영을 행동 목록으로 정한다 (끝에 endTurn은 넣지 않는다).
  * 쉬움: 본사에서 손님이 많은 도시로 천천히 노선을 늘리고, 운임은 조심스럽게, 잘 안 되는 노선만 닫는다.
@@ -546,13 +549,15 @@ export class Planner {
       ? [from]
       : [...c.branches].sort((x, y) => (x === c.hub ? -1 : y === c.hub ? 1 : citySize(CITY[y], year) - citySize(CITY[x], year))).slice(0, 8);
     const models = only ? [only] : this.models();
-    const maxRange = Math.max(0, ...models.map((m) => m.range));
     const quick: { a: string; b: string; v: number; d: number }[] = [];
     const seen = new Set<string>();
     const hubRoutes = c.routes.filter((r) => r.a === c.hub || r.b === c.hub).length;
     const history = historyOn(this.s);
     for (const a of origins) {
       if (this.slotsLeft(a) < 2) continue;
+      // 이 공항 활주로에 내릴 수 있는 기종만 본다 (작은 공항에서 못 띄우는 장거리 기종의 거리로 후보 자리를 채우지 않게)
+      const fromA = models.filter((m) => airportClass(CITY[a], year) >= m.runway);
+      const maxRange = Math.max(0, ...fromA.map((m) => m.range));
       for (const city of CITIES) {
         const b = city.id;
         if (b === a) continue;
@@ -562,6 +567,7 @@ export class Planner {
         const d = dist(a, b);
         if (d < 300 || d > maxRange) continue;
         if (history && routePolitics(c.hub, a, b, year)) continue;
+        if (!fromA.some((m) => this.fits(m, a, b))) continue;
         if (!this.normal && d > 6500) continue;
         if (this.slotsLeft(b) < 2) continue;
         const dem = pairDemand(this.s, a, b);
@@ -677,6 +683,18 @@ export class Planner {
     return this.candList;
   }
 
+  /**
+   * 이 후보를 열려면 넘어야 하는 달 이익 어림 (새 지점 유지비까지 뺀 값).
+   * 노선이 몇 개 없는 갓 시작한 회사는 본사 유지비와 미리 뽑아 둔 직원 임금을 어차피 내고 있으니,
+   * 노선 자체가 비행 비용과 리스료를 벌면(새 지점 유지비는 아직 못 벌어도) 연다.
+   * 손님이 적은 지역(1960년대 동남아처럼)에서도 첫해부터 노선망을 짜기 시작하고,
+   * 손님이 해마다 늘고 갈아타는 손님이 붙으면서 지점 유지비도 벌게 된다.
+   */
+  private minOpenProfit(cand: Candidate): number {
+    if (this.c.routes.length >= STARTUP_ROUTES) return 5 / Q;
+    return -cand.needBranch.reduce((sum, city) => sum + branchUpkeep(city, this.s.q), 0);
+  }
+
   private expand(max: number): void {
     if (max <= 0 || this.c.cash - this.reserve() < 30) return;
     const list = [...this.candidates()];
@@ -689,7 +707,7 @@ export class Planner {
       if (routeOnPair(this.c, cand.a, cand.b)) continue;
       let c2: Candidate | null = cand;
       if (usedCities.has(cand.a) || usedCities.has(cand.b)) c2 = this.evaluatePair(cand.a, cand.b, [cand.model], false);
-      if (!c2 || c2.profit <= 5 / Q || c2.capital > budget) continue;
+      if (!c2 || c2.profit <= this.minOpenProfit(c2) || c2.capital > budget) continue;
       if (this.openCandidate(c2)) {
         usedCities.add(cand.a);
         usedCities.add(cand.b);

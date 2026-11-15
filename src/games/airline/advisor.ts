@@ -745,7 +745,7 @@ function leaseAndAssign(s: AirlineState, ci: number, model: string, routeId: num
 }
 
 /** 낡은 비행기를 바꿀 리스 기종 (첫 노선 기준) */
-function replacementFor(state: AirlineState, ci: number, planeId: number): { model: string; gain: number } | null {
+export function replacementFor(state: AirlineState, ci: number, planeId: number): { model: string; gain: number } | null {
   const c = state.companies[ci];
   const p = planeById(c, planeId);
   if (!p || p.legs.length === 0) return null;
@@ -769,7 +769,7 @@ function replacementFor(state: AirlineState, ci: number, planeId: number): { mod
   return best;
 }
 
-function replacePlane(s: AirlineState, ci: number, planeId: number, model: string): AirlineState {
+export function replacePlane(s: AirlineState, ci: number, planeId: number, model: string): AirlineState {
   const pl = planner(s, ci);
   const p = planeById(pl.c, planeId);
   if (!p) return s;

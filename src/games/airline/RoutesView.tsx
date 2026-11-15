@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import './routes.css';
+import { BulkTools } from './BulkTools';
 import { coColors } from './brand';
 import { MODEL } from './aircraft';
 import { openSuggestion, type Candidate } from './ai';
@@ -70,7 +71,7 @@ interface RoutesViewProps {
 const notMine = '내 차례에만 할 수 있어요';
 
 export function RoutesView(props: RoutesViewProps) {
-  const { state, viewer, focus, onFocus, planner, onPlanner, canAct } = props;
+  const { state, viewer, focus, onFocus, planner, onPlanner, canAct, apply } = props;
   const me = state.companies[viewer];
   const [sort, setSort] = useState<'profit' | 'lf' | 'name'>('profit');
   const routes = [...me.routes].sort((a, b) => {
@@ -115,6 +116,7 @@ export function RoutesView(props: RoutesViewProps) {
             )}
           </div>
         )}
+        {me.routes.length >= 3 && <BulkTools state={state} viewer={viewer} canAct={canAct} apply={apply} />}
         {routes.length === 0 && <p className="al-muted al-empty">아직 노선이 없어요. ‘＋ 새 노선’이나 지도에서 도시를 눌러 시작해요.</p>}
         <ul>
           {routes.map((r) => {

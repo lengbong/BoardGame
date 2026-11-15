@@ -16,6 +16,7 @@ import { BUSINESS_INFO, businessMonthSeason } from './business';
 import { bizMonthMult, leisureMonthMult, weather } from './calendar';
 import { AIRPORT_INFO, CITY, FEE_INFO, REGIONS, airportClass, citySize, dist, pairIndex, pairKey } from './cities';
 import { effectMults, fixedEventMult, priceMult, worldMult } from './events';
+import { checkCost, condOf, condRisk, fleetCond, inCheck } from './condition';
 import { FUEL_TON, burnFuel, tankWorth } from './fuel';
 import { STAFF_SHARE, overtime, payroll, staffCap, staffNeed, strikeChance } from './staff';
 import { bandCaps, bandCounts, bandUsed, defaultTimes, legalTimes, timeFit } from './timetable';
@@ -218,8 +219,9 @@ export function planeValue(state: Pick<AirlineState, 'q' | 't'>, plane: Plane): 
   return m.price * Math.max(0.1, 1 - DEPRECIATION * age) * retired;
 }
 
+/** 팔 때 값: 가치의 90%, 기체 상태가 나쁘면 15%까지 덜 받는다 */
 export function sellPrice(state: Pick<AirlineState, 'q' | 't'>, plane: Plane): number {
-  return Math.round(planeValue(state, plane) * SELL_RATE);
+  return Math.round(planeValue(state, plane) * SELL_RATE * (0.85 + 0.15 * (condOf(plane) / 100)));
 }
 
 export function businessValue(b: Business): number {
@@ -1173,10 +1175,31 @@ export interface OpsRates {
   weather: number;
 }
 
-/** 비행기 한 대가 한 달에 기체 점검으로 쉬게 될 확률 */
+/** 비행기 한 대가 한 달에 갑작스러운 고장으로 쉬게 될 확률 (나이·기체 상태·정비 수준) */
 export function groundingChance(state: Pick<AirlineState, 't'>, c: Company, p: Plane): number {
   const ageF = 1 + 0.035 * planeAge(state, p);
-  return Math.min(0.25, 0.012 * ageF ** 1.5 * (MAINT_RISK[c.maint] ?? 1) ** 1.5);
+  return Math.min(0.25, 0.012 * ageF ** 0.8 * condRisk(condOf(p)) * (MAINT_RISK[c.maint] ?? 1) ** 1.5);
+}
+
+/**
+ * 이번 달 C점검으로 쉬는 비행기: 쉬는 비행기(예비기)가 있으면 대신 날고, 없으면 그 비행기가 나는 노선의 횟수가 준다.
+ * lost: 노선마다 못 뜨는 주간 왕복 수, spares: 점검을 메우고 남은 예비기 수
+ */
+export function checkDowntime(c: Company, t: number): { lost: Map<number, number>; planes: number; spares: number } {
+  const lost = new Map<number, number>();
+  let spares = c.planes.filter((p) => p.legs.length === 0 && !inCheck(p, t)).length;
+  let planes = 0;
+  for (const p of c.planes) {
+    if (!inCheck(p, t)) continue;
+    planes++;
+    if (p.legs.length === 0) continue;
+    if (spares > 0) {
+      spares--;
+      continue;
+    }
+    for (const l of p.legs) lost.set(l.route, (lost.get(l.route) ?? 0) + l.freq);
+  }
+  return { lost, planes, spares };
 }
 
 /** 예비기로 쓸 수 있는 쉬는 비행기가 얼마나 있는지 (0~1: 한 달 기체 점검·결항을 메울 정도) */
@@ -1196,17 +1219,20 @@ export function opsRates(state: Pick<AirlineState, 't' | 'q' | 'slotBoost' | 'co
   let freq = 0;
   let age = 0;
   let util = 0;
+  let condF = 0;
   for (const p of c.planes) {
     const f = legFreq(p, routeId);
     if (f <= 0) continue;
     freq += f;
     age += planeAge(state, p) * f;
     util += (planeHours(c, p) / WEEK_HOURS) * f;
+    condF += condRisk(condOf(p)) * f;
   }
   if (freq > 0) {
     age /= freq;
     util /= freq;
-  }
+    condF /= freq;
+  } else condF = 1;
   // 공항 혼잡: 이 노선이 뜨는 시간대마다 (큰 공항은 아침·저녁이 붐빈다)
   const year = yearOf(state.q);
   const mine = bandCounts(legalTimes(r, year), freq);
@@ -1229,12 +1255,12 @@ export function opsRates(state: Pick<AirlineState, 't' | 'q' | 'slotBoost' | 'co
   const congF = 1 + Math.max(0, cong - 0.7) * 1.6;
   const crewF = (RESERVE_RISK[c.crewReserve] ?? 1) * extra * staffF;
   const spareF = 1 - 0.45 * spareCover(c);
-  const late = Math.min(0.6, 0.075 * ageF * maintF ** 0.6 * utilF * congF * crewF * w.factor ** 0.9);
-  const cancel = Math.min(0.3, 0.0045 * ageF ** 1.2 * maintF * utilF * congF ** 0.5 * crewF * spareF * w.factor ** 2.2);
+  const late = Math.min(0.6, 0.075 * ageF * maintF ** 0.6 * condF ** 0.5 * utilF * congF * crewF * w.factor ** 0.9);
+  const cancel = Math.min(0.3, 0.0045 * ageF ** 1.2 * maintF * condF ** 0.8 * utilF * congF ** 0.5 * crewF * spareF * w.factor ** 2.2);
   const divert = Math.min(0.05, 0.0012 * w.factor ** 1.6);
   // 큰 원인 고르기
   const parts: [string, number][] = [
-    ['tech', (ageF - 1) * 2 + (maintF - 1) * 2],
+    ['tech', (ageF - 1) * 2 + (maintF - 1) * 2 + (condF - 1) * 2],
     ['crew', (crewF / staffF - 1) * 4 + (utilF - 1) * 2],
     ['staff', (staffF - 1) * 4],
     ['congestion', (congF - 1) * 3],
@@ -1274,11 +1300,16 @@ interface RouteOps {
 /**
  * 이번 달 운항 현장 사건을 뽑는다. rng가 없으면 사건 없이 (어림과 같게) 셈한다.
  */
-function rollOps(state: AirlineState, rng: Rng | undefined): { byRoute: Map<number, RouteOps>[]; closures: QuarterOutcome['closures']; strikes: boolean[] } {
+function rollOps(
+  state: AirlineState,
+  rng: Rng | undefined,
+): { byRoute: Map<number, RouteOps>[]; closures: QuarterOutcome['closures']; strikes: boolean[]; checks: ReturnType<typeof checkDowntime>[] } {
   const byRoute: Map<number, RouteOps>[] = state.companies.map(() => new Map());
   const closures: QuarterOutcome['closures'] = [];
   const strikes = state.companies.map(() => false);
-  if (!rng) return { byRoute, closures, strikes };
+  // C점검은 미리 정해 둔 일이라 어림할 때도 셈한다
+  const checks = state.companies.map((c) => checkDowntime(c, state.t));
+  if (!rng) return { byRoute, closures, strikes, checks };
   const m0 = monthOf(state.t) - 1;
   // 날씨가 아주 나쁜 도시는 하루 이틀 공항이 닫힌다 (노선이 닿은 도시만)
   const cities = new Set<string>();
@@ -1298,12 +1329,12 @@ function rollOps(state: AirlineState, rng: Rng | undefined): { byRoute: Map<numb
     // 파업 (조직 만족도가 아주 낮을 때): 한 주쯤 운항이 크게 준다
     const strike = c.planes.length > 0 && rng() < strikeChance(c);
     strikes[ci] = strike;
-    // 기체 점검: 비행기마다 (예비기가 있으면 그 비행기가 대신 난다)
-    let spares = c.planes.filter((p) => p.legs.length === 0).length;
+    // 갑작스러운 고장: 비행기마다 (C점검을 메우고 남은 예비기가 있으면 그 비행기가 대신 난다)
+    let spares = checks[ci].spares;
     const lostWeeks = new Map<number, number>();
     const groundedOn = new Map<number, number>();
     for (const p of c.planes) {
-      if (p.legs.length === 0) continue;
+      if (p.legs.length === 0 || inCheck(p, state.t)) continue;
       if (rng() >= groundingChance(state, c, p)) continue;
       if (spares > 0) {
         spares--;
@@ -1338,17 +1369,25 @@ function rollOps(state: AirlineState, rng: Rng | undefined): { byRoute: Map<numb
       byRoute[ci].set(r.id, { flights, late, cancelled, diverted, grounded: groundedOn.get(r.id) ?? 0, cause, city, lost: flights > 0 ? cancelled / flights : 0 });
     }
   });
-  return { byRoute, closures, strikes };
+  return { byRoute, closures, strikes, checks };
 }
 
 /** 이번 달 손님·수입·비용 (상태는 바꾸지 않는다). rng를 주면 운항 현장 사건도 뽑는다 */
 export function computeMonth(state: AirlineState, rng?: Rng): QuarterOutcome {
   const n = state.companies.length;
-  const { byRoute, closures, strikes } = rollOps(state, rng);
+  const { byRoute, closures, strikes, checks } = rollOps(state, rng);
   // 일손이 모자라면 (초과 근무로도 못 메우면) 그만큼 결항한다
   const needs = state.companies.map((c) => staffNeed(state, c));
   const caps = state.companies.map((c, ci) => (c.out ? 1 : staffCap(needs[ci], c)));
-  const lostFor = (ci: number, routeId: number) => 1 - (1 - (byRoute[ci].get(routeId)?.lost ?? 0)) * caps[ci];
+  /** 운항 사건과 C점검으로 못 뜨는 비율 (일손 부족은 빼고) */
+  const baseLost = (ci: number, routeId: number) => {
+    const ops = byRoute[ci].get(routeId)?.lost ?? 0;
+    const down = checks[ci].lost.get(routeId) ?? 0;
+    const freq = down > 0 ? routeFreq(state.companies[ci], routeId) : 0;
+    const chk = freq > 0 ? Math.min(1, down / freq) : 0;
+    return 1 - (1 - ops) * (1 - chk);
+  };
+  const lostFor = (ci: number, routeId: number) => 1 - (1 - baseLost(ci, routeId)) * caps[ci];
   // 1) 곧장 가는 손님: 두 도시마다 운항을 모아 나눈다
   const pairs = new Map<string, { a: string; b: string; offers: Offer[]; routes: Route[] }>();
   state.companies.forEach((c, ci) => {
@@ -1415,7 +1454,7 @@ export function computeMonth(state: AirlineState, rng?: Rng): QuarterOutcome {
     const rep = reports[ci];
     // 일손 부족 결항을 운항 사건에 더한다
     const allFlights = freqSum * 2 * WEEKS;
-    const staffCancel = caps[ci] < 1 ? Math.round(allFlights * (lost - (o0?.lost ?? 0))) : 0;
+    const staffCancel = caps[ci] < 1 ? Math.round(allFlights * (lost - baseLost(ci, run.route.id))) : 0;
     rep.staffCancelled += staffCancel;
     const o: RouteOps | undefined = o0
       ? { ...o0, cancelled: Math.min(o0.flights, o0.cancelled + staffCancel), cause: staffCancel > o0.cancelled ? 'staff' : o0.cause }
@@ -1481,6 +1520,14 @@ export function computeMonth(state: AirlineState, rng?: Rng): QuarterOutcome {
       if (p.legs.some((l) => l.freq > 0 && activeRoutes.has(l.route))) continue;
       const price = MODEL[p.model].price;
       rep.fleet += planeFixed(p) + (p.leased ? 0 : price * IDLE_RATE);
+    }
+    // C점검 값 ('운항 수당·정비 부품'에 넣는다)
+    if (checks[ci].planes > 0) {
+      let cost = 0;
+      for (const p of c.planes) if (inCheck(p, state.t)) cost += checkCost(p);
+      rep.crew += cost;
+      rep.checks = checks[ci].planes;
+      rep.checkCost = cost;
     }
     for (const city of c.branches) rep.branch += branchUpkeep(city, state.q);
     for (const r of REGIONS) rep.ads += c.ads[r];
@@ -1573,6 +1620,8 @@ export function emptyReport(): CompanyReport {
     fuelTons: 0,
     tankUsed: 0,
     tankSaved: 0,
+    checks: 0,
+    checkCost: 0,
   };
 }
 
@@ -1591,6 +1640,8 @@ export function sumReports(list: readonly CompanyReport[]): CompanyReport {
     out.fuelTons = (out.fuelTons ?? 0) + (r.fuelTons ?? 0);
     out.tankUsed = (out.tankUsed ?? 0) + (r.tankUsed ?? 0);
     out.tankSaved = (out.tankSaved ?? 0) + (r.tankSaved ?? 0);
+    out.checks = (out.checks ?? 0) + (r.checks ?? 0);
+    out.checkCost = (out.checkCost ?? 0) + (r.checkCost ?? 0);
     out.bankrupt = out.bankrupt || r.bankrupt;
     out.strike = out.strike || r.strike;
   }
@@ -1633,7 +1684,9 @@ export function reputationTarget(state: Pick<AirlineState, 't'>, c: Company): nu
   meal /= seats;
   const ageAdj = age < 5 ? 8 : age < 10 ? 2 : age < 16 ? -6 : -14;
   const onTimeAdj = Math.max(-12, Math.min(6, (c.onTime - 0.85) * 80));
-  return Math.max(0, Math.min(100, 25 + 9 * meal + ageAdj + (comfort - 3) * 4 + onTimeAdj));
+  // 기체 상태: 낡고 닳은 실내는 손님 눈에 띈다
+  const condAdj = Math.max(-5, Math.min(3, (fleetCond(c) - 70) / 6));
+  return Math.max(0, Math.min(100, 25 + 9 * meal + ageAdj + (comfort - 3) * 4 + onTimeAdj + condAdj));
 }
 
 /** 광고가 알려진 정도로 바뀌는 크기 (억/분기 기준. 달 광고비는 세 배로 견준다) */

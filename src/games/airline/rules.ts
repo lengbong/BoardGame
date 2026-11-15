@@ -5,6 +5,7 @@ import { BUSINESS_INFO } from './business';
 import { cabinBlocker, defaultCabin, sameCabin } from './cabin';
 import { blockText, branchPolitics, makerPolitics, politicalNews, polity, routePolitics } from './politics';
 import { CHALLENGE, challengeDeadline, checkChallenge } from './challenges';
+import { CHECK_POLICIES, checkCost, condOf, dueForCheck, inCheck, monthlyWear, restoredCond, usedCond } from './condition';
 import { allianceChoice, allianceScore, makeChoice, nextChoiceGap } from './choices';
 import { autoAirline, gameHub, pickColors } from './brand';
 import { AIRPORT_INFO, CITIES, CITY, REGIONS, REGION_INFO, airportClass, citySize, dist, pairKey } from './cities';
@@ -34,6 +35,7 @@ import {
   maxFreqFor,
   orderPrice,
   planeAge,
+  planeHours,
   planeValue,
   regionsServed,
   reputationTarget,
@@ -352,6 +354,7 @@ function createChallenge(setup: AirlineSetup, opts: AirlineOptions, rng: Rng): A
         legs: routeId !== null ? [{ route: routeId, freq: Math.min(f.freq ?? 7, maxFreq(m, dist(f.route![0], f.route![1]))) }] : [],
         cabin: defaultCabin(m),
         meal: c.service,
+        cond: usedCond(f.age),
       });
     }
   }
@@ -570,6 +573,18 @@ export function cabinChangeBlocker(state: AirlineState, ci: number, planeId: num
   return null;
 }
 
+/** 이 비행기를 이번 달 C점검에 보낼 수 없는 까닭 */
+export function checkBlocker(state: AirlineState, ci: number, planeId: number): string | null {
+  const c = state.companies[ci];
+  const p = c.planes.find((x) => x.id === planeId);
+  if (!p) return '없는 비행기예요';
+  if (inCheck(p, state.t)) return '이번 달 이미 점검해요';
+  if (condOf(p) >= 92) return '아직 상태가 좋아요';
+  const cost = checkCost(p);
+  if (c.cash < cost) return `돈이 모자라요 (${fmtMoney(cost)} 필요)`;
+  return null;
+}
+
 /** 캠페인 값 (광고 규모에 따라) */
 export function campaignCost(state: Pick<AirlineState, 'q'>, kind: CampaignKind): number {
   return Math.round(CAMPAIGN_INFO[kind].costK * adScale(state.q));
@@ -770,12 +785,33 @@ export function allianceOutlook(state: AirlineState, from: number, to: number): 
 
 // ------------------------------------------------------------------ 행동
 
+/**
+ * 비행기 한 대를 늘 같은 모양(같은 키, 같은 순서)으로 베낀다. 없는 값은 undefined로 두어 저장(JSON)에는 남지 않는다.
+ * 비행기마다 키가 다르거나 키를 지우면(delete) 자바스크립트 엔진이 느린 길로 가서, 컴퓨터 한 차례가 눈에 띄게 느려졌다.
+ */
+function clonePlane(p: Plane): Plane {
+  return {
+    id: p.id,
+    model: p.model,
+    leased: p.leased,
+    rent: p.rent,
+    deposit: p.deposit,
+    since: p.since,
+    legs: p.legs.map((l) => ({ route: l.route, freq: l.freq })),
+    cabin: p.cabin,
+    meal: p.meal,
+    got: p.got,
+    cond: p.cond,
+    check: p.check,
+  };
+}
+
 function cloneCompany(c: Company): Company {
   return {
     ...c,
     branches: [...c.branches],
     routes: c.routes.map((r) => ({ ...r, times: [...r.times] as [number, number, number, number] })),
-    planes: c.planes.map((p) => ({ ...p, legs: p.legs.map((l) => ({ ...l })) })),
+    planes: c.planes.map(clonePlane),
     ads: { ...c.ads },
     awareness: { ...c.awareness },
     businesses: c.businesses.map((b) => ({ ...b })),
@@ -929,7 +965,7 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
       const deposit = depositFor(state, ci, m.id);
       const s = edit(state, ci, (c, s) => {
         c.cash -= deposit;
-        c.planes.push({ id: s.nextId, model: m.id, leased: true, rent, deposit, since: s.t, legs: [], cabin: defaultCabin(m), meal: c.service, got: s.t });
+        c.planes.push({ id: s.nextId, model: m.id, leased: true, rent, deposit, since: s.t, legs: [], cabin: defaultCabin(m), meal: c.service, got: s.t, cond: 100 });
         s.nextId += 1;
         c.taken += 1;
         c.stats.bought += 1;
@@ -943,7 +979,7 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
       const u = state.market.find((x) => x.id === action.listing)!;
       const s = edit(state, ci, (c, s) => {
         c.cash -= u.price;
-        c.planes.push({ id: s.nextId, model: u.model, leased: false, rent: 0, deposit: 0, since: s.t - Math.round(u.age * 12), legs: [], cabin: defaultCabin(MODEL[u.model]), meal: c.service, got: s.t });
+        c.planes.push({ id: s.nextId, model: u.model, leased: false, rent: 0, deposit: 0, since: s.t - Math.round(u.age * 12), legs: [], cabin: defaultCabin(MODEL[u.model]), meal: c.service, got: s.t, cond: usedCond(u.age) });
         s.nextId += 1;
         c.taken += 1;
         c.stats.bought += 1;
@@ -1205,6 +1241,26 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
       if (tankOf(c0).level === 0 || tankOf(c0).auto === ratio) return state;
       return edit(state, ci, (c) => {
         c.fuel = { ...tankOf(c), auto: ratio };
+      });
+    }
+    case 'checkPlane': {
+      const p = planeById(c0, action.plane);
+      if (!p) return state;
+      if (action.on && checkBlocker(state, ci, p.id)) return state;
+      if (!action.on && !inCheck(p, state.t)) return state;
+      const s = edit(state, ci, (c, s) => {
+        const x = planeById(c, action.plane)!;
+        if (action.on) x.check = s.t;
+        else x.check = undefined;
+        pushEvent(s, { type: 'check', company: ci, plane: x.id, on: action.on });
+      });
+      return addLog(s, seat, action.on ? `${c0.name}: ${MODEL[p.model].name} 이번 달 C점검 (약 ${fmtMoney(checkCost(p))})` : `${c0.name}: ${MODEL[p.model].name} C점검 미루기`);
+    }
+    case 'setCheckAt': {
+      const at = Math.round(action.at);
+      if (!CHECK_POLICIES.some((x) => x.at === at) || (c0.checkAt ?? 50) === at) return state;
+      return edit(state, ci, (c) => {
+        c.checkAt = at;
       });
     }
     case 'choose':
@@ -1493,6 +1549,16 @@ export function runMonth(state: AirlineState, rng: Rng = Math.random): AirlineSt
     for (const region of REGIONS) {
       const effect = adTarget(c, region, scale);
       c.awareness[region] = Math.round((c.awareness[region] * 0.887 + effect * 0.113) * 1000) / 1000;
+    }
+    // 기체 상태: C점검을 마친 비행기는 돌아오고, 날던 비행기는 닳는다
+    for (const p of c.planes) {
+      const age = planeAge(s, p);
+      if (inCheck(p, t)) {
+        p.cond = restoredCond(age);
+        p.check = undefined;
+      } else if (p.legs.length > 0) {
+        p.cond = Math.max(0, Math.round((condOf(p) - monthlyWear(planeHours(c, p), age, c.maint)) * 10) / 10);
+      } else if (p.cond === undefined) p.cond = condOf(p);
     }
     // 탱크에서 쓴 연료를 덜어 낸다
     if (c.fuel && (rep.tankUsed ?? 0) > 0) {
@@ -1852,6 +1918,17 @@ function startMonth(state: AirlineState, t: number, rng: Rng): AirlineState {
       c.fuel = addFuel(tankOf(c), autoTons, s.oil);
       s = addLog(s, c.seat, `⛽ ${c.name}: 유가 ${s.oil.toFixed(2)}에 연료 ${autoTons.toLocaleString('ko-KR')}톤 자동으로 사 두기 (−${fmtFine(cost)})`);
     }
+    // C점검: 기체 상태가 점검 시점 아래로 내려간 비행기는 이번 달 정비고에 들어간다
+    const toCheck = new Set(dueForCheck(c, t));
+    if (toCheck.size > 0) {
+      const names: string[] = [];
+      for (const p of c.planes) {
+        if (!toCheck.has(p.id)) continue;
+        p.check = t;
+        names.push(MODEL[p.model].name);
+      }
+      if (c.kind === 'human') s = addLog(s, c.seat, `🔧 ${c.name}: C점검 ${names.join(', ')} (이번 달 쉬어요)`);
+    }
     // 나라 관계가 막힌 노선은 운항을 멈춘다
     if (historyOn(s)) {
       const blocked = c.routes.map((r) => ({ r, why: routePolitics(c.hub, r.a, r.b, yearOfM(t)) })).filter((x) => x.why);
@@ -1877,7 +1954,7 @@ function startMonth(state: AirlineState, t: number, rng: Rng): AirlineState {
     }
     const due = c.orders.filter((o) => o.due <= t);
     for (const o of due) {
-      c.planes.push({ id: s.nextId, model: o.model, leased: false, rent: 0, deposit: 0, since: t, legs: [], cabin: defaultCabin(MODEL[o.model]), meal: c.service, got: t });
+      c.planes.push({ id: s.nextId, model: o.model, leased: false, rent: 0, deposit: 0, since: t, legs: [], cabin: defaultCabin(MODEL[o.model]), meal: c.service, got: t, cond: 100 });
       s.nextId += 1;
       c.stats.bought += 1;
       c.acc.bought += 1;

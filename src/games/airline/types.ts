@@ -182,6 +182,10 @@ export interface Plane {
   meal: number;
   /** 우리 회사에 온 달 (이 달에는 좌석 배치를 공짜로 바꾼다). 없으면 since */
   got?: number;
+  /** 기체 상태 0~100% (condition.ts). 없으면 80 (예전 저장) */
+  cond?: number;
+  /** 이 달(t)에 C점검을 받는다 (그달은 날지 않고, 끝나면 상태가 돌아온다) */
+  check?: number;
 }
 
 /** 비행기 한 대가 한 노선을 한 주에 몇 번 왕복하는지 */
@@ -448,6 +452,8 @@ export interface Company {
   color: string | null;
   /** 연료 탱크 (없으면 탱크 없음) */
   fuel?: FuelTank;
+  /** C점검 시점: 기체 상태가 이 아래로 내려가면 점검한다 (없으면 50) */
+  checkAt?: number;
 }
 
 /** 광고 매체 (ads.ts) */
@@ -599,6 +605,10 @@ export interface CompanyReport {
   tankUsed?: number;
   /** 탱크 연료 덕분에 아낀 돈 (그달 값에 견주어, 억. 비싸게 사 두었으면 음수) */
   tankSaved?: number;
+  /** C점검을 받은 비행기 수 */
+  checks?: number;
+  /** C점검 값 (억, '운항 수당·정비 부품'에 들어 있다) */
+  checkCost?: number;
   /** 정시 운항률 (결항은 빼고 뜬 편 가운데 제때 뜬 비율) */
   onTime: number;
   /** 경영 평가 (4분기 결산에만) */
@@ -771,6 +781,10 @@ export type AirlineAction =
   | { type: 'sellFuel'; tons: number }
   /** 자동으로 사기 (보통 값에 견준 비율, null이면 끄기) */
   | { type: 'setFuelAuto'; ratio: number | null }
+  /** 이 비행기를 이번 달 C점검에 보내거나(on) 점검을 다음으로 미룬다 */
+  | { type: 'checkPlane'; plane: number; on: boolean }
+  /** C점검 시점 (기체 상태 %) */
+  | { type: 'setCheckAt'; at: number }
   | { type: 'sellBusiness'; city: string; kind: BusinessKind }
   | { type: 'endTurn' };
 
@@ -791,6 +805,7 @@ export type GameEvent =
   | { id: number; type: 'money'; company: number; amount: number; what: 'borrow' | 'repay' }
   | { id: number; type: 'build'; company: number; city: string; kind: BusinessKind }
   | { id: number; type: 'fuel'; company: number; tons: number; what: 'buy' | 'sell' | 'tank' }
+  | { id: number; type: 'check'; company: number; plane: number; on: boolean }
   | { id: number; type: 'turn'; company: number }
   | { id: number; type: 'month'; t: number }
   | { id: number; type: 'quarter'; q: number }

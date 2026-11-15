@@ -23,6 +23,8 @@ import { MEAL_NAMES } from './cabin';
 import { mLabel, mShort, yearOf } from './time';
 import type { AirlineAction, AirlineState, ModelDef } from './types';
 import { CabinEditor, cabinSeatText } from './CabinEditor';
+import { CheckButton, CondBar, PlaneCondition } from './ConditionArt';
+import { checkAtOf, fleetCond, inCheck } from './condition';
 import { DaySchedule } from './DaySchedule';
 import { ArrivalTimeline, FleetIcon, HoursBar, SpecBars, toneOfUse, type FleetIconKind } from './FleetArt';
 import { FinIcon, ProgressRing } from './FinanceArt';
@@ -167,6 +169,16 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                     <small>낡을수록 연료·정비비 ↑</small>
                   </span>
                 </li>
+                <li className={fleetCond(me) < checkAtOf(me) + 5 ? 'al-kpi-warn' : 'al-kpi-ok'}>
+                  <FinIcon kind="wrench" size={26} />
+                  <span>
+                    <small>평균 기체 상태</small>
+                    <b>{Math.round(fleetCond(me))}%</b>
+                    <small>
+                      <CondBar cond={fleetCond(me)} at={checkAtOf(me)} width={60} /> 이번 달 C점검 {me.planes.filter((p) => inCheck(p, state.t)).length}대
+                    </small>
+                  </span>
+                </li>
               </ul>
               {[...families.entries()].some(([, n]) => n >= 2) && (
                 <div className="al-families al-fl-families">
@@ -267,6 +279,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                       )}
                       {old && <span className="al-flag al-flag-warn">단종</span>}
                     </small>
+                    <PlaneCondition state={state} c={me} p={p} />
                   </div>
                   <div className="al-pl-route">
                     {p.legs.length > 0 ? (
@@ -304,6 +317,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                     )}
                   </div>
                   <div className="al-pl-act">
+                    <CheckButton state={state} viewer={viewer} p={p} canAct={canAct} perform={perform} />
                     <ActButton
                       small
                       blocker={canAct ? sellBlocker(state, viewer, p.id) : notMine}

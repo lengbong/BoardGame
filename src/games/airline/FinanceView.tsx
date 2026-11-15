@@ -8,11 +8,12 @@ import { fmtMoney, signedMoney } from './format';
 import { FuelCard } from './FuelCard';
 import { CheckPolicy } from './ConditionArt';
 import { FacilityCard } from './FacilityCard';
+import { AlliancePanel } from './AlliancePanel';
 import { TrophyShelf } from './AwardsArt';
 import { facilitiesWorth } from './facilities';
 import { tankWorth } from './fuel';
 import { GRADE_INFO, goalProgress } from './goals';
-import { ADS_MAX, allianceOutlook, borrowBlocker, campaignBlocker, campaignCost, proposeBlocker, repayBlocker } from './rules';
+import { ADS_MAX, borrowBlocker, campaignBlocker, campaignCost, repayBlocker } from './rules';
 import {
   MAINT_COST,
   MAINT_NAMES,
@@ -27,12 +28,12 @@ import {
   planeValue,
   reputationTarget,
 } from './simulate';
-import { AllianceLink, AssetBar, CostBars, FinIcon, LoanMeter, MoneyFlow, OutlookBars, ProgressRing, TargetBar, WrenchPips, type FinIconKind } from './FinanceArt';
+import { AssetBar, CostBars, FinIcon, LoanMeter, MoneyFlow, ProgressRing, TargetBar, WrenchPips, type FinIconKind } from './FinanceArt';
 import { MoreInfo } from './StaffArt';
 import { BizModelCard, INCOME_PARTS } from './BizModelCard';
 import { mLabel, monthsText, qOfM, yearOf } from './time';
 import type { AdMedia, AirlineAction, AirlineState, CompanyReport, Mod, ModKind, RegionId } from './types';
-import { ActButton, CoName, Meter, Stepper } from './ui';
+import { ActButton, Meter, Stepper } from './ui';
 
 interface FinanceViewProps {
   state: AirlineState;
@@ -300,59 +301,7 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
       <BizModelCard state={state} viewer={viewer} canAct={canAct} perform={perform} />
 
       <section className="al-card al-alliance">
-        <h4 className="al-fin-title">
-          <FinIcon kind="rings" /> 제휴 <small>코드셰어</small>
-        </h4>
-        {me.partner !== null ? (
-          <div className="al-partner">
-            <AllianceLink left={<CoName c={me} bold />} right={<CoName c={state.companies[me.partner]} bold />} />
-            <ul className="al-perks">
-              <li>
-                <FinIcon kind="plane" size={16} /> 서로의 노선을 이어 갈아타는 손님을 함께 태워요
-              </li>
-              <li>
-                <FinIcon kind="people" size={16} /> 둘 다 지점이 있는 도시에서 손님 <b className="al-pos">+5%</b>
-              </li>
-            </ul>
-            <ActButton
-              small
-              blocker={canAct ? null : notMine}
-              onClick={() => {
-                if (window.confirm('제휴를 끝낼까요?')) perform({ type: 'endAlliance' });
-              }}
-            >
-              제휴 끝내기
-            </ActButton>
-          </div>
-        ) : state.companies.length < 2 ? (
-          <p className="al-muted">함께할 회사가 없어요.</p>
-        ) : (
-          <ul className="al-alliance-list">
-            {state.companies.map((c, i) => {
-              if (i === viewer || c.out) return null;
-              const look = c.kind === 'human' ? null : allianceOutlook(state, viewer, i);
-              const why = canAct ? proposeBlocker(state, viewer, i) : notMine;
-              return (
-                <li key={i}>
-                  <CoName c={c} />
-                  <small className="al-muted al-outlook-text">
-                    {c.partner === null && look !== null && <OutlookBars level={look === 'yes' ? 3 : look === 'maybe' ? 2 : 1} />}
-                    {c.partner !== null ? '다른 회사와 제휴 중' : c.kind === 'human' ? '사람이 정해요' : look === 'yes' ? '받아들일 것 같아요' : look === 'maybe' ? '반반이에요' : '거절할 것 같아요'}
-                  </small>
-                  <ActButton small blocker={why} onClick={() => perform({ type: 'propose', to: i })}>
-                    제휴 제안
-                  </ActButton>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        <MoreInfo>
-          {me.partner !== null
-            ? '공동 운항하면 서로의 노선을 이어 갈아타는 손님을 함께 태우고, 둘 다 지점이 있는 도시에서 손님이 5% 늘어요. '
-            : ''}
-          같은 도시에 지점이 많고 겹치는 노선이 적을수록 제휴를 반겨요. 석 달에 한 번 제안할 수 있어요.
-        </MoreInfo>
+        <AlliancePanel state={state} viewer={viewer} canAct={canAct} perform={perform} />
         {mods.length > 0 && (
           <>
             <h5 className="al-fin-sub">지금 걸린 효과</h5>

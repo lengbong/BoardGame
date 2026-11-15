@@ -21,7 +21,8 @@ import { AIRPORT_INFO, CITY, FEE_INFO, REGIONS, airportClass, citySize, dist, pa
 import { effectMults, fixedEventMult, priceMult, worldMult } from './events';
 import { condOf, condRisk, fleetCond, inCheck } from './condition';
 import { FUEL_TON, burnFuel, tankWorth } from './fuel';
-import { LOUNGE_XFER, TERMINAL_XFER_HOURS, companyCheckCost, facilitiesUpkeep, facilitiesWorth, hasFacility, loungeBiz, loungeRep, terminalSlots } from './facilities';
+import { JOINT_BONUS, MILES_PER_MEMBER, allianceGroups, alliesOf } from './alliances';
+import { LOUNGE_BIZ, LOUNGE_XFER, TERMINAL_XFER_HOURS, companyCheckCost, facilitiesUpkeep, facilitiesWorth, hasFacility, loungeBiz, loungeRep, terminalSlots } from './facilities';
 import { STAFF_SHARE, overtime, payroll, staffCap, staffNeed, strikeChance } from './staff';
 import { bandCaps, bandCounts, bandUsed, defaultTimes, legalTimes, timeFit } from './timetable';
 import { monthOf, quarterOf, yearOf } from './time';
@@ -522,13 +523,21 @@ function quality(c: Company, a: string, b: string): { biz: number; leisure: numb
   return { biz: rep * biz, leisure: rep * leisure };
 }
 
-/** 제휴 상대와 둘 다 지점이 있는 도시면 손님이 조금 더 (공동 운항 효과) */
-function partnerBonus(state: AirlineState, c: Company, a: string, b: string): number {
-  if (c.partner === null) return 1;
-  const p = state.companies[c.partner];
-  if (!p || p.out || p.partner === null) return 1;
-  const joint = (x: string) => c.branches.includes(x) && p.branches.includes(x);
-  return joint(a) || joint(b) ? 1.05 : 1;
+/** 동맹 효과: 동맹 회사도 지점이 있는 도시를 오가면 손님이 조금 더, 동맹 마일리지는 회사 수만큼 */
+function allianceBonus(state: AirlineState, ci: number, a: string, b: string): number {
+  const allies = alliesOf(state, ci);
+  if (allies.length === 0) return 1;
+  const c = state.companies[ci];
+  const joint = (x: string) => c.branches.includes(x) && allies.some((i) => state.companies[i].branches.includes(x));
+  return (joint(a) || joint(b) ? JOINT_BONUS : 1) * (1 + MILES_PER_MEMBER * allies.length);
+}
+
+/** 이 도시의 라운지 효과: 내 라운지는 다, 동맹 회사의 라운지는 반쯤 */
+function sharedLounge(state: AirlineState, ci: number, city: string): number {
+  const own = loungeBiz(state.companies[ci], city);
+  if (own > 1) return own;
+  const ally = alliesOf(state, ci).some((i) => hasFacility(state.companies[i], city, 'lounge'));
+  return ally ? 1 + (LOUNGE_BIZ - 1) / 2 : 1;
 }
 
 interface Attraction {
@@ -589,8 +598,8 @@ function attraction(state: AirlineState, a: string, b: string, offer: Offer, bes
   const speed = bestHours > 0 ? bestHours / hours : 1;
   const hub = c.hub === a || c.hub === b ? 1.08 : 1;
   let leisureBonus = 1;
-  // 라운지가 있는 도시를 오가면 사업 손님이 우리를 더 고른다
-  let bizBonus = loungeBiz(c, a) * loungeBiz(c, b);
+  // 라운지가 있는 도시를 오가면 사업 손님이 우리를 더 고른다 (동맹 회사의 라운지도 반쯤)
+  let bizBonus = sharedLounge(state, offer.company, a) * sharedLounge(state, offer.company, b);
   for (const biz of c.businesses) {
     if (biz.city !== a && biz.city !== b) continue;
     leisureBonus *= BUSINESS_INFO[biz.kind].leisure;
@@ -599,7 +608,7 @@ function attraction(state: AirlineState, a: string, b: string, offer: Offer, bes
   const cabinBiz = premiumAttraction(premAttr / seats, d, firstSeats > 0);
   const p = (1 + offer.fare / 100) * premium;
   const qual = quality(c, a, b);
-  const common = hub * partnerBonus(state, c, a, b);
+  const common = hub * allianceBonus(state, offer.company, a, b);
   // 지연·결항이 잦으면 손님(특히 사업 손님)이 덜 고른다
   const rel = Math.max(0.8, Math.min(1.06, 1 + 0.8 * ((offer.rel ?? 0.85) - 0.85)));
   return {
@@ -1144,20 +1153,9 @@ function isPacific(a: string, b: string): boolean {
   return (PACIFIC_WEST.includes(ra) && rb === 'americas') || (PACIFIC_WEST.includes(rb) && ra === 'americas');
 }
 
-/** 제휴로 묶인 회사들 (네트워크 하나) */
+/** 동맹으로 묶인 회사들 (네트워크 하나) */
 export function networks(state: AirlineState): number[][] {
-  const out: number[][] = [];
-  const seen = new Set<number>();
-  state.companies.forEach((c, ci) => {
-    if (c.out || seen.has(ci)) return;
-    seen.add(ci);
-    const p = c.partner;
-    if (p !== null && state.companies[p] && !state.companies[p].out && state.companies[p].partner === ci) {
-      seen.add(p);
-      out.push([ci, p]);
-    } else out.push([ci]);
-  });
-  return out;
+  return allianceGroups(state);
 }
 
 interface Conn {

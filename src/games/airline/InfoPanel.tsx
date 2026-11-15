@@ -3,6 +3,7 @@ import { MODEL } from './aircraft';
 import { advise } from './advisor';
 import { BUSINESS_INFO, BUSINESS_KINDS } from './business';
 import { FacilityRow } from './FacilityCard';
+import { allianceOf, alliesOf } from './alliances';
 import { LandmarkIcon } from './Art';
 import { SEASON_NAMES, WEATHER_INFO, leisureMonthMult, weather } from './calendar';
 import { AIRPORT_INFO, CITIES, CITY, FEE_INFO, REGION_INFO, airportClass, citySize, dist, pairKey } from './cities';
@@ -625,11 +626,11 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
               기내식 <b>{meal.toFixed(1)}</b>단계
             </span>
           </li>
-          {me.partner !== null && (
+          {allianceOf(state, viewer) && (
             <li>
               <FinIcon kind="rings" size={16} />
               <span>
-                제휴 <b>{state.companies[me.partner].name}</b>
+                {allianceOf(state, viewer)!.name} <b>{alliesOf(state, viewer).map((i) => state.companies[i].name).join('·')}</b>
               </span>
             </li>
           )}

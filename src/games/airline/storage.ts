@@ -175,6 +175,9 @@ export function isValidState(v: unknown): v is AirlineState {
   if (!Array.isArray(s.ledger) || !s.ledger.every(okReport)) return false;
   if (!Array.isArray(s.months) || !s.months.every((m) => isObj(m) && isInt(m.t) && Array.isArray(m.value) && m.value.length === n)) return false;
   if (!Array.isArray(s.years) || !s.years.every((y) => isObj(y) && isInt(y.year) && Array.isArray(y.companies))) return false;
+  // 주식 (예전 저장에는 없다): n × n, 0~100%, 한 회사를 남들이 가진 몫 합은 100% 안
+  if (s.stakes !== undefined && !(Array.isArray(s.stakes) && s.stakes.length === n && s.stakes.every((row, i) => Array.isArray(row) && row.length === n && row.every((v, j) => isNum(v) && v >= 0 && v <= 100 && (i !== j || v === 0)) && row.reduce((a, b) => a + b, 0) <= 100.001))) return false;
+  if (!s.companies.every((c) => (c.mergedInto === undefined || isIndex(c.mergedInto, n)) && (c.lastIssue === undefined || isInt(c.lastIssue)))) return false;
   // 항공 동맹 (예전 저장에는 없다): 회사마다 동맹 하나, 동맹마다 둘~셋
   if (s.alliances !== undefined) {
     if (!Array.isArray(s.alliances)) return false;

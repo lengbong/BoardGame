@@ -7,6 +7,7 @@ import { BIZ_CHANGE_MONTHS, BIZ_INFO, assignBizModels, bizCabinBlocker, bizChang
 import { CLASS_FARE_MAX, CLASS_FARE_MIN } from './classes';
 import { blockText, branchPolitics, makerPolitics, politicalNews, polity, routePolitics } from './politics';
 import { MAX_MEMBERS, allianceOf, joinAlliance, leaveAlliance, pruneAlliances } from './alliances';
+import { ISSUE_SHARE, PAYOUT, buyCost, buyStakeBlocker, buyoutCost, emptyStakes, issueBlocker, issueCash, mergeBlocker, sellStakeBlocker, sellValue, stakeOf, withStake } from './stocks';
 import { AIRLINE_AWARD_DEMAND, AIRLINE_AWARD_MONTHS, AWARD_INFO, yearAwards } from './awards';
 import { charterBlocker, charterPlaneIds, refreshCharters, tripsFor } from './charters';
 import { CHALLENGE, challengeDeadline, checkChallenge } from './challenges';
@@ -26,6 +27,8 @@ import { bandCaps, bandCounts, bandUsed, defaultTimes, routeCurfew } from './tim
 import {
   LEASE_RATE,
   MAX_DELIVERIES,
+  MAX_FREQ,
+  marketCap,
   adScale,
   branchCost,
   businessCost,
@@ -1294,6 +1297,49 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
       s = { ...s, events: [{ id: s.nextEventId, type: 'charter', company: ci, offer: o.id }], nextEventId: s.nextEventId + 1 };
       return addLog(s, seat, `${c0.name}: ${o.icon} ${o.title} ${CITY[o.a].name}⇄${CITY[o.b].name} ${o.pax}명 전세기 맡기 (${MODEL[p.model].name} ${tripsFor(o, p)}번 왕복, 보수 ${fmtMoney(o.pay)})`);
     }
+    case 'buyStake': {
+      const pct = Math.round(action.pct);
+      if (buyStakeBlocker(state, ci, action.company, pct)) return state;
+      const cost = buyCost(state, action.company, pct);
+      const target = state.companies[action.company];
+      let s = edit(state, ci, (c, s) => {
+        c.cash -= cost;
+        pushEvent(s, { type: 'stock', company: ci, target: action.company, what: 'buy' });
+      });
+      s = { ...s, stakes: withStake(s.stakes, s.companies.length, action.company, ci, pct) };
+      const now = stakeOf(s, action.company, ci);
+      if (target.kind === 'human' && (now >= 20 || pct >= 10)) {
+        s = addNews(s, { icon: '📈', title: `${withJosa(c0.name, '이/가')} 우리 주식을 사들여요`, text: `${c0.name}이(가) ${target.name} 주식 ${pct}%를 더 사서 이제 ${now.toFixed(0)}%를 가졌어요. 사람 회사는 인수당하지 않지만, 흑자 분기마다 이익의 일부를 배당으로 나눠 줘요.`, tone: 'info', for: [action.company], company: ci });
+      }
+      return addLog(s, seat, `${c0.name}: ${target.name} 주식 ${pct}% 사기 (−${fmtMoney(cost)}, 이제 ${now.toFixed(0)}%)`);
+    }
+    case 'sellStake': {
+      const pct = Math.round(action.pct * 10) / 10;
+      if (sellStakeBlocker(state, ci, action.company, pct)) return state;
+      const got = sellValue(state, action.company, pct);
+      let s = edit(state, ci, (c, s) => {
+        c.cash += got;
+        pushEvent(s, { type: 'stock', company: ci, target: action.company, what: 'sell' });
+      });
+      s = { ...s, stakes: withStake(s.stakes, s.companies.length, action.company, ci, -pct) };
+      return addLog(s, seat, `${c0.name}: ${state.companies[action.company].name} 주식 ${pct}% 팔기 (+${fmtMoney(got)})`);
+    }
+    case 'issueShares': {
+      if (issueBlocker(state, ci)) return state;
+      const got = issueCash(state, ci);
+      let s = edit(state, ci, (c, s) => {
+        c.cash += got;
+        c.lastIssue = s.t;
+        pushEvent(s, { type: 'stock', company: ci, target: ci, what: 'issue' });
+      });
+      // 새 주식이 늘어난 만큼 다른 회사들의 몫이 준다
+      if (s.stakes?.[ci]) s = { ...s, stakes: s.stakes.map((row, i) => (i === ci ? row.map((v) => Math.round((v / (1 + ISSUE_SHARE)) * 10) / 10) : row)) };
+      return addLog(s, seat, `${c0.name}: 새 주식 발행 (증자, +${fmtMoney(got)})`);
+    }
+    case 'merge': {
+      if (mergeBlocker(state, ci, action.company)) return state;
+      return mergeCompanies(state, ci, action.company);
+    }
     case 'checkPlane': {
       const p = planeById(c0, action.plane);
       if (!p) return state;
@@ -1446,6 +1492,110 @@ function propose(state: AirlineState, ci: number, to: number): AirlineState {
     s = { ...s, events: [...s.events, { id: s.nextEventId, type: 'alliance', company: ci, with: to, ok: false }], nextEventId: s.nextEventId + 1 };
   }
   return addLog(s, c0.seat, ok ? `${c0.name}: ${withJosa(t.name, '와/과')} 동맹을 맺었어요` : `${c0.name}: ${withJosa(t.name, '이/가')} 동맹을 거절했어요`);
+}
+
+/**
+ * j가 과반을 가진 컴퓨터 회사 i를 인수해 합친다: 남은 주식을 사들이고(다른 주주 회사 몫은 주가대로, 창업자 몫은 반값),
+ * i의 현금·빚·지점·노선·비행기·주문·직원·부대사업·시설·연료를 넘겨받는다. 같은 두 도시 노선은 하나로 합친다.
+ */
+function mergeCompanies(state: AirlineState, j: number, i: number): AirlineState {
+  const n = state.companies.length;
+  const cost = buyoutCost(state, j, i);
+  const per = marketCap(state, i) / 100;
+  const holders = state.companies.map((_, k) => k).filter((k) => k !== i && k !== j && stakeOf(state, i, k) > 0);
+  const buyer = state.companies[j];
+  const target = state.companies[i];
+  let s = editMany(state, [j, i, ...holders], ([a, b, ...rest], s) => {
+    a.cash -= cost;
+    holders.forEach((k, idx) => (rest[idx].cash += stakeOf(state, i, k) * per));
+    a.cash += b.cash;
+    a.debt += b.debt;
+    a.baseCredit += Math.round(b.baseCredit * 0.5);
+    for (const city of b.branches) if (!a.branches.includes(city)) a.branches.push(city);
+    for (const biz of b.businesses) if (!a.businesses.some((x) => x.city === biz.city && x.kind === biz.kind)) a.businesses.push(biz);
+    for (const f of b.facilities ?? []) if (!(a.facilities ?? []).some((x) => x.city === f.city && x.kind === f.kind)) a.facilities = [...(a.facilities ?? []), f];
+    if (b.fuel) {
+      const mine = tankOf(a);
+      const level = Math.max(mine.level, b.fuel.level);
+      a.fuel = b.fuel.stock > 0 ? addFuel({ ...mine, level }, b.fuel.stock, b.fuel.avg) : { ...mine, level };
+    }
+    // 노선: 같은 두 도시는 우리 노선으로 합치고, 나머지는 그대로 넘겨받는다
+    const remap = new Map<number, number>();
+    for (const r of b.routes) {
+      const same = a.routes.find((x) => pairKey(x.a, x.b) === pairKey(r.a, r.b));
+      if (same) remap.set(r.id, same.id);
+      else {
+        a.routes.push(r);
+        remap.set(r.id, r.id);
+      }
+    }
+    for (const p of b.planes) {
+      const legs = new Map<number, number>();
+      for (const l of p.legs) {
+        const rid = remap.get(l.route);
+        if (rid !== undefined) legs.set(rid, Math.min(MAX_FREQ, (legs.get(rid) ?? 0) + l.freq));
+      }
+      a.planes.push({ ...p, legs: [...legs].map(([route, freq]) => ({ route, freq })) });
+    }
+    a.orders.push(...b.orders);
+    for (const g of STAFF_GROUPS) a.staff = { ...a.staff, [g]: { ...a.staff[g], have: a.staff[g].have + b.staff[g].have, pipe: [...a.staff[g].pipe, ...b.staff[g].pipe] } };
+    a.stats.pax += b.stats.pax;
+    a.stats.opened += b.stats.opened;
+    // 인수된 회사는 판에서 빠진다
+    b.out = true;
+    b.mergedInto = j;
+    b.planes = [];
+    b.routes = [];
+    b.orders = [];
+    b.businesses = [];
+    b.branches = [b.hub];
+    b.cash = 0;
+    b.debt = 0;
+    b.ads = emptyRegions();
+    b.choice = null;
+    delete b.facilities;
+    delete b.fuel;
+    pushEvent(s, { type: 'stock', company: j, target: i, what: 'merge' });
+  });
+  // 주식 표: i의 주식은 없어지고, i가 가진 다른 회사 주식은 j에게 (j 자기 주식이면 없앤다)
+  const st = (s.stakes ?? emptyStakes(n)).map((row) => [...row]);
+  st[i] = st[i].map(() => 0);
+  for (let x = 0; x < n; x++) {
+    if (x === i || st[x][i] <= 0) continue;
+    if (x !== j) st[x][j] = Math.round((st[x][j] + st[x][i]) * 10) / 10;
+    st[x][i] = 0;
+  }
+  s = { ...s, stakes: st, charters: s.charters?.map((o) => (o.by === i ? { ...o, by: j } : o)) };
+  s = pruneAlliances(s);
+  // 두 회사 운항을 합치면 공항 슬롯을 넘을 수 있다: 넘는 공항은 넘겨받은 비행기부터 횟수를 줄인다
+  const absorbed = new Set(target.planes.map((p) => p.id));
+  const a = s.companies[j];
+  for (const city of a.branches) {
+    let over = slotsUsed(a, city) - slotCapacity(s, j, city);
+    while (over > 0) {
+      let pick: { p: Plane; leg: Plane['legs'][number] } | null = null;
+      for (const p of a.planes) {
+        for (const leg of p.legs) {
+          const r = routeOf(a, leg.route);
+          if (!r || (r.a !== city && r.b !== city) || leg.freq <= 0) continue;
+          const better = !pick || (absorbed.has(p.id) && !absorbed.has(pick.p.id)) || (absorbed.has(p.id) === absorbed.has(pick.p.id) && leg.freq > pick.leg.freq);
+          if (better) pick = { p, leg };
+        }
+      }
+      if (!pick) break;
+      pick.leg.freq -= 1;
+      if (pick.leg.freq <= 0) pick.p.legs = pick.p.legs.filter((l) => l !== pick!.leg);
+      over -= 1;
+    }
+  }
+  s = addNews(s, {
+    icon: '🤝',
+    title: `${withJosa(buyer.name, '이/가')} ${withJosa(target.name, '을/를')} 인수했어요`,
+    text: `${buyer.name}이(가) ${target.name} 주식 과반을 사들여 회사를 합쳤어요. 노선 ${target.routes.length}개와 비행기 ${target.planes.length}대가 ${buyer.name}의 것이 됐어요.${target.airline || buyer.airline ? ' (게임 속 이야기)' : ''}`,
+    tone: 'big',
+    company: j,
+  });
+  return addLog(s, buyer.seat, `${buyer.name}: ${target.name} 인수 (남은 주식 −${fmtMoney(cost)})`);
 }
 
 /** x와 y가 한 동맹이 된 소식 (새로 만들었는지, 누가 들어갔는지) */
@@ -1712,6 +1862,21 @@ export function runMonth(state: AirlineState, rng: Rng = Math.random): AirlineSt
     });
     const hist = [...s.history, historyPoint(s, q, qReport)];
     s = { ...s, qReport, history: hist.length > 200 ? hist.slice(-200) : hist };
+    // 배당: 흑자 회사는 분기 이익의 일부를 주주 회사들에게 몫만큼 나눠 준다
+    if (s.stakes) {
+      for (let i = 0; i < n; i++) {
+        const qp = qReport.companies[i]?.profit ?? 0;
+        if (qp <= 0 || companies[i].out) continue;
+        for (let j = 0; j < n; j++) {
+          const pct = stakeOf(s, i, j);
+          if (j === i || pct <= 0 || companies[j].out) continue;
+          const div = (qp * PAYOUT * pct) / 100;
+          companies[i].cash -= div;
+          companies[j].cash += div;
+          if (companies[j].kind === 'human' || companies[i].kind === 'human') s = addLog(s, companies[j].seat, `💹 ${companies[i].name} → ${companies[j].name} 배당 ${fmtMoney(div)} (주식 ${pct.toFixed(0)}%)`);
+        }
+      }
+    }
   }
 
   // 해가 끝나면 (12월): 한 해 결산, 연간 목표와 경영 평가
@@ -1837,6 +2002,8 @@ function shutDown(state: AirlineState, ci: number, t: number): AirlineState {
   delete c.fuel;
   delete c.facilities;
   s = pruneAlliances(s);
+  // 운항을 멈춘 회사의 주식은 휴지가 되고, 그 회사가 가진 다른 회사 주식은 시장에 나간다
+  if (s.stakes) s = { ...s, stakes: s.stakes.map((row, x) => (x === ci ? row.map(() => 0) : row.map((v, y) => (y === ci ? 0 : v)))) };
   s = addNews(s, {
     icon: '🛑',
     title: `${c.name} 운항 중단`,

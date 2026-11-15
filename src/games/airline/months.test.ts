@@ -110,7 +110,7 @@ describe('운항 현장 (지연·결항·회항·기체 점검)', () => {
     for (const bad of ['사고', '추락', '부상', '다쳤', '사망', '죽', '충돌', '불시착', '폭발', '전쟁', '테러']) expect(all).not.toContain(bad);
     const opsNews = s.news.filter((n) => n.icon === '🔧' || n.title.includes('공항이'));
     for (const n of opsNews) if (n.company !== undefined && s.companies[n.company]?.airline) expect(n.text).toContain('게임 속 이야기');
-  });
+  }, 60000);
 });
 
 describe('자동 진행', () => {

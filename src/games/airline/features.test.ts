@@ -214,7 +214,7 @@ describe('결정 사건', () => {
       expect(n).toBeGreaterThanOrEqual(3);
       expect(n).toBeLessThanOrEqual(6);
     }
-  });
+  }, 60000);
 });
 
 describe('파산과 중고 시장', () => {

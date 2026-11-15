@@ -1,5 +1,8 @@
 import { MODEL, availableModels, leadTime } from './aircraft';
 import { MAX_ROUTES } from './limits';
+import { CAMPAIGN_INFO, MEDIA_INFO, mediaOf } from './ads';
+import { cabinPresets, sameCabin } from './cabin';
+import { makerPolitics, routePolitics } from './politics';
 import { ACADEMY_COST, STAFF_GROUPS, hireCost, hireTime, staffNeed, staffPipe } from './staff';
 import { aiChoose, allianceScore } from './choices';
 import { CITIES, CITY, REGIONS, airportClass, citySize, dist, pairKey } from './cities';
@@ -7,10 +10,13 @@ import {
   applyAction,
   bestFreq,
   branchBlocker,
+  buildBlocker,
   buyBlocker,
+  campaignCost,
   depositFor,
   fireBlocker,
   fleetCount,
+  historyOn,
   hireBlocker,
   idlePlanes,
   planeById,
@@ -26,6 +32,7 @@ import {
   baseFare,
   branchCost,
   branchUpkeep,
+  businessCost,
   creditLimit,
   draftsOf,
   estimateExisting,
@@ -40,13 +47,14 @@ import {
   planeAge,
   planeHours,
   regionsServed,
+  routeFreq,
   routeIndex,
   slotCapacity,
   slotsUsed,
   type DraftPlane,
 } from './simulate';
-import { yearOf } from './time';
-import type { AirlineAction, AirlineState, Company, ModelDef, RegionId, Rng } from './types';
+import { monthOf, yearOf } from './time';
+import type { AdMedia, AirlineAction, AirlineState, BusinessKind, Cabin, CampaignKind, Company, ModelDef, RegionId, Rng } from './types';
 
 export type AiLevel = 'ai-easy' | 'ai-normal';
 
@@ -183,7 +191,9 @@ export class Planner {
       this.renewFleet();
       this.orderAhead();
       this.setAds();
-      this.setService();
+      this.configureCabins();
+      this.setMeals();
+      this.buildBusinesses();
       this.setOps();
       this.tuneTimes();
       this.maybePropose();
@@ -497,8 +507,15 @@ export class Planner {
 
   // ---------------------------------------------------------------- 넓히기
 
+  private modelMemo: ModelDef[] | null = null;
+
+  /** 살 수 있는 기종 (냉전 중 막힌 제작국 기종은 뺀다) */
   private models(): ModelDef[] {
-    return availableModels(this.year);
+    if (!this.modelMemo) {
+      const history = historyOn(this.s);
+      this.modelMemo = availableModels(this.year).filter((m) => !history || !makerPolitics(this.c.hub, m, this.year));
+    }
+    return this.modelMemo;
   }
 
   private fits(m: ModelDef, a: string, b: string): boolean {
@@ -533,6 +550,7 @@ export class Planner {
     const quick: { a: string; b: string; v: number; d: number }[] = [];
     const seen = new Set<string>();
     const hubRoutes = c.routes.filter((r) => r.a === c.hub || r.b === c.hub).length;
+    const history = historyOn(this.s);
     for (const a of origins) {
       if (this.slotsLeft(a) < 2) continue;
       for (const city of CITIES) {
@@ -543,6 +561,7 @@ export class Planner {
         seen.add(key);
         const d = dist(a, b);
         if (d < 300 || d > maxRange) continue;
+        if (history && routePolitics(c.hub, a, b, year)) continue;
         if (!this.normal && d > 6500) continue;
         if (this.slotsLeft(b) < 2) continue;
         const dem = pairDemand(this.s, a, b);
@@ -771,7 +790,36 @@ export class Planner {
 
   // ---------------------------------------------------------------- 광고·서비스·대출
 
+  /** 지역 손님 가운데 사업 손님이 많으면 신문, 관광 손님이 많으면 여행 잡지, 아니면 TV(인터넷이 나오면 인터넷) */
+  private setMedia(): void {
+    const year = this.year;
+    for (const region of REGIONS) {
+      if (this.c.ads[region] <= 0) continue;
+      let biz = 0;
+      let all = 0;
+      for (const r of this.c.routes) {
+        if (CITY[r.a].region !== region && CITY[r.b].region !== region) continue;
+        const d = pairDemand(this.s, r.a, r.b);
+        biz += d.biz;
+        all += d.biz + d.leisure;
+      }
+      const share = all > 0 ? biz / all : 0.4;
+      const want: AdMedia = share > 0.52 ? 'newspaper' : share < 0.3 ? 'magazine' : year >= MEDIA_INFO.internet.from ? 'internet' : 'tv';
+      if (mediaOf(this.c, region) !== want) this.act({ type: 'setMedia', region, media: want });
+    }
+  }
+
+  /** 치열한 회사는 돈이 넉넉하면 해마다 7월에 캠페인 */
+  private maybeCampaign(): void {
+    if (this.style !== 'fierce' || monthOf(this.s.t) !== 7) return;
+    const kind: CampaignKind = this.year >= CAMPAIGN_INFO.miles.from ? 'miles' : 'lucky';
+    if (this.c.cash - this.reserve() < campaignCost(this.s, kind) * 5) return;
+    this.act({ type: 'campaign', kind });
+  }
+
   private setAds(): void {
+    this.setMedia();
+    this.maybeCampaign();
     const rep = this.s.report?.companies[this.ci];
     if (!rep) return;
     const total = Math.max(0, rep.ticket * (this.style === 'fierce' ? 0.03 : 0.025));
@@ -790,11 +838,84 @@ export class Planner {
     if (Math.abs(want - this.c.ads[region]) > 3) this.act({ type: 'setAds', region, amount: want });
   }
 
-  private setService(): void {
+  /** 돈이 넉넉하면 해마다 4월에, 노선이 많은 도시에 부대사업 하나 */
+  private buildBusinesses(): void {
+    if (monthOf(this.s.t) !== 4 || this.style === 'relaxed') return;
+    const count = new Map<string, number>();
+    for (const r of this.c.routes) for (const x of [r.a, r.b]) count.set(x, (count.get(x) ?? 0) + routeFreq(this.c, r.id));
+    const cities = [...count.entries()].sort((x, y) => y[1] - x[1]).slice(0, 4).map(([city]) => city);
+    const prefer: BusinessKind[] = ['resort', 'hotel', 'bus', 'agency', 'ski', 'park', 'store', 'restaurant'];
+    for (const city of cities) {
+      for (const kind of prefer) {
+        if (buildBlocker(this.s, this.ci, city, kind)) continue;
+        const cost = businessCost(city, kind, this.s.q);
+        if (this.c.cash - this.reserve() < cost * 4) continue;
+        if (kind === 'hotel' && CITY[city].fun < 6) continue;
+        if (this.act({ type: 'build', city, kind })) return;
+      }
+    }
+  }
+
+  /** 비행기가 나는 노선들의 평균 거리와 사업 손님 비율 (왕복 수 가중) */
+  private planeMix(planeId: number): { d: number; biz: number } | null {
+    const p = planeById(this.c, planeId);
+    if (!p || p.legs.length === 0) return null;
+    let w = 0;
+    let d = 0;
+    let biz = 0;
+    for (const l of p.legs) {
+      const r = routeById(this.c, l.route);
+      if (!r) continue;
+      const dem = pairDemand(this.s, r.a, r.b);
+      const tot = dem.biz + dem.leisure;
+      w += l.freq;
+      d += dist(r.a, r.b) * l.freq;
+      biz += (tot > 0 ? dem.biz / tot : 0.4) * l.freq;
+    }
+    return w > 0 ? { d: d / w, biz: biz / w } : null;
+  }
+
+  /** 새로 받은 비행기는 (공짜로 바꿀 수 있을 때) 노선 이익이 가장 큰 좌석 배치로 */
+  private configureCabins(): void {
+    for (const p0 of this.c.planes) {
+      if ((p0.got ?? p0.since) !== this.s.t || p0.legs.length === 0) continue;
+      const presets = cabinPresets(MODEL[p0.model]);
+      if (presets.length === 0) continue;
+      const profitWith = (cabin: Cabin) => {
+        let sum = 0;
+        for (const l of p0.legs) {
+          const route = routeById(this.c, l.route);
+          if (!route) continue;
+          const planes: DraftPlane[] = [];
+          for (const q of this.c.planes) {
+            const f = legFreq(q, route.id);
+            if (f > 0) planes.push({ model: q.model, freq: f, age: planeAge(this.s, q), fixed: fixedShare(this.c, q, route.id), cabin: q.id === p0.id ? cabin : q.cabin, meal: q.meal });
+          }
+          sum += estimateExisting(this.s, this.ci, route, { planes }).profit;
+        }
+        return sum;
+      };
+      const now = profitWith(p0.cabin);
+      let best: { cabin: Cabin; profit: number } = { cabin: p0.cabin, profit: now };
+      for (const pr of presets) {
+        if (sameCabin(pr.cabin, p0.cabin)) continue;
+        const v = profitWith(pr.cabin);
+        if (v > best.profit + Math.abs(now) * 0.01 + 0.5) best = { cabin: pr.cabin, profit: v };
+      }
+      if (!sameCabin(best.cabin, p0.cabin)) this.act({ type: 'setCabin', plane: p0.id, cabin: best.cabin });
+    }
+  }
+
+  /** 기내식: 짧은 노선은 간식, 먼 노선은 좋은 식사 (평판이 낮고 돈을 벌면 한 단계 더) */
+  private setMeals(): void {
     const rep = this.s.report?.companies[this.ci];
-    const profitable = !!rep && rep.profit > 0;
-    const want = profitable && this.c.reputation < 55 ? 4 : 3;
-    if (want !== this.c.service) this.act({ type: 'setService', level: want });
+    const boost = !!rep && rep.profit > 0 && this.c.reputation < 55 ? 1 : 0;
+    for (const p0 of this.c.planes) {
+      const mix = this.planeMix(p0.id);
+      if (!mix) continue;
+      const want = Math.min(5, (mix.d < 1200 ? 2 : mix.d < 4500 ? 3 : 4) + boost);
+      if (want !== p0.meal) this.act({ type: 'setMeal', plane: p0.id, level: want });
+    }
   }
 
   private manageLoans(before: boolean): void {

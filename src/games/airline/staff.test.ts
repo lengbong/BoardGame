@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { MODEL } from './aircraft';
+import { defaultCabin } from './cabin';
 import { seededRandom } from '../../lib/random';
 import { aiTurn } from './ai';
 import { makeChoice } from './choices';
@@ -39,7 +41,7 @@ function fleet(dests: string[], { from = 'seoul', model = 'a320', age = 0, freq 
     if (!c.branches.includes(to)) c.branches.push(to);
     const route = s.nextId++;
     c.routes.push({ id: route, a: from, b: to, fare: 0, since: s.t, stats: null, times: defaultTimes(from, to, 2003) });
-    c.planes.push({ id: s.nextId++, model, leased: false, rent: 0, deposit: 0, since: s.t - Math.round(age * 12), legs: [{ route, freq }] });
+    c.planes.push({ id: s.nextId++, model, leased: false, rent: 0, deposit: 0, since: s.t - Math.round(age * 12), legs: [{ route, freq }], cabin: defaultCabin(MODEL[model]), meal: 3 });
   }
   return s;
 }
@@ -255,7 +257,7 @@ describe('운항 시간표', () => {
     const s = fleet(['tokyo'], { freq: 20 });
     const c = s.companies[0];
     const r = c.routes[0];
-    for (let k = 0; k < 2; k++) c.planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.t, legs: [{ route: r.id, freq: 20 }] });
+    for (let k = 0; k < 2; k++) c.planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.t, legs: [{ route: r.id, freq: 20 }], cabin: defaultCabin(MODEL['a320']), meal: 3 });
     const capT = bandCaps(s, 0, 'tokyo', slotCapacity(s, 0, 'tokyo'));
     // 큰 공항은 낮보다 아침·저녁 슬롯이 적다
     expect(capT[0]).toBeLessThan(capT[1]);

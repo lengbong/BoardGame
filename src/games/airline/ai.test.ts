@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { defaultCabin } from './cabin';
 import { seededRandom } from '../../lib/random';
 import { MODEL } from './aircraft';
 import { aiManage, aiTurn, planTurn } from './ai';
 import { advise } from './advisor';
 import { CHALLENGES } from './challenges';
 import { AIRPORT_INFO, CITY, airportClass, dist } from './cities';
-import { actor, applyAction, createGame } from './rules';
+import { MAX_ROUTES, actor, applyAction, createGame } from './rules';
 import { WEEK_HOURS, companyValue, estimateExisting, maxFreq, planeHours, slotCapacity, slotsUsed } from './simulate';
 import { yearOf } from './time';
 import type { AirlineOptions, AirlineSetup, AirlineState, SeatKind } from './types';
@@ -99,7 +100,7 @@ describe('컴퓨터 항공사', () => {
     let s = createGame(setup(['ai-normal', 'human'], {}, [null, 'london']), seededRandom(7));
     s = aiManage(s, 0, 'ai-normal', seededRandom(7));
     const c = s.companies[0];
-    c.planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.t, legs: [] });
+    c.planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.t, legs: [], cabin: defaultCabin(MODEL['a320']), meal: 3 });
     c.cash = -30;
     c.crisis = 1;
     c.ads.eastasia = 50;
@@ -135,8 +136,10 @@ describe('컴퓨터끼리 끝까지', () => {
     }
     expect(s.history.length).toBe(81);
     expect(s.months.length).toBe(241);
-    expect(worst).toBeLessThan(300);
-  });
+    // 한 차례가 화면을 멈출 만큼 오래 걸리지 않는다 (함께 돌리는 테스트 때문에 튀는 것을 넉넉히 봐준다)
+    expect(worst).toBeLessThan(600);
+    // 한 달씩 240달을 끝까지 두므로 오래 걸린다
+  }, 60000);
 
   it('2003년부터 20년: 보통 회사가 크게 자라지만 터무니없지는 않다', () => {
     for (const seed of [31, 32]) {
@@ -144,12 +147,15 @@ describe('컴퓨터끼리 끝까지', () => {
       expect(s.phase).toBe('gameover');
       const v = companyValue(s, 0);
       expect(v).toBeGreaterThan(20000);
-      expect(v).toBeLessThan(400000);
+      // 노선 수 한도가 없어 예전(노선 32개)보다 크게 자라지만, 끝없이 커지지는 않는다
+      expect(v).toBeLessThan(800000);
       expect(s.companies[0].routes.length).toBeGreaterThan(5);
-      expect(worst).toBeLessThan(300);
+      expect(s.companies[0].routes.length).toBeLessThan(MAX_ROUTES);
+      // 노선 한도가 없어 회사가 노선 150개쯤까지 커진다. 한 차례는 보통 0.1초 안이지만 테스트를 함께 돌리면 메모리 정리로 튈 수 있다
+      expect(worst).toBeLessThan(600);
       for (const h of s.history) for (const x of h.value) expect(Number.isFinite(x)).toBe(true);
     }
-  });
+  }, 60000);
 
   it('목표 먼저 이루기에서는 보통 회사가 여러 지역으로 넓혀 결국 목표를 이룬다', () => {
     const { s } = playOut(['ai-normal', 'ai-easy'], 41, { mode: 'goal', goalValue: 10000, goalRegions: 6 });
@@ -169,7 +175,7 @@ describe('컴퓨터끼리 끝까지', () => {
       games++;
     }
     expect(normal / games).toBeGreaterThanOrEqual(0.75);
-  });
+  }, 60000);
 
   it('경영 비서만 따르는 사람은 보통 컴퓨터와 비슷하게 겨룬다 (같은 크기 본사, 자리 바꿔 두 판)', () => {
     let bot = 0;

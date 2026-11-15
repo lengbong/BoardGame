@@ -131,7 +131,7 @@ export function IataBadge({ airline, color, small }: { airline: RealAirline; col
 
 /**
  * 사진 (위키미디어 공용). 사진이 없거나 못 불러오면 fallback(그린 그림)을 보여 준다.
- * credit: 'aircraft/<id>' 같은 출처 열쇠 — 사진 위에 작게 지은이와 라이선스를 쓴다.
+ * credit: 'cities/<id>' 같은 출처 열쇠 — 사진 위에 작게 지은이와 라이선스를 쓴다.
  */
 export function Photo({ src, credit, alt, fallback, className, ratio = '16 / 9' }: { src: string | undefined; credit?: string; alt: string; fallback: ReactNode; className?: string; ratio?: string }) {
   const [broken, setBroken] = useState(false);

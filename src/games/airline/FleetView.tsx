@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { coColors } from './brand';
-import { BODY_INFO, MODEL, MODELS, availableModels, commonalityMult, launchDiscount, leadTime, sizeClass, type SizeClass } from './aircraft';
-import { PlaneArt, SEAT_SHAPES } from './Art';
+import { BODY_INFO, MODEL, MODELS, availableModels, commonalityMult, isFictional, launchDiscount, leadTime, sizeClass, type SizeClass } from './aircraft';
+import { EAST_MAKERS } from './politics';
+import { SEAT_SHAPES } from './Art';
 import { AIRPORT_INFO, CITY } from './cities';
 import { fmtMoney, km } from './format';
 import { CANCEL_REFUND, buyBlocker, deliveriesThisQuarter, depositFor, firstYearHelp, sellAmount, sellBlocker, usedBlocker } from './rules';
@@ -18,9 +19,10 @@ import {
 } from './simulate';
 import { mLabel, yearOf } from './time';
 import type { AirlineAction, AirlineState, ModelDef } from './types';
-import { aircraftPhoto } from './images';
+import { CabinEditor, cabinSummary } from './CabinEditor';
 import { DaySchedule } from './DaySchedule';
-import { ActButton, Meter, Photo, Stars } from './ui';
+import { PlaneImage } from './PlaneImage';
+import { ActButton, Meter, Stars } from './ui';
 
 interface FleetViewProps {
   state: AirlineState;
@@ -43,9 +45,10 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
   const me = state.companies[viewer];
   const [tab, setTab] = useState<Tab>(me.planes.length === 0 && me.orders.length === 0 ? 'shop' : 'hangar');
   const [size, setSize] = useState<SizeClass | 'all'>('all');
+  const [cabinFor, setCabinFor] = useState<number | null>(null);
   const year = yearOf(state.q);
   const color = coColors(me);
-  const shape = SEAT_SHAPES[me.seat];
+  const paint = { main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] };
   const planes = [...me.planes].sort((a, b) => (a.legs.length === 0 ? 0 : 1) - (b.legs.length === 0 ? 0 : 1) || planeHours(me, a) - planeHours(me, b));
   const models = availableModels(year).filter((m) => size === 'all' || sizeClass(m) === size);
   const soon = MODELS.filter((m) => m.intro > year && m.intro <= year + 4);
@@ -115,7 +118,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                     const m = MODEL[o.model];
                     return (
                       <li key={o.id}>
-                        <Photo src={aircraftPhoto(m.id)} alt={`${m.name} 사진`} className="al-thumb" fallback={<PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={64} />} />
+                        <PlaneImage model={m.id} paint={paint} className="al-thumb" />
                         <b>{m.name}</b>
                         <span>
                           {mLabel(o.due)} 도착 <small className="al-muted">({o.due - state.t}달 뒤)</small>
@@ -158,13 +161,16 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
               return (
                 <li key={p.id} className={p.legs.length ? '' : 'al-idle'}>
                   <span className="al-pl-art">
-                    <Photo src={aircraftPhoto(m.id)} alt={`${m.name} 사진`} className="al-thumb" fallback={<PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={96} />} />
+                    <PlaneImage model={m.id} paint={paint} className="al-thumb" />
                   </span>
                   <div className="al-pl-name">
                     <b>{m.name}</b>
                     <small>
-                      {m.maker} · {m.seats}석 · {km(m.range)}
+                      {m.maker} · {km(m.range)}
                     </small>
+                    <button type="button" className="al-link al-small al-cabin-link" onClick={() => setCabinFor(cabinFor === p.id ? null : p.id)} aria-expanded={cabinFor === p.id} data-testid={`al-cabin-open-${p.id}`}>
+                      🪑 {cabinSummary(p)}
+                    </button>
                     <small>
                       {Math.floor(age)}년째 · {p.leased ? `리스 (달 ${fmtMoney(p.rent)}${p.deposit > 0 ? ` · 보증금 ${fmtMoney(p.deposit)}` : ''})` : `내 것 (가치 ${fmtMoney(planeValue(state, p))})`}
                       {old && ' · 단종'}
@@ -216,6 +222,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                       {p.leased ? `반납 ${amount >= 0 ? '+' : '−'}${fmtMoney(Math.abs(amount))}` : `팔기 +${fmtMoney(amount)}`}
                     </ActButton>
                   </div>
+                  {cabinFor === p.id && <CabinEditor state={state} viewer={viewer} plane={p} canAct={canAct} perform={perform} onClose={() => setCabinFor(null)} />}
                 </li>
               );
             })}
@@ -249,12 +256,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
               return (
                 <li key={m.id} className="al-model-card" data-testid={`al-model-${m.id}`}>
                   <div className="al-mc-art">
-                    <Photo
-                      src={aircraftPhoto(m.id)}
-                      credit={`aircraft/${m.id}`}
-                      alt={`${m.maker} ${m.name} 사진`}
-                      fallback={<PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={150} title={`${m.name} 옆모습`} />}
-                    />
+                    <PlaneImage model={m.id} label={m.name} />
                   </div>
                   <h4>
                     {m.name} <small>{m.maker}</small>
@@ -263,6 +265,12 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                     {BODY_INFO[m.body].name} · {m.note}
                   </p>
                   <div className="al-mc-tags">
+                    {isFictional(m) && (
+                      <span className="al-flag al-flag-blue" title="실제로 만들어지지 않은 게임 속 미래 기종이에요">
+                        ✨ 상상 속 기종
+                      </span>
+                    )}
+                    {EAST_MAKERS.includes(m.maker) && <span className="al-flag">☭ 소련·러시아제</span>}
                     {launch > 0 && <span className="al-flag al-flag-good">첫 손님 할인 −{Math.round(launch * 100)}%</span>}
                     {famNow > 0 && (
                       <span className="al-flag al-flag-blue" title="같은 계열 비행기가 많을수록 정비·승무원비가 줄어요">
@@ -359,12 +367,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
               return (
                 <li key={u.id} className="al-model-card al-used-card" data-testid={`al-used-${u.id}`}>
                   <div className="al-mc-art">
-                    <Photo
-                      src={aircraftPhoto(m.id)}
-                      credit={`aircraft/${m.id}`}
-                      alt={`${m.maker} ${m.name} 사진`}
-                      fallback={<PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={130} title={`${m.name} 옆모습`} />}
-                    />
+                    <PlaneImage model={m.id} label={m.name} />
                   </div>
                   <h4>
                     {m.name} <small>{m.maker}</small>

@@ -98,6 +98,10 @@ export const REAL_AIRLINES: readonly RealAirline[] = [
     id: 'turkish', name: '터키항공', nameEn: 'Turkish Airlines', iata: 'TK', founded: 1956, hub: 'istanbul', region: 'europe',
     colors: ['#c70a0c', '#a7a9ac'], note: '1933년 나라 항공국으로 시작해 1956년 지금 회사로',
   },
+  {
+    id: 'aeroflot', name: '아에로플로트', nameEn: 'Aeroflot', iata: 'SU', founded: 1932, hub: 'moscow', region: 'europe',
+    colors: ['#1d4d9c', '#e0262f'], note: '소련 시절에는 세계에서 가장 큰 항공사였어요',
+  },
   { id: 'lufthansa', name: '루프트한자', nameEn: 'Lufthansa', iata: 'LH', founded: 1955, hub: 'frankfurt', region: 'europe', colors: ['#05164d', '#ffad00'] },
   {
     id: 'boac', name: '영국해외항공', nameEn: 'BOAC', iata: 'BA', founded: 1940, defunct: 1974, hub: 'london', region: 'europe',

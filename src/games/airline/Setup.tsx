@@ -4,7 +4,8 @@ import { SeatPicker } from '../../components/SeatPicker';
 import { SpeedPicker } from '../../components/SpeedPicker';
 import { SEAT_COLORS, activeSeatCount } from '../common/players';
 import type { GameSettings } from '../common/settings';
-import { HeroArt, LandmarkIcon, PlaneArt } from './Art';
+import { HeroArt, LandmarkIcon } from './Art';
+import { PlaneImage } from './PlaneImage';
 import { CHALLENGES } from './challenges';
 import { SEASON_NAMES } from './calendar';
 import { CITY, REGIONS, REGION_INFO, airportClass, citySize } from './cities';
@@ -151,6 +152,11 @@ function NameIcon({ real }: { real: boolean }) {
   );
 }
 
+const HISTORY_CHOICES: IconChoice<'on' | 'off'>[] = [
+  { value: 'on', short: '🌍 켜기', label: '냉전·국교와 석유 파동·9·11·코로나 같은 실제 사건을 따라요' },
+  { value: 'off', short: '끄기', label: '실제 역사 없이 자유롭게' },
+];
+
 const NAME_CHOICES: IconChoice<NameMode>[] = [
   { value: 'real', short: '실제 항공사', label: '그 해에 날던 실제 항공사 이름으로 (로고는 쓰지 않아요)', icon: <NameIcon real /> },
   { value: 'fictional', short: '가상 항공사', label: '노을항공·바람길항공 같은 지어낸 이름으로', icon: <NameIcon real={false} /> },
@@ -282,6 +288,12 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
             </div>
             <IconPicker caption="시작 자금" value={opt.money} options={MONEY_CHOICES} onChange={(money) => setOpt({ money })} testId="al-money" />
             <IconPicker caption="컴퓨터 성향" value={opt.aiStyle} options={STYLE_CHOICES} onChange={(aiStyle) => setOpt({ aiStyle })} testId="al-aistyle" />
+            <IconPicker caption="실제 역사" value={opt.history === false ? 'off' : 'on'} options={HISTORY_CHOICES} onChange={(v) => setOpt({ history: v === 'on' })} testId="al-history" />
+            <p className="al-note">
+              {opt.history === false
+                ? '역사 사건 없이 무작위 사건만 일어나고, 어느 나라든 오갈 수 있어요.'
+                : '냉전과 국교(막힌 하늘길, 소련 비행기)를 따르고, 석유 파동·걸프 전쟁·9·11·사스·금융 위기·코로나19 같은 실제 사건이 그 해에 일어나요.'}
+            </p>
           </section>
 
           <section className="setup-section">
@@ -514,10 +526,10 @@ function HowTo() {
         <li>
           <b>지점 → 노선 → 비행기</b>: 지도에서 도시를 눌러 <b>지점</b>을 열고, 지점이 있는 두 도시 사이에 <b>노선</b>을 열어요. 비행기는 <b>리스</b>(바로 받고 달마다 값의 1.2% 남짓을 냄, 보증금은 돌려줄 때 돌려받음)하거나 <b>주문</b>(값을 먼저 내고 3~12달 뒤에 받음, 막 나온 인기 기종일수록 오래 기다리지만 처음 2년은 15% 싸요)하거나 <b>중고 시장</b>에서 바로 사요. 같은 계열 비행기가 많으면 정비·승무원비가 줄어요.
           <span className="al-howto-planes" aria-hidden="true">
-            <PlaneArt body="prop" engines={2} color="#30a46c" shape="star" width={70} />
-            <PlaneArt body="narrow" engines={2} color="#e5484d" shape="circle" width={70} />
-            <PlaneArt body="jumbo" engines={4} color="#3e63dd" shape="diamond" width={70} />
-            <PlaneArt body="sst" engines={4} color="#f5b400" shape="leaf" width={70} />
+            <PlaneImage model="atr72" paint={{ main: '#30a46c', dark: '#1f7a4d', shape: 'star' }} className="al-plane-chip al-plane-chip-big" />
+            <PlaneImage model="a320" paint={{ main: '#e5484d', dark: '#b4282e', shape: 'circle' }} className="al-plane-chip al-plane-chip-big" />
+            <PlaneImage model="b747-400" paint={{ main: '#3e63dd', dark: '#2a47a8', shape: 'diamond' }} className="al-plane-chip al-plane-chip-big" />
+            <PlaneImage model="concorde" paint={{ main: '#f5b400', dark: '#c28a00', shape: 'leaf' }} className="al-plane-chip al-plane-chip-big" />
           </span>
         </li>
         <li>

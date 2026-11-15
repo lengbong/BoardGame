@@ -1,5 +1,7 @@
 import { defaultTimes } from './timetable';
 import { describe, expect, it } from 'vitest';
+import { MODEL } from './aircraft';
+import { defaultCabin } from './cabin';
 import { seededRandom } from '../../lib/random';
 import { aiTurn } from './ai';
 import { weather } from './calendar';
@@ -24,7 +26,7 @@ function withRoute(to: string, age = 0, freq = 14, model = 'a320'): { s: Airline
   c.branches.push(to);
   const route = s.nextId++;
   c.routes.push({ id: route, a: 'seoul', b: to, fare: 0, since: s.t, stats: null, times: defaultTimes('seoul', to, 2003) });
-  c.planes.push({ id: s.nextId++, model, leased: false, rent: 0, deposit: 0, since: s.t - Math.round(age * 12), legs: [{ route, freq }] });
+  c.planes.push({ id: s.nextId++, model, leased: false, rent: 0, deposit: 0, since: s.t - Math.round(age * 12), legs: [{ route, freq }], cabin: defaultCabin(MODEL[model]), meal: 3 });
   return { s, route };
 }
 
@@ -62,7 +64,7 @@ describe('운항 현장 (지연·결항·회항·기체 점검)', () => {
     expect(opsRates(crew2, 0, old.route).late).toBeLessThan(opsRates(crew0, 0, old.route).late);
     // 예비기: 쉬는 비행기가 있으면 결항이 준다
     const spare = structuredClone(s);
-    spare.companies[0].planes.push({ id: spare.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: spare.t, legs: [] });
+    spare.companies[0].planes.push({ id: spare.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: spare.t, legs: [], cabin: defaultCabin(MODEL['a320']), meal: 3 });
     expect(spareCover(spare.companies[0])).toBeGreaterThan(0);
     expect(opsRates(spare, 0, old.route).cancel).toBeLessThan(opsRates(s, 0, old.route).cancel);
   });

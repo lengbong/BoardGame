@@ -26,6 +26,8 @@
   --al-c-svc: #c9a227;
   --al-c-sales: #9a8f80;
   --al-c-lease: #c75b7a;
+  --al-sky-top: #c9e3f4;
+  --al-sky-bottom: #f1f8fc;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .al-game,
@@ -45,6 +47,8 @@
     --al-warn: #f2b24a;
     --al-blue: #8aa6ff;
     --al-map-ui: rgba(36, 34, 31, 0.9);
+    --al-sky-top: #2b5470;
+    --al-sky-bottom: #4f7d99;
   }
 }
 :root[data-theme='dark'] .al-game,
@@ -64,6 +68,8 @@
   --al-warn: #f2b24a;
   --al-blue: #8aa6ff;
   --al-map-ui: rgba(36, 34, 31, 0.9);
+  --al-sky-top: #2b5470;
+  --al-sky-bottom: #4f7d99;
 }
 
 .al-game kbd,
@@ -1390,40 +1396,6 @@
 .al-soon {
   font-size: 12.5px;
 }
-.al-plane-art {
-  display: block;
-  overflow: visible;
-}
-.al-pa-body {
-  fill: #fdfdfd;
-  stroke: #7b8796;
-  stroke-width: 0.8;
-}
-.al-pa-wing {
-  fill: #c9d1dc;
-  stroke: #7b8796;
-  stroke-width: 0.7;
-}
-.al-pa-engine {
-  fill: #aab4c2;
-  stroke: #6b7686;
-  stroke-width: 0.7;
-}
-.al-pa-win {
-  fill: none;
-  stroke: #5f7489;
-  stroke-width: 1.2;
-  stroke-linecap: round;
-}
-.al-pa-cockpit {
-  stroke: #33475b;
-  stroke-width: 1.4;
-  stroke-linecap: round;
-}
-.al-pa-prop {
-  fill: rgba(90, 100, 110, 0.35);
-}
-
 /* ---------------------------------------------------------------- 재무 화면 */
 .al-finance {
   display: grid;
@@ -1465,7 +1437,7 @@
 }
 .al-ads li {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr) auto;
+  grid-template-columns: 110px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 8px;
   font-size: 13.5px;
@@ -2709,12 +2681,56 @@
 .al-airline-photo {
   border-radius: 8px;
 }
-.al-airline-art {
-  display: grid;
-  place-items: center;
+.al-plane-img {
+  position: relative;
+  margin: 0;
   width: 100%;
   aspect-ratio: 16 / 9;
+  overflow: hidden;
   border-radius: 8px;
+  background: linear-gradient(180deg, var(--al-sky-top) 0%, var(--al-sky-bottom) 100%);
+}
+.al-plane-img img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 3px 2px rgba(20, 40, 60, 0.22));
+  user-select: none;
+}
+.al-plane-img figcaption {
+  position: absolute;
+  right: 7px;
+  bottom: 3px;
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 0 4px rgba(0, 30, 60, 0.6);
+  pointer-events: none;
+}
+.al-mc-art .al-plane-img {
+  border-radius: 10px;
+  outline: 2px solid color-mix(in srgb, var(--al-sky-bottom) 40%, #fff);
+  outline-offset: -2px;
+}
+.al-model-card:hover .al-mc-art .al-plane-img {
+  outline-color: #e8792b;
+}
+.al-plane-chip {
+  flex: none;
+  width: 72px;
+  border-radius: 6px;
+}
+.al-plane-chip-big {
+  width: 92px;
+}
+.al-thumb.al-plane-img {
+  width: 96px;
+}
+.al-orders .al-thumb.al-plane-img {
+  width: 64px;
 }
 .al-airline-picker {
   margin-top: 10px;
@@ -2823,7 +2839,7 @@
   font-size: 13px;
 }
 .al-picked-airlines .al-photo,
-.al-picked-airlines .al-airline-art {
+.al-picked-airlines .al-plane-img {
   width: 120px;
 }
 .al-turn {
@@ -2899,13 +2915,9 @@
   overflow: hidden;
 }
 .al-turn-photo .al-photo,
-.al-turn-photo .al-airline-art {
+.al-turn-photo .al-plane-img {
   aspect-ratio: auto !important;
   height: 100%;
-}
-.al-turn-photo .al-airline-art svg {
-  height: 100%;
-  width: auto;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .al-routes,
@@ -2918,6 +2930,358 @@
   filter: brightness(1.45) saturate(1.05);
 }
 
+/* ---------------------------------------------------------------- 좌석 배치·기내식 */
+.al-cabin-link {
+  text-align: left;
+  font-size: 12px;
+  margin-top: 2px;
+}
+.al-cabin {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  margin-top: 4px;
+  border-top: 1px dashed var(--border);
+}
+.al-cabin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.al-cabin h5 {
+  margin: 0;
+  font-size: 15px;
+}
+.al-seatmap {
+  width: 100%;
+  max-height: 120px;
+  display: block;
+}
+.al-seatmap-small {
+  max-height: 60px;
+}
+.al-seatmap-body {
+  fill: color-mix(in srgb, var(--surface-2) 70%, #fff);
+  stroke: var(--border);
+  stroke-width: 0.25;
+}
+.al-seatmap-cockpit {
+  fill: #2b3a4d;
+  opacity: 0.75;
+}
+.al-seat-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 13px;
+}
+.al-seat-legend i {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  vertical-align: -1px;
+  margin-right: 3px;
+}
+.al-cabin-presets small {
+  opacity: 0.75;
+  margin-left: 2px;
+}
+.al-cabin-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  font-size: 13.5px;
+}
+.al-cabin-controls label,
+.al-cabin-pitch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.al-cabin-pitch > span,
+.al-cabin-controls label > span {
+  font-weight: 700;
+}
+.al-cabin-outlook {
+  margin: 0;
+  font-size: 13.5px;
+}
+.al-cabin .al-good {
+  color: var(--al-good);
+}
+.al-cabin .al-bad {
+  color: var(--al-bad);
+}
+.al-cabin-apply {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.al-meal-title {
+  margin-top: 4px !important;
+}
+.al-cabin .al-svc small.al-muted {
+  font-size: 10.5px;
+}
+
+/* ---------------------------------------------------------------- 새 노선 취항 */
+.al-route-new .al-route-line,
+.al-route-new .al-route-case {
+  animation: al-route-appear 2.6s ease-out both;
+}
+@keyframes al-route-appear {
+  0%,
+  55% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0.95;
+  }
+}
+.al-openings {
+  pointer-events: none;
+}
+.al-open-draw,
+.al-open-glow {
+  fill: none;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+.al-open-draw {
+  animation: al-open-draw 1.5s cubic-bezier(0.45, 0, 0.3, 1) forwards, al-open-out 0.6s ease-in 2.2s forwards;
+}
+.al-open-glow {
+  opacity: 0.25;
+  animation: al-open-draw 1.5s cubic-bezier(0.45, 0, 0.3, 1) forwards, al-open-out 0.8s ease-in 1.8s forwards;
+}
+@keyframes al-open-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes al-open-out {
+  to {
+    opacity: 0;
+  }
+}
+.al-open-plane {
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.45));
+  animation: al-open-out 0.5s ease-in 1.9s forwards;
+}
+.al-open-ring {
+  fill: none;
+  stroke-width: 1.6;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: al-open-ring 1s ease-out both;
+}
+@keyframes al-open-ring {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  12% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(3.4);
+  }
+}
+.al-open-tag {
+  opacity: 0;
+  animation: al-open-tag 2.6s ease-out 0.5s both;
+}
+.al-open-tag-text {
+  fill: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+}
+@keyframes al-open-tag {
+  0% {
+    opacity: 0;
+  }
+  15%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 축하 카드 (내 회사가 새 노선을 열면) */
+.al-opening {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 25;
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 32px));
+  cursor: pointer;
+  animation: al-opening-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2) both, al-opening-out 0.4s ease-in 3.4s forwards;
+}
+@keyframes al-opening-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 24px) scale(0.92);
+  }
+}
+@keyframes al-opening-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, 16px) scale(0.96);
+  }
+}
+.al-opening-card {
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 2px solid var(--al-co);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.22),
+    0 0 0 4px color-mix(in srgb, var(--al-co) 25%, transparent);
+}
+.al-opening-scene {
+  position: relative;
+  height: 128px;
+  background: linear-gradient(180deg, var(--al-sky-top), var(--al-sky-bottom));
+  overflow: hidden;
+}
+.al-opening-scene svg.al-opening-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.al-opening-arc {
+  fill: none;
+  stroke: var(--al-co);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: al-open-draw 1.6s ease-in-out 0.25s forwards;
+}
+.al-opening-city {
+  position: absolute;
+  bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+  text-shadow: 0 1px 0 var(--surface);
+}
+.al-opening-city svg {
+  color: var(--al-co);
+}
+.al-opening-city.al-from {
+  left: 14px;
+}
+.al-opening-city.al-to {
+  right: 14px;
+  animation: al-opening-pop 0.5s ease-out 1.75s both;
+}
+@keyframes al-opening-pop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.25);
+  }
+}
+.al-opening-plane {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 150px;
+  height: auto;
+  filter: drop-shadow(0 4px 3px rgba(20, 40, 60, 0.25));
+  animation: al-opening-fly 2s cubic-bezier(0.4, 0, 0.3, 1) 0.15s both;
+}
+@keyframes al-opening-fly {
+  0% {
+    transform: translate(-30px, 70px) scale(0.55) rotate(6deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(240px, -6px) scale(0.95) rotate(-4deg);
+  }
+}
+.al-confetti {
+  position: absolute;
+  top: -10px;
+  width: 7px;
+  height: 11px;
+  border-radius: 2px;
+  animation: al-confetti 1.8s ease-in both;
+}
+@keyframes al-confetti {
+  0% {
+    transform: translateY(0) rotate(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(150px) rotate(540deg);
+    opacity: 0;
+  }
+}
+.al-opening-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 14px 11px;
+}
+.al-opening-text small {
+  color: var(--al-co);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.al-opening-text b {
+  font-size: 19px;
+}
+.al-opening-text span {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .al-opening,
+  .al-opening-plane,
+  .al-opening-arc,
+  .al-confetti,
+  .al-opening-city.al-to,
+  .al-route-new .al-route-line,
+  .al-route-new .al-route-case {
+    animation: none;
+  }
+  .al-opening-arc {
+    stroke-dashoffset: 0;
+  }
+  .al-opening-plane {
+    transform: translate(120px, 20px) scale(0.8);
+  }
+  .al-confetti {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- 광고 매체·캠페인 */
+.al-media,
+.al-campaign-region select {
+  padding: 3px 6px;
 /* ---------------------------------------------------------------- 4판: 달별 그래프·운항 상황판·자동 진행 */
 .al-game,
 .al-setup {
@@ -2979,6 +3343,12 @@
   background: var(--surface);
   color: var(--text);
   font: inherit;
+  font-size: 12.5px;
+}
+.al-campaign-title {
+  margin: 10px 0 4px;
+}
+.al-campaigns {
   font-size: 13px;
   max-width: 220px;
 }
@@ -3118,6 +3488,13 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+}
+.al-campaign-region {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
   margin: 8px 0 0;
   font-size: 13px;
 }

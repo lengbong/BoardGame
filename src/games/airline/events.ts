@@ -1,6 +1,6 @@
 import { CITIES, CITY, REGIONS, REGION_INFO, citySize } from './cities';
 import { monthOf, yearOfM } from './time';
-import type { DistOmit, Effect, NewsItem, RegionId, Rng } from './types';
+import type { DistOmit, Effect, NewsItem, NewsTone, RegionId, Rng } from './types';
 
 /**
  * 실제로 열렸거나 열리기로 정해진 올림픽(여름·겨울)과 세계 엑스포 가운데, 이 게임의 도시에서 열리는 것.
@@ -227,4 +227,79 @@ export function effectMults(effects: readonly Effect[], cityId: string): { biz: 
 /** 비행기 값 배수 (박람회 특가) */
 export function priceMult(effects: readonly Effect[]): number {
   return effects.reduce((m, e) => (e.kind === 'sale' ? m * e.mult : m), 1);
+}
+
+/** 온 세계 손님 배수 (큰 사건) */
+export function worldMult(effects: readonly Effect[]): number {
+  return effects.reduce((m, e) => (e.kind === 'world' ? m * e.mult : m), 1);
+}
+
+// ------------------------------------------------------------------ 실제 역사 사건
+
+/**
+ * 실제로 일어난 큰 사건 (설정에서 '실제 역사'를 켜면 그 달에 일어난다).
+ * demand: 손님 배수 (regions가 없으면 온 세계), months 달 동안.
+ * aid: 정부 지원금 (지난달 비용의 몇 배를 회사마다 받는다).
+ */
+export interface HistoryEvent {
+  year: number;
+  /** 1~12 */
+  month: number;
+  icon: string;
+  title: string;
+  text: string;
+  tone: NewsTone;
+  demand?: { regions?: RegionId[]; mult: number; months: number }[];
+  oil?: number;
+  aid?: number;
+}
+
+export const HISTORY: readonly HistoryEvent[] = [
+  { year: 1967, month: 6, icon: '⚔️', title: '6일 전쟁', text: '중동에서 전쟁이 일어나 수에즈 운하가 막혔어요. 중동을 오가는 손님이 줄어요.', tone: 'bad', demand: [{ regions: ['southmid', 'africa'], mult: 0.85, months: 9 }] },
+  { year: 1973, month: 10, icon: '⛽', title: '1차 석유 파동', text: '중동 전쟁으로 산유국들이 석유 수출을 줄여 기름값이 크게 뛰었어요. 연료를 많이 먹는 비행기는 큰 손해를 봐요.', tone: 'bad', oil: 1.7, demand: [{ mult: 0.93, months: 12 }] },
+  { year: 1978, month: 10, icon: '🗽', title: '미국 항공 자유화', text: '미국이 항공 규제를 풀어 누구나 노선과 운임을 정할 수 있게 됐어요. 값이 내려 아메리카 손님이 늘어요.', tone: 'good', demand: [{ regions: ['americas'], mult: 1.12, months: 24 }] },
+  { year: 1979, month: 4, icon: '⛽', title: '2차 석유 파동', text: '이란 혁명으로 기름값이 다시 크게 올랐어요.', tone: 'bad', oil: 1.45, demand: [{ mult: 0.95, months: 12 }] },
+  { year: 1986, month: 2, icon: '🛢️', title: '기름값 폭락', text: '산유국들이 석유를 많이 풀어 기름값이 절반 가까이 떨어졌어요. 연료비가 크게 줄어요.', tone: 'good', oil: 0.6 },
+  { year: 1989, month: 11, icon: '🧱', title: '베를린 장벽 붕괴', text: '동서 유럽을 가르던 장벽이 무너졌어요. 유럽을 오가는 손님이 늘어요.', tone: 'good', demand: [{ regions: ['europe'], mult: 1.1, months: 24 }] },
+  { year: 1990, month: 8, icon: '⚔️', title: '걸프 전쟁', text: '이라크가 쿠웨이트를 침공했어요. 기름값이 뛰고 중동과 세계 여행 손님이 줄어요.', tone: 'bad', oil: 1.55, demand: [{ regions: ['southmid'], mult: 0.65, months: 8 }, { mult: 0.92, months: 8 }] },
+  { year: 1991, month: 12, icon: '🕊️', title: '소련 해체', text: '소련이 여러 나라로 나뉘며 냉전이 끝났어요. 막혔던 하늘길이 하나둘 열리고, 이제 누구나 러시아 비행기를 살 수 있어요.', tone: 'info' },
+  { year: 1997, month: 7, icon: '📉', title: '아시아 외환 위기', text: '아시아 여러 나라의 돈값이 크게 떨어졌어요. 동아시아·동남아 손님이 줄어요.', tone: 'bad', demand: [{ regions: ['eastasia', 'seaoc'], mult: 0.84, months: 15 }] },
+  { year: 2001, month: 9, icon: '🏢', title: '9·11 테러', text: '미국에서 비행기를 이용한 테러가 일어났어요. 비행기를 타려는 사람이 크게 줄고 보안이 엄해져요.', tone: 'bad', demand: [{ mult: 0.8, months: 5 }, { regions: ['americas'], mult: 0.85, months: 12 }] },
+  { year: 2003, month: 4, icon: '😷', title: '사스 유행', text: '새 호흡기 전염병이 돌아 아시아 여행 손님이 크게 줄었어요.', tone: 'bad', demand: [{ regions: ['eastasia'], mult: 0.65, months: 3 }, { regions: ['seaoc'], mult: 0.82, months: 3 }] },
+  { year: 2008, month: 10, icon: '🏦', title: '세계 금융 위기', text: '큰 은행들이 무너지며 세계 경제가 움츠러들었어요. 손님, 특히 사업 손님이 줄어요.', tone: 'bad', oil: 0.65, demand: [{ mult: 0.88, months: 12 }] },
+  { year: 2010, month: 4, icon: '🌋', title: '아이슬란드 화산 폭발', text: '화산재가 유럽 하늘을 덮어 며칠 동안 비행기가 뜨지 못했어요.', tone: 'bad', demand: [{ regions: ['europe'], mult: 0.7, months: 1 }] },
+  {
+    year: 2020,
+    month: 3,
+    icon: '🦠',
+    title: '코로나19 대유행',
+    text: '전염병이 온 세계로 퍼져 나라마다 국경을 닫았어요. 손님이 거의 사라져요. 나라마다 항공사에 지원금을 줬어요. 비행기를 쉬게 하고 돈을 아끼세요.',
+    tone: 'big',
+    oil: 0.55,
+    aid: 2.5,
+    demand: [{ mult: 0.2, months: 3 }],
+  },
+  { year: 2020, month: 6, icon: '😷', title: '코로나19: 국경이 조금씩 열려요', text: '아직 손님이 예전의 절반에도 못 미쳐요. 가까운 나라 노선부터 조금씩 돌아와요.', tone: 'bad', aid: 1.2, demand: [{ mult: 0.42, months: 12 }] },
+  { year: 2021, month: 6, icon: '💉', title: '백신 접종이 늘어요', text: '백신을 맞은 사람이 많아져 여행이 다시 늘기 시작했어요.', tone: 'info', demand: [{ mult: 0.7, months: 12 }] },
+  { year: 2022, month: 2, icon: '⚔️', title: '우크라이나 전쟁', text: '러시아가 우크라이나를 침공했어요. 기름값이 뛰고, 서방과 러시아 사이 하늘길이 닫혀요.', tone: 'bad', oil: 1.35 },
+  { year: 2022, month: 7, icon: '🧳', title: '여행이 돌아와요', text: '나라마다 국경을 열어 여행 손님이 거의 예전만큼 돌아왔어요. 밀렸던 여행 수요로 관광 손님이 북적여요.', tone: 'good', demand: [{ mult: 0.92, months: 9 }] },
+];
+
+/** 이 달에 일어나는 실제 역사 사건 */
+export function historyAt(t: number): HistoryEvent[] {
+  const year = yearOfM(t);
+  const month = monthOf(t);
+  return HISTORY.filter((e) => e.year === year && e.month === month);
+}
+
+/** 실제 역사의 기름값 기준 (유가는 이 값 쪽으로 천천히 돌아간다) */
+export function historicOil(year: number): number {
+  if (year < 1974) return 1;
+  if (year < 1979) return 1.3;
+  if (year < 1986) return 1.5;
+  if (year < 2000) return 0.9;
+  if (year < 2005) return 1;
+  if (year < 2015) return 1.35;
+  if (year < 2022) return 1;
+  return 1.2;
 }

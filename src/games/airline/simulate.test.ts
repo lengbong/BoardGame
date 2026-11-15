@@ -1,5 +1,6 @@
 import { defaultTimes } from './timetable';
 import { describe, expect, it } from 'vitest';
+import { defaultCabin } from './cabin';
 import { seededRandom } from '../../lib/random';
 import { MODEL } from './aircraft';
 import { dist } from './cities';
@@ -159,7 +160,7 @@ describe('비용과 이익', () => {
     const c = s.companies[0];
     c.branches.push('tokyo');
     c.routes.push({ id: 50, a: 'seoul', b: 'tokyo', fare: 10, since: s.t, stats: null, times: defaultTimes('seoul', 'tokyo', 2003) });
-    c.planes.push({ id: 51, model: 'a321', leased: true, rent: 10, deposit: 0, since: s.t, legs: [{ route: 50, freq: 12 }] });
+    c.planes.push({ id: 51, model: 'a321', leased: true, rent: 10, deposit: 0, since: s.t, legs: [{ route: 50, freq: 12 }], cabin: defaultCabin(MODEL['a321']), meal: 3 });
     s.nextId = 60;
     const est = estimateRoute(s, 0, 'seoul', 'tokyo', [{ model: 'a321', freq: 12, fixed: planeFixed(c.planes[0]) }], 10);
     const out = computeMonth(s);
@@ -176,7 +177,7 @@ describe('비용과 이익', () => {
     const s = base();
     s.companies[0].branches.push('tokyo');
     s.companies[0].routes.push({ id: 50, a: 'seoul', b: 'tokyo', fare: 0, since: s.t, stats: null, times: defaultTimes('seoul', 'tokyo', 2003) });
-    s.companies[0].planes.push({ id: 51, model: 'b737-800', leased: false, rent: 0, deposit: 0, since: s.t, legs: [{ route: 50, freq: 20 }] });
+    s.companies[0].planes.push({ id: 51, model: 'b737-800', leased: false, rent: 0, deposit: 0, since: s.t, legs: [{ route: 50, freq: 20 }], cabin: defaultCabin(MODEL['b737-800']), meal: 3 });
     s.nextId = 60;
     const r = computeQuarter(s).reports;
     expect(r[0].tax).toBeCloseTo(Math.max(0, (r[0].profit + r[0].tax) * TAX_RATE), 6);

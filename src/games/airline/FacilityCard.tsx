@@ -78,35 +78,47 @@ export function FacilityCard({ state, viewer, canAct, perform }: { state: Airlin
       <h4 className="al-fin-title">
         <FinIcon kind="building" /> 공항 시설 <small>{list.length > 0 ? `${list.length}곳 · 달 유지비 ${fmtFine(facilitiesUpkeep(me, state.q))}` : '아직 없어요'}</small>
       </h4>
-      {list.length > 0 && (
-        <ul className="al-fac-list">
-          {list.map((f) => {
-            const info = FACILITY_INFO[f.kind];
-            return (
-              <li key={`${f.city}-${f.kind}`}>
-                <FacilityIcon kind={f.kind} size={26} />
-                <span className="al-fac-main">
-                  <b>
-                    {CITY[f.city].name} {info.name}
-                  </b>
-                  <small className="al-muted">
-                    {info.desc} · 달 {fmtFine(facilityUpkeep(f.city, f.kind, state.q))}
-                  </small>
-                </span>
-                <ActButton
-                  small
-                  blocker={canAct ? null : notMine}
-                  onClick={() => {
-                    if (window.confirm(`${CITY[f.city].name} ${info.name}을(를) ${fmtMoney(f.cost * FACILITY_REFUND)}에 팔까요?`)) perform({ type: 'sellFacility', city: f.city, kind: f.kind });
-                  }}
-                >
-                  팔기 +{fmtMoney(f.cost * FACILITY_REFUND)}
-                </ActButton>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {list.length > 0 && !canAct && <small className="al-why">{notMine}</small>}
+      {FACILITY_KINDS.map((kind) => {
+        // 종류별로 묶어 설명은 한 번만, 도시는 작은 칸으로 늘어놓는다 (시설이 많아도 짧게)
+        const items = list.filter((f) => f.kind === kind).sort((a, b) => CITY[a.city].name.localeCompare(CITY[b.city].name, 'ko'));
+        if (items.length === 0) return null;
+        const info = FACILITY_INFO[kind];
+        const upkeep = items.reduce((s, f) => s + facilityUpkeep(f.city, f.kind, state.q), 0);
+        return (
+          <div key={kind} className="al-fac-group" data-testid={`al-fac-group-${kind}`}>
+            <div className="al-fac-ghead">
+              <FacilityIcon kind={kind} size={22} />
+              <b>{info.name}</b>
+              <small className="al-muted">
+                {items.length}곳 · 달 {fmtFine(upkeep)}
+              </small>
+            </div>
+            <small className="al-muted al-fac-gdesc">{info.desc}</small>
+            <ul className="al-fac-chips">
+              {items.map((f) => (
+                <li key={`${f.city}-${f.kind}`}>
+                  <span className="al-fac-city" title={CITY[f.city].name}>
+                    <b>{CITY[f.city].name}</b>
+                    <small className="al-muted">달 {fmtFine(facilityUpkeep(f.city, f.kind, state.q))}</small>
+                  </span>
+                  <ActButton
+                    small
+                    quiet
+                    blocker={canAct ? null : notMine}
+                    onClick={() => {
+                      if (window.confirm(`${CITY[f.city].name} ${info.name}을(를) ${fmtMoney(f.cost * FACILITY_REFUND)}에 팔까요?`)) perform({ type: 'sellFacility', city: f.city, kind: f.kind });
+                    }}
+                    title={`${CITY[f.city].name} ${info.name} 팔기`}
+                  >
+                    팔기 +{fmtMoney(f.cost * FACILITY_REFUND)}
+                  </ActButton>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
       <h5 className="al-fin-sub">
         본사 {CITY[hub].name}에 짓기{' '}
         <small>

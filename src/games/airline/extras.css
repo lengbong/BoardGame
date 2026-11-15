@@ -206,28 +206,79 @@
 .al-fac-terminal {
   color: var(--al-blue);
 }
-.al-fac-list {
-  list-style: none;
-  margin: 0 0 6px;
-  padding: 0;
+/* 가진 시설: 종류별 묶음 (설명 한 번 + 도시 칸) */
+.al-fac-group {
+  margin: 8px 0 10px;
+}
+.al-fac-ghead {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 14px;
+}
+.al-fac-ghead small {
+  font-size: 12px;
+}
+.al-fac-gdesc {
+  display: block;
+  margin: 2px 0 6px 28px;
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.al-fac-chips {
+  list-style: none;
+  margin: 0 0 0 28px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
   gap: 6px;
 }
-.al-fac-list li {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+.al-fac-chips li {
+  display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 4px 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
 }
-.al-fac-main {
+.al-fac-city {
   display: flex;
   flex-direction: column;
   min-width: 0;
   font-size: 13px;
+  line-height: 1.2;
 }
-.al-fac-main small {
-  font-size: 11.5px;
+.al-fac-city b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.al-fac-city small {
+  font-size: 11px;
+}
+.al-fac-chips .btn-small {
+  padding: 3px 8px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+@media (max-width: 520px) {
+  .al-fac-gdesc,
+  .al-fac-chips {
+    margin-left: 0;
+  }
+  /* 좁은 화면: 두 줄로 놓고, 팔기 단추는 도시 이름 밑에 */
+  .al-fac-chips {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .al-fac-chips li {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 6px 8px;
+  }
 }
 
 /* ---------------------------------------------------------------- 연말 시상식 */

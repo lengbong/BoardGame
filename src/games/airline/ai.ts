@@ -68,6 +68,7 @@ import {
 } from './simulate';
 import { monthOf, yearOf } from './time';
 import { aiRights } from './aiRights';
+import { aiLoyalty } from './aiLoyalty';
 import { rightsLeftFor } from './rights';
 import type { AdMedia, AirlineAction, AirlineState, BusinessKind, Cabin, CampaignKind, Company, FacilityKind, ModelDef, RegionId, Rng } from './types';
 
@@ -102,6 +103,7 @@ export function planTurn(state: AirlineState, ci: number, level: AiLevel, rng: R
   const ai = new Planner(state, ci, level, rng);
   ai.run();
   aiRights(ai);
+  aiLoyalty(ai);
   return ai.actions;
 }
 
@@ -110,6 +112,7 @@ export function aiManage(state: AirlineState, ci: number, level: AiLevel, rng: R
   const ai = new Planner(state, ci, level, rng);
   ai.run();
   aiRights(ai);
+  aiLoyalty(ai);
   return ai.s;
 }
 

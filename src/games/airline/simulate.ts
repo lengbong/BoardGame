@@ -24,6 +24,7 @@ import { FUEL_TON, burnFuel, tankWorth } from './fuel';
 import { JOINT_BONUS, MILES_PER_MEMBER, allianceGroups, alliesOf } from './alliances';
 import { LOUNGE_BIZ, LOUNGE_XFER, TERMINAL_XFER_HOURS, companyCheckCost, facilitiesUpkeep, facilitiesWorth, hasFacility, loungeBiz, loungeRep, terminalSlots } from './facilities';
 import { STAFF_SHARE, overtime, payroll, staffCap, staffNeed, strikeChance } from './staff';
+import { chargeLoyalty, loyaltyQuality } from './loyalty';
 import { bandCaps, bandCounts, bandUsed, defaultTimes, legalTimes, timeFit } from './timetable';
 import { monthOf, quarterOf, yearOf } from './time';
 import type { WeatherCause } from './calendar';
@@ -646,7 +647,8 @@ function attraction(state: AirlineState, a: string, b: string, offer: Offer, bes
   }
   const cabinBiz = premiumAttraction(premAttr / seats, d, firstSeats > 0);
   const p = (1 + offer.fare / 100) * premium;
-  const qual = quality(c, a, b);
+  // 단골 회원·브랜드 힘은 회사 매력에 곱한다 (저장된 값만 읽는다: loyalty.ts)
+  const qual = loyaltyQuality(quality(c, a, b), c, a, b, offer.fare);
   const common = hub * allianceBonus(state, offer.company, a, b);
   // 지연·결항이 잦으면 손님(특히 사업 손님)이 덜 고른다
   const rel = Math.max(0.8, Math.min(1.06, 1 + 0.8 * ((offer.rel ?? 0.85) - 0.85)));
@@ -1710,6 +1712,8 @@ export function computeMonth(state: AirlineState, rng?: Rng): QuarterOutcome {
     for (const city of c.branches) rep.branch += branchUpkeep(city, state.q);
     if (c.facilities) rep.branch += facilitiesUpkeep(c, state.q);
     for (const r of REGIONS) rep.ads += c.ads[r];
+    // 단골 프로그램 운영비·마일리지 값 (광고비에 넣고 따로 적는다: loyalty.ts)
+    chargeLoyalty(c, rep);
     const limit = creditLimit(state, ci);
     const premium = c.debt > limit * 0.8 ? 2 : 0;
     rep.interest = (c.debt * (state.rate + premium)) / 100 / 12;

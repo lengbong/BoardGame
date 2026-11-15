@@ -1,5 +1,6 @@
 import type { SeatIndex, SeatKind, Seats } from '../common/players';
 import type { RightsAction, RightsBook, RightsEvent, RightsMode } from './rightsTypes';
+import type { BrandPosState, LoyaltyAction, LoyaltyEvent, LoyaltyState } from './loyaltyTypes';
 
 export type { SeatIndex, SeatKind } from '../common/players';
 export type { Rng } from '../../lib/random';
@@ -497,6 +498,10 @@ export interface Company {
   bizModel: BizModel;
   /** 바꾸는 중인 사업 모델 (t 달에 바뀐다) */
   bizModelNext?: { model: BizModel; t: number } | null;
+  /** 단골 손님 프로그램 (loyalty.ts). 없으면 프로그램이 없다 (예전 저장) */
+  loyalty?: LoyaltyState;
+  /** 브랜드 자리 (brandPosition.ts). 없으면 정하지 않았다: 효과 없음 (예전 저장) */
+  brandPos?: BrandPosState;
 }
 
 /** 광고 매체 (ads.ts) */
@@ -669,6 +674,8 @@ export interface CompanyReport {
   checks?: number;
   /** C점검 값 (억, '운항 수당·정비 부품'에 들어 있다) */
   checkCost?: number;
+  /** 단골 프로그램 운영비·마일리지 값 (억, '광고비'에 들어 있다: loyalty.ts) */
+  loyalty?: number;
   /** 전세기로 다녀온 의뢰 수와 보수 (보수는 부대 수입에 들어 있다) */
   charters?: number;
   charterRev?: number;
@@ -912,6 +919,8 @@ export type AirlineAction =
   | { type: 'sellBusiness'; city: string; kind: BusinessKind }
   /** 운수권 신청 (rightsTypes.ts) */
   | RightsAction
+  /** 단골 프로그램·브랜드 자리 (loyaltyTypes.ts) */
+  | LoyaltyAction
   | { type: 'endTurn' };
 
 /** 화면 연출용: 마지막 행동에서 일어난 일 */
@@ -940,6 +949,7 @@ export type GameEvent =
   | { id: number; type: 'quarter'; q: number }
   | { id: number; type: 'bankrupt'; company: number }
   | RightsEvent
+  | LoyaltyEvent
   | { id: number; type: 'gameover' };
 
 export interface LogEntry {

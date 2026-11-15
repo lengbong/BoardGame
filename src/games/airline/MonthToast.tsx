@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { fmtMoney, fmtPax, pct, signedMoney } from './format';
 import { causeInfo } from './ReportView';
 import { MonthClassLine } from './FaresCard';
+import { LoyaltyToastLine } from './LoyaltyCard';
 import { CITY } from './cities';
 import { mLabel } from './time';
 import type { AirlineState, QuarterReport } from './types';
@@ -59,6 +60,7 @@ export function MonthToast({ state, report, viewer, onClose, onDetail }: { state
         </div>
       </dl>
       <MonthClassLine r={r} />
+      <LoyaltyToastLine state={state} report={report} viewer={viewer} />
       {(worst || news.length > 0 || r.staffCancelled > 0) && (
         <ul className="al-mt-news">
           {r.staffCancelled > 0 && <li>👥 일손이 모자라 {r.staffCancelled}편을 못 띄웠어요</li>}

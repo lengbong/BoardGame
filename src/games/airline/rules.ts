@@ -26,6 +26,7 @@ import { ACADEMY_COST, PAY_MAX, PAY_MIN, STAFF_GROUPS, STAFF_INFO, emptyStaff, f
 import { bandCaps, bandCounts, bandUsed, defaultTimes, routeCurfew } from './timetable';
 import { rightsAssignBlocker, rightsMonth, rightsRoom, rightsRouteBlocker } from './rights';
 import { applyRightsAction, isRightsAction, rightsAfterMerge } from './rightsRules';
+import { applyLoyaltyAction, isLoyaltyAction, loyaltyMonth } from './loyaltyRules';
 import {
   LEASE_RATE,
   MAX_DELIVERIES,
@@ -897,6 +898,8 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
   const seat = c0.seat;
   // 운수권 신청 (rightsRules.ts)
   if (isRightsAction(action)) return applyRightsAction(state, action, ci);
+  // 단골 프로그램·브랜드 자리 (loyaltyRules.ts)
+  if (isLoyaltyAction(action)) return applyLoyaltyAction(state, action, ci);
 
   switch (action.type) {
     case 'openBranch': {
@@ -1844,6 +1847,8 @@ export function runMonth(state: AirlineState, rng: Rng = Math.random): AirlineSt
   s = opsNews(s, out.ops, out.closures);
   // 운수권 심사·돌려주기 (rights.ts)
   s = rightsMonth(s, t);
+  // 단골 회원 모이기·떠나기, 브랜드 힘 (loyaltyRules.ts)
+  s = loyaltyMonth(s, t, out.reports);
 
   out.reports.forEach((rep, ci) => {
     rep.value = Math.round(companyValue(s, ci));

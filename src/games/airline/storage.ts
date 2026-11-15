@@ -12,6 +12,7 @@ import { MAX_TANK } from './fuel';
 import { FACILITY_KINDS } from './facilities';
 import { isValidV4Company, migrateV3, parseModels } from './migrate4';
 import { isValidRightsState, parseRightsOption } from './rightsSave';
+import { isValidLoyaltyState } from './loyaltySave';
 import { CITY, REGIONS } from './cities';
 import { REAL_AIRLINE } from './realAirlines';
 import { STAFF_GROUPS, emptyStaff, staffNeed } from './staff';
@@ -203,6 +204,8 @@ export function isValidState(v: unknown): v is AirlineState {
   if (!isInt(s.nextEventId) || !isInt(s.nextLogId)) return false;
   // 운수권 장부 (예전 저장에는 없다: rightsSave.ts)
   if (!isValidRightsState(s)) return false;
+  // 단골 프로그램·브랜드 자리 (예전 저장에는 없다: loyaltySave.ts)
+  if (!isValidLoyaltyState(s)) return false;
   return true;
 }
 

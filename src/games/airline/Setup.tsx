@@ -26,6 +26,7 @@ import { IataBadge } from './ui';
 import { BizModelSetup, humanModels } from './BizModelCard';
 import { Meter } from './ui';
 import { RightsSetup } from './RightsSetup';
+import { LoyaltyHowTo } from './LoyaltyCard';
 
 interface SetupProps {
   initialSetup: AirlineSetup;
@@ -591,6 +592,7 @@ function HowTo() {
         <li>
           <b>실제 항공사와 사진</b>: ‘실제 항공사’로 하면 시작하는 해에 날던 항공사(대한항공·팬암·루프트한자…)를 골라 그 본거지에서 시작해요. 이름·두 글자 부호(IATA)·칠 색만 빌려 쓰고 로고는 쓰지 않으며, 게임 속 경영과 사건은 모두 지어낸 이야기예요. 기종·도시·항공사 사진은 위키미디어 공용의 자유 라이선스 사진이고, 지은이와 라이선스는 ‘📷 사진 출처’에서 볼 수 있어요.
         </li>
+        <LoyaltyHowTo />
         <li>
           <b>세계는 움직여요</b>: 해마다 새 기종이 나오고 옛 기종은 생산이 끝나요. 도시가 자라고 공항이 커지며, 기름값·경기·여행 붐·올림픽·엑스포 같은 사건이 손님과 비용을 바꿔요.
         </li>

@@ -11,6 +11,7 @@ import { FacilityCard } from './FacilityCard';
 import { AlliancePanel } from './AlliancePanel';
 import { StockCard } from './StockCard';
 import { RightsCard } from './RightsCard';
+import { LoyaltyCard } from './LoyaltyCard';
 import { TrophyShelf } from './AwardsArt';
 import { AchievementStrip } from './AchievementsView';
 import { facilitiesWorth } from './facilities';
@@ -57,7 +58,7 @@ const COSTS: { key: keyof CompanyReport; name: string; icon: FinIconKind }[] = [
   { key: 'lease', name: '리스료·보험', icon: 'doc' },
   { key: 'fleet', name: '쉬는 비행기', icon: 'parked' },
   { key: 'branch', name: '지점·시설 유지비', icon: 'building' },
-  { key: 'ads', name: '광고비', icon: 'megaphone' },
+  { key: 'ads', name: '광고·단골 프로그램', icon: 'megaphone' },
   { key: 'interest', name: '대출 이자', icon: 'bank' },
   { key: 'disrupt', name: '지연·결항 보상', icon: 'delay' },
   { key: 'tax', name: '법인세 (이익의 20%)', icon: 'receipt' },
@@ -386,6 +387,8 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
         <TrophyShelf state={state} ci={viewer} />
         <AchievementStrip />
       </section>
+
+      <LoyaltyCard state={state} viewer={viewer} canAct={canAct} perform={perform} />
 
       <section className="al-card al-ads">
         <h4 className="al-fin-title">

@@ -192,3 +192,24 @@ export function inkOn(hex: string): string {
   const [r, g, b] = hexToRgb(hex);
   return 0.299 * r + 0.587 * g + 0.114 * b > 160 ? '#1a1a1a' : '#ffffff';
 }
+
+const inkCache = new Map<string, string>();
+
+/**
+ * 지도 위 노선·비행기 색: 어두운 바다 위에서 잘 보이게 밝힌 색 (CSS `brightness(1.45) saturate(1.05)`와 같은 셈).
+ * 예전에는 노선 묶음 전체에 CSS 필터를 걸었는데, 노선이 많으면 비행기가 움직일 때마다 큰 그림에 필터를 다시 걸어 화면이 굼떠서
+ * 색을 미리 밝혀 둔다.
+ */
+export function mapInk(hex: string): string {
+  const hit = inkCache.get(hex);
+  if (hit) return hit;
+  const s = 1.05;
+  const [r, g, b] = hexToRgb(hex).map((v) => Math.min(255, v * 1.45));
+  const out = rgbToHex([
+    (0.213 + 0.787 * s) * r + (0.715 - 0.715 * s) * g + (0.072 - 0.072 * s) * b,
+    (0.213 - 0.213 * s) * r + (0.715 + 0.285 * s) * g + (0.072 - 0.072 * s) * b,
+    (0.213 - 0.213 * s) * r + (0.715 - 0.715 * s) * g + (0.072 + 0.928 * s) * b,
+  ]);
+  inkCache.set(hex, out);
+  return out;
+}

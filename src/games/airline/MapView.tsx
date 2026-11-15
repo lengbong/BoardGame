@@ -1,13 +1,13 @@
 import { shownCompanies } from './rules';
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { shapeElement } from '../../components/shapes';
 import { useElementWidth } from '../../lib/useElementWidth';
-import { coColors } from './brand';
+import { coColors, mapInk } from './brand';
 import { LandmarkIcon, MAP_PLANE_D, SEAT_SHAPES } from './Art';
 import { CITIES, CITY, REGIONS, REGION_INFO, citySize, dist, pairKey } from './cities';
 import { yearOf } from './time';
-import type { AirlineState, RegionId } from './types';
-import { LAND, MAP_H, MAP_W, WATER, greatCircleArc, project, shapePath } from './worldmap';
+import type { AirlineState, Company, RegionId } from './types';
+import { LAND, MAP_H, MAP_W, WATER, greatCircleArc, project, shapePath, type RouteArc } from './worldmap';
 import { routeFreq } from './simulate';
 
 export type Selection = { kind: 'city'; id: string } | { kind: 'route'; company: number; route: number } | null;
@@ -108,9 +108,226 @@ function regionView(region: RegionId): View {
   return clampView({ x: (minX + maxX) / 2 - w / 2, y: (minY + maxY) / 2 - h / 2, w, h });
 }
 
-export function MapView({ state, viewer, selected, onSelect, pulses: allPulses, flying, fx, zoomCmd, focusCo = null, onFocusCo }: MapViewProps) {
+/** 지도에 그릴 노선 하나 */
+interface MapRoute {
+  key: string;
+  company: number;
+  route: number;
+  d: string;
+  copies: string[];
+  mid: { x: number; y: number };
+  flying: boolean;
+  freq: number;
+  pair: string;
+  dist: number;
+  /** 어두운 바다 위에서 잘 보이게 밝힌 회사 색 */
+  ink: string;
+}
+
+/** 대권 항로는 두 도시와 비키는 칸만으로 정해지니, 한 번 셈한 길은 다시 쓴다 (노선이 수백 개면 상태가 바뀔 때마다 셈하면 느리다) */
+const arcCache = new Map<string, RouteArc>();
+function routeArc(a: string, b: string, lane: number): RouteArc {
+  const key = `${a}>${b}#${lane}`;
+  let arc = arcCache.get(key);
+  if (!arc) {
+    arc = greatCircleArc(CITY[a], CITY[b], lane);
+    arcCache.set(key, arc);
+  }
+  return arc;
+}
+
+let landPaths: { land: { name: string; d: string }[]; water: { name: string; d: string }[] } | null = null;
+function getLandPaths() {
+  landPaths ??= { land: LAND.map((s) => ({ name: s.name, d: shapePath(s.pts) })), water: WATER.map((s) => ({ name: s.name, d: shapePath(s.pts) })) };
+  return landPaths;
+}
+
+/** 바다·땅 (확대할 때만 다시 그린다) */
+const LandLayer = memo(function LandLayer({ k }: { k: number }) {
+  const { land, water } = getLandPaths();
+  return (
+    <>
+      <rect x={-MAP_W} y={-50} width={MAP_W * 3} height={MAP_H + 100} fill="url(#al-sea)" />
+      {[0, 23.44, -23.44].map((lat) => {
+        const y = project(0, lat).y;
+        return <line key={lat} x1={0} x2={MAP_W} y1={y} y2={y} className={lat === 0 ? 'al-equator' : 'al-tropic'} strokeWidth={k} />;
+      })}
+      <g className="al-land">
+        {land.map((p) => (
+          <path key={p.name} d={p.d} strokeWidth={0.8 * k} />
+        ))}
+      </g>
+      <g className="al-water">
+        {water.map((p) => (
+          <path key={p.name} d={p.d} strokeWidth={0.6 * k} />
+        ))}
+      </g>
+    </>
+  );
+});
+
+interface RouteItemProps {
+  r: MapRoute;
+  k: number;
+  mine: boolean;
+  sel: boolean;
+  pulse: boolean;
+  isNew: boolean;
+  onPick: (sel: Selection) => void;
+}
+
+/** 노선 하나 (고르거나 반짝일 때 그 노선만 다시 그린다) */
+const RouteItem = memo(function RouteItem({ r, k, mine, sel, pulse, isNew, onPick }: RouteItemProps) {
+  return (
+    <g
+      className={`al-route${mine ? ' al-route-mine' : ''}${sel ? ' al-route-sel' : ''}${pulse ? ' al-pulse-route' : ''}${isNew ? ' al-route-new' : ''}${r.flying ? '' : ' al-route-idle'}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onPick({ kind: 'route', company: r.company, route: r.route });
+      }}
+    >
+      <path d={r.d} className="al-route-hit" strokeWidth={10 * k} />
+      {sel && <path d={r.d} className="al-route-halo" strokeWidth={(mine ? 7 : 6) * k} />}
+      <path d={r.d} className="al-route-case" strokeWidth={(mine ? 4 : 2.9) * k} />
+      <path d={r.d} stroke={r.ink} strokeWidth={(mine ? 2.4 : 1.5) * k} strokeDasharray={r.flying ? undefined : `${4 * k} ${3 * k}`} className="al-route-line" />
+    </g>
+  );
+});
+
+interface RouteLayerProps {
+  routes: MapRoute[];
+  k: number;
+  viewer: number;
+  selKey: string | null;
+  pulseRoute: Map<string, number>;
+  newRoute: Set<string>;
+  onPick: (sel: Selection) => void;
+}
+
+/** 노선들 (지도를 끌기만 할 때는 다시 그리지 않는다) */
+const RouteLayer = memo(function RouteLayer({ routes, k, viewer, selKey, pulseRoute, newRoute, onPick }: RouteLayerProps) {
+  return (
+    <g className="al-routes">
+      {routes.map((r) => {
+        const pulse = pulseRoute.get(`${r.company}|${r.pair}`);
+        return <RouteItem key={r.key + (pulse ?? '')} r={r} k={k} mine={r.company === viewer} sel={selKey === r.key} pulse={pulse !== undefined} isNew={newRoute.has(r.key)} onPick={onPick} />;
+      })}
+    </g>
+  );
+});
+
+/** 나는 비행기 */
+const PlaneLayer = memo(function PlaneLayer({ planes, k, viewer, flying }: { planes: MapRoute[]; k: number; viewer: number; flying: boolean }) {
+  return (
+    <g className="al-planes" aria-hidden="true">
+      {planes.flatMap((r, i) => {
+        const dur = (flying ? 1.6 : 6) + r.dist / (flying ? 6000 : 1600);
+        const begin = `${-((i * 1.37) % dur).toFixed(2)}s`;
+        // 지도 끝을 넘는 노선은 두 벌 모두에 같은 때에 띄워서, 한쪽 끝으로 나가면 반대쪽에서 들어온다
+        return r.copies.map((path, j) => (
+          <path key={`${r.key}-${j}-${flying ? 'f' : 'n'}`} d={MAP_PLANE_D} fill={r.ink} className="al-map-plane" transform={`scale(${(r.company === viewer ? 1 : 0.8) * k})`}>
+            <animateMotion dur={`${dur.toFixed(1)}s`} repeatCount="indefinite" rotate="auto" path={path} begin={begin} />
+          </path>
+        ));
+      })}
+    </g>
+  );
+});
+
+interface CityLayerProps {
+  companies: Company[];
+  year: number;
+  k: number;
+  zoom: number;
+  viewer: number;
+  focusCo: number | null;
+  selCity: string | null;
+  branchOf: Map<string, number[]>;
+  pulseCity: Map<string, number>;
+  onPick: (sel: Selection) => void;
+  onSelect: (sel: Selection) => void;
+}
+
+/** 도시 (지도를 끌기만 할 때는 다시 그리지 않는다) */
+const CityLayer = memo(function CityLayer({ companies, year, k, zoom, viewer, focusCo, selCity, branchOf, pulseCity, onPick, onSelect }: CityLayerProps) {
+  // 이름을 늘 붙일 지점: 고른 회사, 없으면 지금 보는 회사
+  const labelCo = companies[focusCo ?? viewer];
+  const fontPx = 11;
+  const showLabel = (id: string) => {
+    if (zoom >= 1.7) return true;
+    if (selCity === id) return true;
+    if (labelCo?.branches.includes(id)) return true;
+    return citySize(CITY[id], year) >= 7.5;
+  };
+  return (
+    <g className="al-cities">
+      {CITIES.map((city) => {
+        const p = project(city.lon, city.lat);
+        const size = citySize(city, year);
+        const r = (1.6 + size * 0.32) * k;
+        const owners = (branchOf.get(city.id) ?? []).filter((ci) => focusCo === null || ci === focusCo).filter((ci, k, all) => all.length <= 4 || ci === viewer || companies[ci].hub === city.id || k < 3).slice(0, 5);
+        const sel = selCity === city.id;
+        const lp = LABEL_POS[city.id];
+        const fs = fontPx * k;
+        const lx = lp === 'l' ? p.x - r - 3 * k : lp === 't' || lp === 'b' ? p.x : p.x + r + 3 * k;
+        const ly = lp === 't' ? p.y - r - 4 * k : lp === 'b' ? p.y + r + fs : p.y + fs * 0.35;
+        const anchor = lp === 'l' ? 'end' : lp === 't' || lp === 'b' ? 'middle' : 'start';
+        const pulse = pulseCity.get(city.id);
+        const hubOf = owners.find((ci) => companies[ci].hub === city.id);
+        return (
+          <g
+            key={city.id + (pulse ?? '')}
+            className={`al-city${sel ? ' al-city-sel' : ''}${pulse ? ' al-pulse-city' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onPick({ kind: 'city', id: city.id });
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label={`${city.name} (${REGION_INFO[city.region].name})`}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onSelect({ kind: 'city', id: city.id });
+              }
+            }}
+          >
+            <circle cx={p.x} cy={p.y} r={Math.max(r * 1.6, 6 * k)} className="al-city-hit" />
+            {sel && <circle cx={p.x} cy={p.y} r={r + 4 * k} className="al-city-ring" strokeWidth={1.6 * k} />}
+            {hubOf !== undefined && <circle cx={p.x} cy={p.y} r={r + 2.4 * k} fill="none" stroke={coColors(companies[hubOf]).main} strokeWidth={1.8 * k} />}
+            <circle cx={p.x} cy={p.y} r={r} className="al-city-dot" strokeWidth={0.9 * k} />
+            {owners.map((ci, j) => {
+              const co = companies[ci];
+              const ang = (-50 + j * 50) * (Math.PI / 180);
+              const ox = p.x + Math.cos(ang) * (r + 4.5 * k);
+              const oy = p.y - r - 3.5 * k + Math.sin(ang) * 2 * k;
+              return <g key={ci}>{shapeElement(SEAT_SHAPES[co.seat], ox, oy, 2.6 * k, coColors(co).main, { stroke: '#fff', strokeWidth: 0.7 * k })}</g>;
+            })}
+            {zoom >= 2.6 && (
+              <g transform={`translate(${p.x - 7 * k} ${p.y - r - 18 * k}) scale(${(14 / 24) * k})`} className="al-city-mark">
+                <LandmarkIcon kind={city.landmark} size={24} />
+              </g>
+            )}
+            {showLabel(city.id) && (
+              <text x={lx} y={ly} fontSize={fs} textAnchor={anchor} className="al-city-label" strokeWidth={3 * k}>
+                {city.name}
+              </text>
+            )}
+          </g>
+        );
+      })}
+    </g>
+  );
+});
+
+/**
+ * 세계 지도. 세 장을 겹쳐 그린다: 아래 (바다·땅·노선), 가운데 (나는 비행기·취항 연출), 위 (도시).
+ * 비행기는 쉬지 않고 움직이니 가운데 장만 따로 다시 그리게 해서, 노선이 수백 개여도 화면이 굼뜨지 않게 한다.
+ */
+export const MapView = memo(function MapView({ state, viewer, selected, onSelect, pulses: allPulses, flying, fx, zoomCmd, focusCo = null, onFocusCo }: MapViewProps) {
   const [view, setView] = useState<View>(FULL);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const stackRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ x: number; y: number; view: View; moved: boolean; id: number } | null>(null);
   const width = useElementWidth(wrapRef);
@@ -119,6 +336,7 @@ export function MapView({ state, viewer, selected, onSelect, pulses: allPulses, 
   const zoom = MAP_W / view.w;
   const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const animate = fx && !reduced;
+  const viewBox = `${view.x} ${view.y} ${view.w} ${view.h}`;
 
   const zoomBy = useCallback((f: number, cx?: number, cy?: number) => {
     setView((v) => {
@@ -149,7 +367,7 @@ export function MapView({ state, viewer, selected, onSelect, pulses: allPulses, 
 
   // 휠로 확대 (passive가 아니어야 화면이 같이 굴러가지 않는다)
   useEffect(() => {
-    const el = svgRef.current;
+    const el = stackRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -160,11 +378,11 @@ export function MapView({ state, viewer, selected, onSelect, pulses: allPulses, 
     return () => el.removeEventListener('wheel', onWheel);
   }, [toMap, zoomBy]);
 
-  const onPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     drag.current = { x: e.clientX, y: e.clientY, view, moved: false, id: e.pointerId };
   };
-  const onPointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     const d = drag.current;
     if (!d || d.id !== e.pointerId) return;
     const dx = e.clientX - d.x;
@@ -172,48 +390,59 @@ export function MapView({ state, viewer, selected, onSelect, pulses: allPulses, 
     if (!d.moved && Math.hypot(dx, dy) < 5) return;
     if (!d.moved) {
       d.moved = true;
-      svgRef.current?.setPointerCapture(e.pointerId);
+      stackRef.current?.setPointerCapture(e.pointerId);
     }
     const s = d.view.w / Math.max(1, width);
     setView(clampView({ ...d.view, x: d.view.x - dx * s, y: d.view.y - dy * s }));
   };
-  const endDrag = (e: ReactPointerEvent<SVGSVGElement>) => {
+  const endDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
     const d = drag.current;
-    if (d && d.moved) svgRef.current?.releasePointerCapture(e.pointerId);
+    if (d && d.moved && stackRef.current?.hasPointerCapture(e.pointerId)) stackRef.current.releasePointerCapture(e.pointerId);
     // 끌기가 끝난 직후의 click은 무시한다
     window.setTimeout(() => {
       if (drag.current === d) drag.current = null;
     }, 0);
   };
   const wasDrag = () => !!drag.current?.moved;
-
-  const landPaths = useMemo(() => LAND.map((s) => ({ name: s.name, d: shapePath(s.pts) })), []);
-  const waterPaths = useMemo(() => WATER.map((s) => ({ name: s.name, d: shapePath(s.pts) })), []);
+  // 노선·도시를 눌렀을 때 (끌기였으면 무시). 늘 같은 함수라 노선·도시 장을 다시 그리지 않는다
+  const pick = useCallback(
+    (sel: Selection) => {
+      if (!drag.current?.moved) onSelect(sel);
+    },
+    [onSelect],
+  );
 
   // 노선들 (같은 두 도시를 여러 회사가 날면 조금씩 다르게 휘게)
   const allRoutes = useMemo(() => {
     const lanes = new Map<string, number>();
-    const out: { key: string; company: number; route: number; d: string; copies: string[]; mid: { x: number; y: number }; flying: boolean; freq: number; pair: string; dist: number }[] = [];
+    const out: MapRoute[] = [];
     state.companies.forEach((c, ci) => {
       if (c.out) return;
+      const ink = mapInk(coColors(c).main);
       for (const r of c.routes) {
         const pair = pairKey(r.a, r.b);
         const lane = lanes.get(pair) ?? 0;
         lanes.set(pair, lane + 1);
-        const arc = greatCircleArc(CITY[r.a], CITY[r.b], lane === 0 ? 0 : lane % 2 === 1 ? Math.ceil(lane / 2) : -lane / 2);
+        const arc = routeArc(r.a, r.b, lane === 0 ? 0 : lane % 2 === 1 ? Math.ceil(lane / 2) : -lane / 2);
         const freq = routeFreq(c, r.id);
-        out.push({ key: `${ci}-${r.id}`, company: ci, route: r.id, d: arc.d, copies: arc.copies, mid: arc.mid, flying: freq > 0, freq, pair, dist: dist(r.a, r.b) });
+        out.push({ key: `${ci}-${r.id}`, company: ci, route: r.id, d: arc.d, copies: arc.copies, mid: arc.mid, flying: freq > 0, freq, pair, dist: dist(r.a, r.b), ink });
       }
     });
     return out;
   }, [state.companies]);
   // 회사를 골랐으면 그 회사 노선만 (휘는 자리는 모든 노선 기준이라 골라도 선이 움직이지 않는다)
-  const routes = focusCo === null ? allRoutes : allRoutes.filter((r) => r.company === focusCo);
-  const pulses = focusCo === null ? allPulses : allPulses.filter((p) => p.company === focusCo);
+  const routes = useMemo(() => (focusCo === null ? allRoutes : allRoutes.filter((r) => r.company === focusCo)), [allRoutes, focusCo]);
+  const pulses = useMemo(() => (focusCo === null ? allPulses : allPulses.filter((p) => p.company === focusCo)), [allPulses, focusCo]);
 
-  const pulseRoute = new Map<string, number>();
-  const pulseCity = new Map<string, number>();
-  for (const p of pulses) (p.kind === 'route' ? pulseRoute : pulseCity).set(p.kind === 'route' ? `${p.company}|${p.key}` : p.key, p.id);
+  const [pulseRoute, pulseCity] = useMemo(() => {
+    const byRoute = new Map<string, number>();
+    const byCity = new Map<string, number>();
+    for (const p of pulses) {
+      if (p.kind === 'route') byRoute.set(`${p.company}|${p.key}`, p.id);
+      else byCity.set(p.key, p.id);
+    }
+    return [byRoute, byCity];
+  }, [pulses]);
 
   const branchOf = useMemo(() => {
     const m = new Map<string, number[]>();
@@ -230,41 +459,36 @@ export function MapView({ state, viewer, selected, onSelect, pulses: allPulses, 
     return focusCo !== null && !ids.includes(focusCo) ? [...ids, focusCo] : ids;
   }, [state, viewer, focusCo]);
 
-  // 이름을 늘 붙일 지점: 고른 회사, 없으면 지금 보는 회사
-  const labelCo = state.companies[focusCo ?? viewer];
-  const fontPx = 11;
-  const showLabel = (id: string) => {
-    if (zoom >= 1.7) return true;
-    if (selected?.kind === 'city' && selected.id === id) return true;
-    if (labelCo?.branches.includes(id)) return true;
-    return citySize(CITY[id], year) >= 7.5;
-  };
-
   // 지도 위에 띄울 비행기 수는 적당히
-  const animated = animate ? [...routes].filter((r) => r.flying).sort((a, b) => (a.company === viewer ? -1 : 0) - (b.company === viewer ? -1 : 0)).slice(0, 70) : [];
+  const animated = useMemo(
+    () => (animate ? routes.filter((r) => r.flying).sort((a, b) => (a.company === viewer ? -1 : 0) - (b.company === viewer ? -1 : 0)).slice(0, 70) : []),
+    [animate, routes, viewer],
+  );
 
-  const selRoute = selected?.kind === 'route' ? routes.find((r) => r.company === selected.company && r.route === selected.route) : null;
+  const selKey = selected?.kind === 'route' ? `${selected.company}-${selected.route}` : null;
+  const selCity = selected?.kind === 'city' ? selected.id : null;
 
   // 새 노선 취항: 노선이 그려지고, 첫 비행기가 날아가고, 닿은 도시가 반짝인다
-  const openings = animate
-    ? pulses.flatMap((p) => {
-        if (p.kind !== 'route') return [];
-        const r = [...routes].reverse().find((x) => x.company === p.company && x.pair === p.key);
-        if (!r) return [];
-        const route = state.companies[p.company]?.routes.find((x) => x.id === r.route);
-        return route ? [{ id: p.id, r, a: route.a, b: route.b }] : [];
-      })
-    : [];
-  const newRoute = new Set(openings.map((o) => o.r.key));
+  const openings = useMemo(
+    () =>
+      animate
+        ? pulses.flatMap((p) => {
+            if (p.kind !== 'route') return [];
+            const r = [...routes].reverse().find((x) => x.company === p.company && x.pair === p.key);
+            if (!r) return [];
+            const route = state.companies[p.company]?.routes.find((x) => x.id === r.route);
+            return route ? [{ id: p.id, r, a: route.a, b: route.b }] : [];
+          })
+        : [],
+    [animate, pulses, routes, state.companies],
+  );
+  const newRoute = useMemo(() => new Set(openings.map((o) => o.r.key)), [openings]);
 
   return (
     <div className="al-map-wrap" ref={wrapRef}>
-      <svg
-        ref={svgRef}
-        className={`al-map${flying ? ' al-map-flying' : ''}`}
-        viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
-        role="img"
-        aria-label={`세계 지도${focusCo !== null && state.companies[focusCo] ? ` (${state.companies[focusCo].name} 노선만)` : ''}: 도시를 누르면 정보가, 노선을 누르면 노선 정보가 나와요`}
+      <div
+        className="al-map-stack"
+        ref={stackRef}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
@@ -273,164 +497,77 @@ export function MapView({ state, viewer, selected, onSelect, pulses: allPulses, 
           if (!wasDrag()) onSelect(null);
         }}
       >
-        <defs>
-          <linearGradient id="al-sea" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" className="al-sea-top" />
-            <stop offset="1" className="al-sea-bottom" />
-          </linearGradient>
-        </defs>
-        <rect x={-MAP_W} y={-50} width={MAP_W * 3} height={MAP_H + 100} fill="url(#al-sea)" />
-        {[0, 23.44, -23.44].map((lat) => {
-          const y = project(0, lat).y;
-          return <line key={lat} x1={0} x2={MAP_W} y1={y} y2={y} className={lat === 0 ? 'al-equator' : 'al-tropic'} strokeWidth={k} />;
-        })}
-        <g className="al-land">
-          {landPaths.map((p) => (
-            <path key={p.name} d={p.d} strokeWidth={0.8 * k} />
-          ))}
-        </g>
-        <g className="al-water">
-          {waterPaths.map((p) => (
-            <path key={p.name} d={p.d} strokeWidth={0.6 * k} />
-          ))}
-        </g>
+        <svg
+          ref={svgRef}
+          className={`al-map${flying ? ' al-map-flying' : ''}`}
+          viewBox={viewBox}
+          role="img"
+          aria-label={`세계 지도${focusCo !== null && state.companies[focusCo] ? ` (${state.companies[focusCo].name} 노선만)` : ''}: 도시를 누르면 정보가, 노선을 누르면 노선 정보가 나와요`}
+        >
+          <defs>
+            <linearGradient id="al-sea" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" className="al-sea-top" />
+              <stop offset="1" className="al-sea-bottom" />
+            </linearGradient>
+          </defs>
+          <LandLayer k={k} />
+          <RouteLayer routes={routes} k={k} viewer={viewer} selKey={selKey} pulseRoute={pulseRoute} newRoute={newRoute} onPick={pick} />
+        </svg>
 
-        {/* 노선 */}
-        <g className="al-routes">
-          {routes.map((r) => {
-            const c = state.companies[r.company];
-            const color = coColors(c).main;
-            const mine = r.company === viewer;
-            const sel = selRoute === r;
-            const pulse = pulseRoute.get(`${r.company}|${r.pair}`);
-            return (
-              <g
-                key={r.key + (pulse ?? '')}
-                className={`al-route${mine ? ' al-route-mine' : ''}${sel ? ' al-route-sel' : ''}${pulse ? ' al-pulse-route' : ''}${newRoute.has(r.key) ? ' al-route-new' : ''}${r.flying ? '' : ' al-route-idle'}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!wasDrag()) onSelect({ kind: 'route', company: r.company, route: r.route });
-                }}
-              >
-                <path d={r.d} className="al-route-hit" strokeWidth={10 * k} />
-                {sel && <path d={r.d} className="al-route-halo" strokeWidth={(mine ? 7 : 6) * k} />}
-                <path d={r.d} className="al-route-case" strokeWidth={(mine ? 4 : 2.9) * k} />
-                <path d={r.d} stroke={color} strokeWidth={(mine ? 2.4 : 1.5) * k} strokeDasharray={r.flying ? undefined : `${4 * k} ${3 * k}`} className="al-route-line" />
-              </g>
-            );
-          })}
-        </g>
-
-        {/* 나는 비행기 */}
-        <g className="al-planes" aria-hidden="true">
-          {animated.flatMap((r, i) => {
-            const c = state.companies[r.company];
-            const dur = (flying ? 1.6 : 6) + r.dist / (flying ? 6000 : 1600);
-            const begin = `${-((i * 1.37) % dur).toFixed(2)}s`;
-            // 지도 끝을 넘는 노선은 두 벌 모두에 같은 때에 띄워서, 한쪽 끝으로 나가면 반대쪽에서 들어온다
-            return r.copies.map((path, j) => (
-              <path key={`${r.key}-${j}-${flying ? 'f' : 'n'}`} d={MAP_PLANE_D} fill={coColors(c).main} className="al-map-plane" transform={`scale(${(r.company === viewer ? 1 : 0.8) * k})`}>
-                <animateMotion dur={`${dur.toFixed(1)}s`} repeatCount="indefinite" rotate="auto" path={path} begin={begin} />
-              </path>
-            ));
-          })}
-        </g>
-
-        {/* 새 노선 취항 연출 */}
-        {openings.length > 0 && (
-          <g className="al-openings" aria-hidden="true">
-            {openings.map((o) => {
-              const color = coColors(state.companies[o.r.company]).main;
-              const pa = project(CITY[o.a].lon, CITY[o.a].lat);
-              const pb = project(CITY[o.b].lon, CITY[o.b].lat);
-              return (
-                <g key={`open-${o.id}`} className="al-open">
-                  {o.r.copies.map((path, j) => (
-                    <g key={j}>
-                      <path d={path} pathLength={1} className="al-open-glow" stroke={color} strokeWidth={9 * k} />
-                      <path d={path} pathLength={1} className="al-open-draw" stroke={color} strokeWidth={3.2 * k} />
-                      <path d={MAP_PLANE_D} fill={color} stroke="#fff" strokeWidth={0.5} className="al-open-plane" transform={`scale(${1.8 * k})`}>
-                        <animateMotion ref={startMotion} dur="1.5s" begin="indefinite" fill="freeze" rotate="auto" path={path} calcMode="spline" keyPoints="0;1" keyTimes="0;1" keySplines="0.45 0 0.3 1" />
-                      </path>
+        {/* 나는 비행기와 취항 연출: 쉬지 않고 움직이니 따로 한 장에 (아래 지도를 다시 그리지 않게) */}
+        <svg className="al-map-layer al-map-air" viewBox={viewBox} aria-hidden="true">
+          <PlaneLayer planes={animated} k={k} viewer={viewer} flying={flying} />
+          {openings.length > 0 && (
+            <g className="al-openings">
+              {openings.map((o) => {
+                const color = coColors(state.companies[o.r.company]).main;
+                const pa = project(CITY[o.a].lon, CITY[o.a].lat);
+                const pb = project(CITY[o.b].lon, CITY[o.b].lat);
+                return (
+                  <g key={`open-${o.id}`} className="al-open">
+                    {o.r.copies.map((path, j) => (
+                      <g key={j}>
+                        <path d={path} pathLength={1} className="al-open-glow" stroke={color} strokeWidth={9 * k} />
+                        <path d={path} pathLength={1} className="al-open-draw" stroke={color} strokeWidth={3.2 * k} />
+                        <path d={MAP_PLANE_D} fill={color} stroke="#fff" strokeWidth={0.5} className="al-open-plane" transform={`scale(${1.8 * k})`}>
+                          <animateMotion ref={startMotion} dur="1.5s" begin="indefinite" fill="freeze" rotate="auto" path={path} calcMode="spline" keyPoints="0;1" keyTimes="0;1" keySplines="0.45 0 0.3 1" />
+                        </path>
+                      </g>
+                    ))}
+                    <circle cx={pa.x} cy={pa.y} r={7 * k} className="al-open-ring" stroke={color} style={{ animationDelay: '0s' }} />
+                    {[1.35, 1.6, 1.85].map((delay) => (
+                      <circle key={delay} cx={pb.x} cy={pb.y} r={7 * k} className="al-open-ring" stroke={color} strokeWidth={2 * k} style={{ animationDelay: `${delay}s` }} />
+                    ))}
+                    <g transform={`translate(${o.r.mid.x} ${o.r.mid.y - 9 * k}) scale(${k})`} className="al-open-tag">
+                      <rect x={-34} y={-11} width={68} height={18} rx={9} fill={color} />
+                      <text x={0} y={2.5} textAnchor="middle" className="al-open-tag-text">
+                        ✈ 신규 취항
+                      </text>
                     </g>
-                  ))}
-                  <circle cx={pa.x} cy={pa.y} r={7 * k} className="al-open-ring" stroke={color} style={{ animationDelay: '0s' }} />
-                  {[1.35, 1.6, 1.85].map((delay) => (
-                    <circle key={delay} cx={pb.x} cy={pb.y} r={7 * k} className="al-open-ring" stroke={color} strokeWidth={2 * k} style={{ animationDelay: `${delay}s` }} />
-                  ))}
-                  <g transform={`translate(${o.r.mid.x} ${o.r.mid.y - 9 * k}) scale(${k})`} className="al-open-tag">
-                    <rect x={-34} y={-11} width={68} height={18} rx={9} fill={color} />
-                    <text x={0} y={2.5} textAnchor="middle" className="al-open-tag-text">
-                      ✈ 신규 취항
-                    </text>
                   </g>
-                </g>
-              );
-            })}
-          </g>
-        )}
+                );
+              })}
+            </g>
+          )}
+        </svg>
 
         {/* 도시 */}
-        <g className="al-cities">
-          {CITIES.map((city) => {
-            const p = project(city.lon, city.lat);
-            const size = citySize(city, year);
-            const r = (1.6 + size * 0.32) * k;
-            const owners = (branchOf.get(city.id) ?? []).filter((ci) => focusCo === null || ci === focusCo).filter((ci, k, all) => all.length <= 4 || ci === viewer || state.companies[ci].hub === city.id || k < 3).slice(0, 5);
-            const sel = selected?.kind === 'city' && selected.id === city.id;
-            const lp = LABEL_POS[city.id];
-            const fs = fontPx * k;
-            const lx = lp === 'l' ? p.x - r - 3 * k : lp === 't' || lp === 'b' ? p.x : p.x + r + 3 * k;
-            const ly = lp === 't' ? p.y - r - 4 * k : lp === 'b' ? p.y + r + fs : p.y + fs * 0.35;
-            const anchor = lp === 'l' ? 'end' : lp === 't' || lp === 'b' ? 'middle' : 'start';
-            const pulse = pulseCity.get(city.id);
-            const hubOf = owners.find((ci) => state.companies[ci].hub === city.id);
-            return (
-              <g
-                key={city.id + (pulse ?? '')}
-                className={`al-city${sel ? ' al-city-sel' : ''}${pulse ? ' al-pulse-city' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!wasDrag()) onSelect({ kind: 'city', id: city.id });
-                }}
-                role="button"
-                tabIndex={0}
-                aria-label={`${city.name} (${REGION_INFO[city.region].name})`}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onSelect({ kind: 'city', id: city.id });
-                  }
-                }}
-              >
-                <circle cx={p.x} cy={p.y} r={Math.max(r * 1.6, 6 * k)} className="al-city-hit" />
-                {sel && <circle cx={p.x} cy={p.y} r={r + 4 * k} className="al-city-ring" strokeWidth={1.6 * k} />}
-                {hubOf !== undefined && (
-                  <circle cx={p.x} cy={p.y} r={r + 2.4 * k} fill="none" stroke={coColors(state.companies[hubOf]).main} strokeWidth={1.8 * k} />
-                )}
-                <circle cx={p.x} cy={p.y} r={r} className="al-city-dot" strokeWidth={0.9 * k} />
-                {owners.map((ci, j) => {
-                  const co = state.companies[ci];
-                  const ang = (-50 + j * 50) * (Math.PI / 180);
-                  const ox = p.x + Math.cos(ang) * (r + 4.5 * k);
-                  const oy = p.y - r - 3.5 * k + Math.sin(ang) * 2 * k;
-                  return <g key={ci}>{shapeElement(SEAT_SHAPES[co.seat], ox, oy, 2.6 * k, coColors(co).main, { stroke: '#fff', strokeWidth: 0.7 * k })}</g>;
-                })}
-                {zoom >= 2.6 && (
-                  <g transform={`translate(${p.x - 7 * k} ${p.y - r - 18 * k}) scale(${(14 / 24) * k})`} className="al-city-mark">
-                    <LandmarkIcon kind={city.landmark} size={24} />
-                  </g>
-                )}
-                {showLabel(city.id) && (
-                  <text x={lx} y={ly} fontSize={fs} textAnchor={anchor} className="al-city-label" strokeWidth={3 * k}>
-                    {city.name}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-        </g>
-      </svg>
+        <svg className="al-map-layer al-map-top" viewBox={viewBox} role="group" aria-label="도시">
+          <CityLayer
+            companies={state.companies}
+            year={year}
+            k={k}
+            zoom={zoom}
+            viewer={viewer}
+            focusCo={focusCo}
+            selCity={selCity}
+            branchOf={branchOf}
+            pulseCity={pulseCity}
+            onPick={pick}
+            onSelect={onSelect}
+          />
+        </svg>
+      </div>
 
       <div className="al-map-tools" role="toolbar" aria-label="지도 보기">
         <button type="button" className="al-map-btn" onClick={() => zoomBy(0.7)} aria-label="확대 (+)" title="확대 (+)">
@@ -486,4 +623,4 @@ export function MapView({ state, viewer, selected, onSelect, pulses: allPulses, 
       )}
     </div>
   );
-}
+});

@@ -40,6 +40,8 @@
   --al-city-stroke: #050c17;
   --al-label: #e4eefa;
   --al-halo: #06101e;
+  /* 노선 테두리: --al-halo를 지도 노선 색처럼 밝힌 색 (brand.ts mapInk) */
+  --al-route-halo: #08172d;
   --al-good: #4fd69c;
   --al-bad: #ff6f6f;
   --al-warn: #ffb547;
@@ -286,6 +288,13 @@
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
 }
+.al-map-stack {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  user-select: none;
+}
 .al-map {
   display: block;
   width: 100%;
@@ -296,6 +305,21 @@
 }
 .al-map:active {
   cursor: grabbing;
+}
+/* 지도 위에 겹친 장 (나는 비행기, 도시). 빈 곳은 눌러도 아래 지도가 받는다 */
+.al-map-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+/* 비행기는 쉬지 않고 움직이니 따로 한 장으로 띄워, 노선 수백 개가 깔린 아래 지도를 매번 다시 그리지 않게 한다 */
+.al-map-air {
+  will-change: transform;
+}
+.al-map-top .al-city {
+  pointer-events: auto;
 }
 .al-sea-top {
   stop-color: var(--al-sea-top);
@@ -325,41 +349,45 @@
   cursor: pointer;
 }
 .al-route-hit {
+  /* 그리지 않고 누르기만 받는다 (노선이 많으면 투명한 굵은 선을 그리는 것도 일이다) */
   fill: none;
-  stroke: transparent;
+  stroke: #000;
+  visibility: hidden;
+  pointer-events: stroke;
 }
+/* 노선 선은 opacity 대신 stroke-opacity로 비친다: opacity는 선마다 따로 한 장씩 그려 겹쳐서, 노선이 많으면 느리다 */
 .al-route-line {
   fill: none;
   stroke-linecap: round;
-  opacity: 0.5;
-  transition: opacity 0.2s;
+  stroke-opacity: 0.5;
+  transition: stroke-opacity 0.2s;
 }
 .al-route-mine .al-route-line {
-  opacity: 0.95;
+  stroke-opacity: 0.95;
 }
 .al-route-idle .al-route-line {
-  opacity: 0.35;
+  stroke-opacity: 0.35;
 }
 .al-route:hover .al-route-line,
 .al-map-flying .al-route-line {
-  opacity: 1;
+  stroke-opacity: 1;
 }
 .al-route-halo {
   fill: none;
-  stroke: var(--al-halo);
+  stroke: var(--al-route-halo);
   stroke-linecap: round;
-  opacity: 0.85;
+  stroke-opacity: 0.85;
 }
 .al-pulse-route .al-route-line {
   animation: al-route-pulse 1.1s ease-out 2;
 }
 @keyframes al-route-pulse {
   0% {
-    opacity: 1;
+    stroke-opacity: 1;
     stroke-width: 6;
   }
   100% {
-    opacity: 0.95;
+    stroke-opacity: 0.95;
   }
 }
 .al-map-plane {
@@ -372,7 +400,10 @@
   outline: none;
 }
 .al-city-hit {
-  fill: transparent;
+  /* 그리지 않고 누르기만 받는다 */
+  fill: #000;
+  visibility: hidden;
+  pointer-events: fill;
 }
 .al-city-dot {
   fill: var(--al-city);
@@ -3033,13 +3064,13 @@
 }
 .al-route-case {
   fill: none;
-  stroke: var(--al-halo);
+  stroke: var(--al-route-halo);
   stroke-linecap: round;
-  opacity: 0.55;
+  stroke-opacity: 0.55;
   pointer-events: none;
 }
 .al-route-idle .al-route-case {
-  opacity: 0.3;
+  stroke-opacity: 0.3;
 }
 .al-turn-photo {
   float: none;
@@ -3054,10 +3085,7 @@
   aspect-ratio: auto !important;
   height: 100%;
 }
-.al-routes,
-.al-planes {
-  filter: brightness(1.45) saturate(1.05);
-}
+/* 노선·비행기 색은 밝혀서 칠한다 (brand.ts mapInk). 예전처럼 묶음 전체에 filter를 걸면 노선이 많을 때 아주 느리다 */
 
 /* ---------------------------------------------------------------- 좌석 배치·기내식 */
 .al-cabin-link {
@@ -3170,7 +3198,7 @@
     opacity: 0;
   }
   100% {
-    opacity: 0.95;
+    opacity: 1;
   }
 }
 .al-openings {

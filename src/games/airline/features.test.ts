@@ -11,7 +11,7 @@ import { CRISIS_MONTHS, MAX_PLANES, actor, applyAction, choiceBlocker, createGam
 import { MAX_DELIVERIES, computeQuarter, networks } from './simulate';
 import { allianceOf } from './alliances';
 import { isValidState, parseSaved } from './storage';
-import { colorDistance, coColors, gameHub, pickColors, usableColor } from './brand';
+import { colorDistance, coColors, gameHub, mapInk, pickColors, usableColor } from './brand';
 import { CITY } from './cities';
 import { REAL_AIRLINE, airlinesAt } from './realAirlines';
 import { monthOf, qOf, yearOfM } from './time';
@@ -701,5 +701,17 @@ describe('실제 항공사', () => {
     broken.companies[0].airline = 'no-such-airline';
     const again = parseSaved({ setup: su, state: broken, savedAt: 1 });
     expect(again!.state.companies[0].airline).toBeNull();
+  });
+});
+
+describe('지도 노선 색', () => {
+  it('예전 CSS 필터 brightness(1.45) saturate(1.05)를 건 것과 같은 색을 낸다 (크롬에서 잰 값)', () => {
+    expect(mapInk('#1e6fd9')).toBe('#27a2ff');
+    expect(mapInk('#06101e')).toBe('#08172d');
+    expect(mapInk('#c8102e')).toBe('#ff1542');
+    expect(mapInk('#00a651')).toBe('#00f472');
+    expect(mapInk('#f5a623')).toBe('#fff12a');
+    expect(mapInk('#7a3fb0')).toBe('#b45aff');
+    expect(mapInk('#4cc9ff')).toBe('#69ffff');
   });
 });

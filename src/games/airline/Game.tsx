@@ -439,11 +439,15 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
     setSelected({ kind: 'city', id });
     setTab('map');
   };
-  const focusCompany = (ci: number | null) => {
-    setFocusCo(ci);
-    // 고른 회사가 아닌 노선을 보고 있었으면 지도에서 사라지니 정보 칸도 닫는다
-    if (ci !== null && selected?.kind === 'route' && selected.company !== ci) setSelected(null);
-  };
+  // 늘 같은 함수여야 지도가 쓸데없이 다시 그려지지 않는다
+  const focusCompany = useCallback(
+    (ci: number | null) => {
+      setFocusCo(ci);
+      // 고른 회사가 아닌 노선을 보고 있었으면 지도에서 사라지니 정보 칸도 닫는다
+      if (ci !== null && selected?.kind === 'route' && selected.company !== ci) setSelected(null);
+    },
+    [selected],
+  );
   const canFocus = game.companies.length > 1;
 
   // 키보드

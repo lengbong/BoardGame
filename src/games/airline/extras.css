@@ -184,3 +184,48 @@
 .al-check-policy {
   margin-top: 8px;
 }
+
+/* ---------------------------------------------------------------- 공항 시설 */
+.al-fac-row {
+  margin-top: 6px;
+}
+.al-fac-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.al-fac-icon {
+  flex: none;
+}
+.al-fac-lounge {
+  color: var(--al-cat-5, #e87ba4);
+}
+.al-fac-base {
+  color: var(--al-c-crew);
+}
+.al-fac-terminal {
+  color: var(--al-blue);
+}
+.al-fac-list {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.al-fac-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.al-fac-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 13px;
+}
+.al-fac-main small {
+  font-size: 11.5px;
+}

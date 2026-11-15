@@ -3,6 +3,7 @@ import { MAX_ROUTES } from './limits';
 import { CAMPAIGN_INFO, MEDIA_INFO, mediaOf } from './ads';
 import { cabinPresets, sameCabin } from './cabin';
 import { checkAtOf, inCheck } from './condition';
+import { countFacility, facilityBlocker, facilityCost } from './facilities';
 import { TANK_LEVELS, tankBlocker, tankOf, tonPrice } from './fuel';
 import { makerPolitics, routePolitics } from './politics';
 import { ACADEMY_COST, STAFF_GROUPS, hireCost, hireTime, staffNeed, staffPipe } from './staff';
@@ -59,7 +60,7 @@ import {
   type DraftPlane,
 } from './simulate';
 import { monthOf, yearOf } from './time';
-import type { AdMedia, AirlineAction, AirlineState, BusinessKind, Cabin, CampaignKind, Company, ModelDef, RegionId, Rng } from './types';
+import type { AdMedia, AirlineAction, AirlineState, BusinessKind, Cabin, CampaignKind, Company, FacilityKind, ModelDef, RegionId, Rng } from './types';
 
 export type AiLevel = 'ai-easy' | 'ai-normal';
 
@@ -227,6 +228,7 @@ export class Planner {
       this.configureCabins();
       this.setMeals();
       this.buildBusinesses();
+      this.buildFacilities();
       this.setOps();
       this.manageFuel();
       this.tuneTimes();
@@ -1032,6 +1034,29 @@ export class Planner {
         if (this.act({ type: 'build', city, kind })) return;
       }
     }
+  }
+
+  /**
+   * 공항 시설 (해마다 10월, 돈이 넉넉할 때 하나씩):
+   * 본사 슬롯이 거의 찼으면 전용 터미널, 비행기가 열다섯 대 넘으면 정비 기지,
+   * 사업 손님이 많은 본사·큰 거점에는 라운지.
+   */
+  private buildFacilities(): void {
+    if (monthOf(this.s.t) !== 10 || this.style === 'relaxed') return;
+    const c = this.c;
+    const spare = (cost: number) => c.cash - this.reserve() * 4 - 200 > cost * 2;
+    const tryBuild = (city: string, kind: FacilityKind) => {
+      if (facilityBlocker(this.s, this.ci, city, kind)) return false;
+      if (!spare(facilityCost(city, kind, this.s.q))) return false;
+      return this.act({ type: 'buildFacility', city, kind });
+    };
+    if (slotsUsed(c, c.hub) > slotCapacity(this.s, this.ci, c.hub) * 0.85 && tryBuild(c.hub, 'terminal')) return;
+    if (c.planes.length >= 15 && countFacility(c, 'base') === 0 && tryBuild(c.hub, 'base')) return;
+    // 라운지: 본사부터, 그다음 노선이 많은 사업 도시
+    const count = new Map<string, number>();
+    for (const r of c.routes) for (const x of [r.a, r.b]) count.set(x, (count.get(x) ?? 0) + routeFreq(c, r.id));
+    const cities = [c.hub, ...[...count.entries()].sort((x, y) => y[1] - x[1]).map(([city]) => city)].filter((x, i, a) => a.indexOf(x) === i && CITY[x].biz >= 0.45);
+    for (const city of cities.slice(0, 4)) if (c.planes.length >= 6 && tryBuild(city, 'lounge')) return;
   }
 
   /** 비행기가 나는 노선들의 평균 거리와 사업 손님 비율 (왕복 수 가중) */

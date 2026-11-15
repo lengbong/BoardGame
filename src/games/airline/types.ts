@@ -359,6 +359,16 @@ export interface FuelTank {
   auto: number | null;
 }
 
+/** 공항 시설 (facilities.ts): 라운지·정비 기지·전용 터미널 */
+export type FacilityKind = 'lounge' | 'base' | 'terminal';
+
+export interface Facility {
+  city: string;
+  kind: FacilityKind;
+  /** 지은 값 (가치 계산·되팔기) */
+  cost: number;
+}
+
 /** 부대사업 (business.ts) */
 export type BusinessKind = 'hotel' | 'agency' | 'bus' | 'restaurant' | 'store' | 'resort' | 'ski' | 'park';
 
@@ -454,6 +464,8 @@ export interface Company {
   fuel?: FuelTank;
   /** C점검 시점: 기체 상태가 이 아래로 내려가면 점검한다 (없으면 50) */
   checkAt?: number;
+  /** 공항 시설 (없으면 없음) */
+  facilities?: Facility[];
 }
 
 /** 광고 매체 (ads.ts) */
@@ -785,6 +797,9 @@ export type AirlineAction =
   | { type: 'checkPlane'; plane: number; on: boolean }
   /** C점검 시점 (기체 상태 %) */
   | { type: 'setCheckAt'; at: number }
+  /** 공항 시설 짓기·팔기 */
+  | { type: 'buildFacility'; city: string; kind: FacilityKind }
+  | { type: 'sellFacility'; city: string; kind: FacilityKind }
   | { type: 'sellBusiness'; city: string; kind: BusinessKind }
   | { type: 'endTurn' };
 
@@ -806,6 +821,7 @@ export type GameEvent =
   | { id: number; type: 'build'; company: number; city: string; kind: BusinessKind }
   | { id: number; type: 'fuel'; company: number; tons: number; what: 'buy' | 'sell' | 'tank' }
   | { id: number; type: 'check'; company: number; plane: number; on: boolean }
+  | { id: number; type: 'facility'; company: number; city: string; kind: FacilityKind }
   | { id: number; type: 'turn'; company: number }
   | { id: number; type: 'month'; t: number }
   | { id: number; type: 'quarter'; q: number }

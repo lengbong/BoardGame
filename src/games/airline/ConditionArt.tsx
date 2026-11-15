@@ -1,5 +1,6 @@
 import './extras.css';
-import { CHECK_POLICIES, checkAtOf, checkCost, condOf, condTone, fleetCond, inCheck, monthlyWear, monthsToCheck } from './condition';
+import { CHECK_POLICIES, checkAtOf, condOf, condTone, fleetCond, inCheck, monthlyWear, monthsToCheck } from './condition';
+import { companyCheckCost, wearMult } from './facilities';
 import { FinIcon } from './FinanceArt';
 import { fmtMoney } from './format';
 import { checkBlocker } from './rules';
@@ -27,7 +28,7 @@ export function CondBar({ cond, at, width = 64 }: { cond: number; at: number; wi
 export function PlaneCondition({ state, c, p }: { state: AirlineState; c: Company; p: Plane }) {
   const at = checkAtOf(c);
   const cond = condOf(p);
-  const wear = p.legs.length > 0 ? monthlyWear(planeHours(c, p), planeAge(state, p), c.maint) : 0;
+  const wear = p.legs.length > 0 ? monthlyWear(planeHours(c, p), planeAge(state, p), c.maint) * wearMult(c) : 0;
   const left = monthsToCheck(cond, at, wear);
   return (
     <span className="al-pl-cond" title={`기체 상태 ${Math.round(cond)}% · ${at}% 아래로 내려가면 C점검`}>
@@ -57,7 +58,7 @@ export function CheckButton({ state, viewer, p, canAct, perform }: { state: Airl
   if (why === '아직 상태가 좋아요') return null;
   return (
     <ActButton small blocker={canAct ? why : notMine} onClick={() => perform({ type: 'checkPlane', plane: p.id, on: true })} title="이번 달 정비고에 넣어 상태를 되돌려요 (그달은 쉬어요)">
-      C점검 · {fmtMoney(checkCost(p))}
+      C점검 · {fmtMoney(companyCheckCost(state.companies[viewer], p))}
     </ActButton>
   );
 }
@@ -67,7 +68,7 @@ export function CheckPolicy({ state, viewer, canAct, perform }: { state: Airline
   const me = state.companies[viewer];
   const at = checkAtOf(me);
   const now = me.planes.filter((p) => inCheck(p, state.t));
-  const nowCost = now.reduce((s, p) => s + checkCost(p), 0);
+  const nowCost = now.reduce((s, p) => s + companyCheckCost(me, p), 0);
   const avg = fleetCond(me);
   const last = state.report?.companies[viewer];
   return (

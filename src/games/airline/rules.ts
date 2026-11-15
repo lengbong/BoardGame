@@ -5,7 +5,8 @@ import { BUSINESS_INFO } from './business';
 import { cabinBlocker, defaultCabin, sameCabin } from './cabin';
 import { blockText, branchPolitics, makerPolitics, politicalNews, polity, routePolitics } from './politics';
 import { CHALLENGE, challengeDeadline, checkChallenge } from './challenges';
-import { CHECK_POLICIES, checkCost, condOf, dueForCheck, inCheck, monthlyWear, restoredCond, usedCond } from './condition';
+import { CHECK_POLICIES, condOf, dueForCheck, inCheck, monthlyWear, restoredCond, usedCond } from './condition';
+import { FACILITY_INFO, FACILITY_REFUND, companyCheckCost, extraCheckSlots, facilityBlocker, facilityCost, wearMult } from './facilities';
 import { allianceChoice, allianceScore, makeChoice, nextChoiceGap } from './choices';
 import { autoAirline, gameHub, pickColors } from './brand';
 import { AIRPORT_INFO, CITIES, CITY, REGIONS, REGION_INFO, airportClass, citySize, dist, pairKey } from './cities';
@@ -510,6 +511,7 @@ export function closeBranchBlocker(state: AirlineState, ci: number, city: string
   if (c.hub === city) return '본사는 닫을 수 없어요';
   if (c.routes.some((r) => r.a === city || r.b === city)) return '이 도시를 오가는 노선을 먼저 닫아요';
   if (c.businesses.some((b) => b.city === city)) return '이 도시의 부대사업을 먼저 팔아요';
+  if ((c.facilities ?? []).some((f) => f.city === city)) return '이 공항의 시설을 먼저 팔아요';
   return null;
 }
 
@@ -580,7 +582,7 @@ export function checkBlocker(state: AirlineState, ci: number, planeId: number): 
   if (!p) return '없는 비행기예요';
   if (inCheck(p, state.t)) return '이번 달 이미 점검해요';
   if (condOf(p) >= 92) return '아직 상태가 좋아요';
-  const cost = checkCost(p);
+  const cost = companyCheckCost(c, p);
   if (c.cash < cost) return `돈이 모자라요 (${fmtMoney(cost)} 필요)`;
   return null;
 }
@@ -823,6 +825,7 @@ function cloneCompany(c: Company): Company {
     reviews: [...c.reviews],
     staff: { pilot: { ...c.staff.pilot, pipe: [...c.staff.pilot.pipe] }, cabin: { ...c.staff.cabin, pipe: [...c.staff.cabin.pipe] }, tech: { ...c.staff.tech, pipe: [...c.staff.tech.pipe] }, ground: { ...c.staff.ground, pipe: [...c.staff.ground.pipe] } },
     ...(c.fuel ? { fuel: { ...c.fuel } } : {}),
+    ...(c.facilities ? { facilities: c.facilities.map((f) => ({ ...f })) } : {}),
   };
 }
 
@@ -1254,7 +1257,27 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
         else x.check = undefined;
         pushEvent(s, { type: 'check', company: ci, plane: x.id, on: action.on });
       });
-      return addLog(s, seat, action.on ? `${c0.name}: ${MODEL[p.model].name} 이번 달 C점검 (약 ${fmtMoney(checkCost(p))})` : `${c0.name}: ${MODEL[p.model].name} C점검 미루기`);
+      return addLog(s, seat, action.on ? `${c0.name}: ${MODEL[p.model].name} 이번 달 C점검 (약 ${fmtMoney(companyCheckCost(c0, p))})` : `${c0.name}: ${MODEL[p.model].name} C점검 미루기`);
+    }
+    case 'buildFacility': {
+      if (facilityBlocker(state, ci, action.city, action.kind)) return state;
+      const cost = facilityCost(action.city, action.kind, state.q);
+      const s = edit(state, ci, (c, s) => {
+        c.cash -= cost;
+        c.facilities = [...(c.facilities ?? []), { city: action.city, kind: action.kind, cost }];
+        pushEvent(s, { type: 'facility', company: ci, city: action.city, kind: action.kind });
+      });
+      return addLog(s, seat, `${c0.name}: ${CITY[action.city].name}에 ${withJosa(FACILITY_INFO[action.kind].name, '을/를')} 지었어요 (−${fmtMoney(cost)})`);
+    }
+    case 'sellFacility': {
+      const f = (c0.facilities ?? []).find((x) => x.city === action.city && x.kind === action.kind);
+      if (!f) return state;
+      const refund = Math.round(f.cost * FACILITY_REFUND);
+      const s = edit(state, ci, (c) => {
+        c.cash += refund;
+        c.facilities = (c.facilities ?? []).filter((x) => !(x.city === action.city && x.kind === action.kind));
+      });
+      return addLog(s, seat, `${c0.name}: ${CITY[action.city].name} ${FACILITY_INFO[action.kind].name} 팔기 (+${fmtMoney(refund)})`);
     }
     case 'setCheckAt': {
       const at = Math.round(action.at);
@@ -1557,7 +1580,7 @@ export function runMonth(state: AirlineState, rng: Rng = Math.random): AirlineSt
         p.cond = restoredCond(age);
         p.check = undefined;
       } else if (p.legs.length > 0) {
-        p.cond = Math.max(0, Math.round((condOf(p) - monthlyWear(planeHours(c, p), age, c.maint)) * 10) / 10);
+        p.cond = Math.max(0, Math.round((condOf(p) - monthlyWear(planeHours(c, p), age, c.maint) * wearMult(c)) * 10) / 10);
       } else if (p.cond === undefined) p.cond = condOf(p);
     }
     // 탱크에서 쓴 연료를 덜어 낸다
@@ -1722,6 +1745,7 @@ function shutDown(state: AirlineState, ci: number, t: number): AirlineState {
   c.partner = null;
   c.choice = null;
   delete c.fuel;
+  delete c.facilities;
   s = addNews(s, {
     icon: '🛑',
     title: `${c.name} 운항 중단`,
@@ -1919,7 +1943,7 @@ function startMonth(state: AirlineState, t: number, rng: Rng): AirlineState {
       s = addLog(s, c.seat, `⛽ ${c.name}: 유가 ${s.oil.toFixed(2)}에 연료 ${autoTons.toLocaleString('ko-KR')}톤 자동으로 사 두기 (−${fmtFine(cost)})`);
     }
     // C점검: 기체 상태가 점검 시점 아래로 내려간 비행기는 이번 달 정비고에 들어간다
-    const toCheck = new Set(dueForCheck(c, t));
+    const toCheck = new Set(dueForCheck(c, t, extraCheckSlots(c)));
     if (toCheck.size > 0) {
       const names: string[] = [];
       for (const p of c.planes) {

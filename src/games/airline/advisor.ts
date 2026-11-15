@@ -6,7 +6,8 @@ import { CITY, REGIONS, airportClass, dist } from './cities';
 import { goalProgress } from './goals';
 import { CRISIS_MONTHS, MAX_ROUTES, applyAction, bestFreq, buyBlocker, checkBlocker, creditLimit, fmtFine, fmtMoney, idlePlanes, oilTarget, planeById, routeById, usedBlocker } from './rules';
 import { FUEL_TON, TANK_LEVELS, tankBlocker, tankCap, tankOf, tankSpace, tonPrice } from './fuel';
-import { checkCost, condOf, inCheck, restoredCond } from './condition';
+import { condOf, inCheck, restoredCond } from './condition';
+import { companyCheckCost, facilityBlocker, facilityCost } from './facilities';
 import {
   MAINT_COST,
   MAINT_NAMES,
@@ -20,6 +21,8 @@ import {
   orderPrice,
   planeAge,
   planeHours,
+  slotCapacity,
+  slotsUsed,
 } from './simulate';
 import { monthOf, yearOf } from './time';
 import type { AirlineState, Company } from './types';
@@ -574,11 +577,39 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
       key: `check-${worn.id}`,
       icon: '🔧',
       title: `${MODEL[worn.model].name} 기체 상태 ${Math.round(condOf(worn))}%: C점검 보내기`,
-      detail: `많이 닳아 고장·지연·결항이 잦아요. 이번 달 정비고에 넣으면 약 ${fmtMoney(checkCost(worn))}이 들고 그달은 쉬지만${spareCover(c) > 0 ? ' (예비기가 대신 날아요)' : ''}, 상태가 ${restoredCond(planeAge(state, worn))}%로 돌아와요.`,
+      detail: `많이 닳아 고장·지연·결항이 잦아요. 이번 달 정비고에 넣으면 약 ${fmtMoney(companyCheckCost(c, worn))}이 들고 그달은 쉬지만${spareCover(c) > 0 ? ' (예비기가 대신 날아요)' : ''}, 상태가 ${restoredCond(planeAge(state, worn))}%로 돌아와요.`,
       label: 'C점검',
       apply: (s2) => afterAct(s2, ci, { type: 'checkPlane', plane: worn.id, on: true }),
       weight: 165,
     });
+  }
+
+  // 8-0-1. 공항 시설: 본사 슬롯이 거의 찼으면 전용 터미널, 아니면 자리 잡은 회사에 본사 라운지
+  {
+    const used = slotsUsed(c, c.hub);
+    const cap = slotCapacity(state, ci, c.hub);
+    const hubName = cityName(c.hub);
+    if (used >= cap * 0.9 && !facilityBlocker(state, ci, c.hub, 'terminal') && c.cash > facilityCost(c.hub, 'terminal', state.q) * 2) {
+      out.push({
+        key: 'terminal',
+        icon: '🏛️',
+        title: `${hubName} 슬롯이 거의 찼어요: 전용 터미널 짓기`,
+        detail: `본사 슬롯을 ${used}/${cap}회 쓰고 있어요. ${fmtMoney(facilityCost(c.hub, 'terminal', state.q))}으로 전용 터미널을 지으면 슬롯이 25% 늘고, 붐빔으로 생기는 지연이 줄고, 갈아타는 손님이 늘어요.`,
+        label: '터미널 짓기',
+        apply: (s2) => afterAct(s2, ci, { type: 'buildFacility', city: c.hub, kind: 'terminal' }),
+        weight: 175,
+      });
+    } else if (c.planes.length >= 6 && !facilityBlocker(state, ci, c.hub, 'lounge') && c.cash > facilityCost(c.hub, 'lounge', state.q) * 6 && CITY[c.hub].biz >= 0.4) {
+      out.push({
+        key: 'lounge',
+        icon: '🛋️',
+        title: `${hubName}에 라운지 짓기`,
+        detail: `${fmtMoney(facilityCost(c.hub, 'lounge', state.q))}으로 본사 라운지를 지으면 본사를 오가는 사업 손님이 6%, 본사에서 갈아타는 사업 손님이 10% 늘고 평판이 조금 올라요.`,
+        label: '라운지 짓기',
+        apply: (s2) => afterAct(s2, ci, { type: 'buildFacility', city: c.hub, kind: 'lounge' }),
+        weight: 100,
+      });
+    }
   }
 
   // 8-1. 연료 탱크: 연료를 많이 쓰면 탱크를, 탱크가 있고 유가가 싸면 채우기를

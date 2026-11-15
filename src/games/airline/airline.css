@@ -3282,6 +3282,29 @@
 .al-media,
 .al-campaign-region select {
   padding: 3px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+}
+.al-campaign-title {
+  margin: 10px 0 4px;
+}
+.al-campaigns {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.al-campaign-region {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+
 /* ---------------------------------------------------------------- 4판: 달별 그래프·운항 상황판·자동 진행 */
 .al-game,
 .al-setup {
@@ -3343,12 +3366,6 @@
   background: var(--surface);
   color: var(--text);
   font: inherit;
-  font-size: 12.5px;
-}
-.al-campaign-title {
-  margin: 10px 0 4px;
-}
-.al-campaigns {
   font-size: 13px;
   max-width: 220px;
 }
@@ -3488,13 +3505,6 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-}
-.al-campaign-region {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 13px;
-}
   margin: 8px 0 0;
   font-size: 13px;
 }

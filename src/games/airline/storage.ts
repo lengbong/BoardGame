@@ -14,6 +14,7 @@ import { isValidV4Company, migrateV3, parseModels } from './migrate4';
 import { isValidRightsState, parseRightsOption } from './rightsSave';
 import { isValidLoyaltyState } from './loyaltySave';
 import { isValidRivalsState, parseRivalsOption } from './relations';
+import { isValidScenarioState, parseScenarioOption } from './scenarioSave';
 import { CITY, REGIONS } from './cities';
 import { REAL_AIRLINE } from './realAirlines';
 import { STAFF_GROUPS, emptyStaff, staffNeed } from './staff';
@@ -55,7 +56,7 @@ export function parseOptions(v: unknown): AirlineOptions {
   const o = (isObj(v) ? v : {}) as Partial<AirlineOptions>;
   return {
     era: (ERAS.includes(o.era as number) ? o.era : DEFAULT_OPTIONS.era) as AirlineOptions['era'],
-    mode: o.mode === 'goal' || o.mode === 'challenge' || o.mode === 'years' ? o.mode : DEFAULT_OPTIONS.mode,
+    mode: o.mode === 'goal' || o.mode === 'challenge' || o.mode === 'years' || o.mode === 'scenario' ? o.mode : DEFAULT_OPTIONS.mode,
     years: o.years === 10 || o.years === 30 || o.years === 20 ? o.years : DEFAULT_OPTIONS.years,
     goalValue: (GOAL_VALUES as readonly number[]).includes(o.goalValue as number) ? (o.goalValue as number) : DEFAULT_OPTIONS.goalValue,
     goalRegions: isInt(o.goalRegions) && o.goalRegions >= 3 && o.goalRegions <= 6 ? o.goalRegions : DEFAULT_OPTIONS.goalRegions,
@@ -68,6 +69,8 @@ export function parseOptions(v: unknown): AirlineOptions {
     ...parseRightsOption(o as Record<string, unknown>),
     // 라이벌 성격 (없으면 키를 두지 않는다: 켜짐)
     ...parseRivalsOption(o as Record<string, unknown>),
+    // 역사 시나리오 (없으면 키를 두지 않는다: scenarioSave.ts)
+    ...parseScenarioOption(o as Record<string, unknown>),
   };
 }
 
@@ -211,6 +214,8 @@ export function isValidState(v: unknown): v is AirlineState {
   if (!isValidLoyaltyState(s)) return false;
   // 라이벌 장부 (예전 저장에는 없다: relations.ts)
   if (!isValidRivalsState(s)) return false;
+  // 역사 시나리오 진행 (예전 저장에는 없다: scenarioSave.ts)
+  if (!isValidScenarioState(s)) return false;
   return true;
 }
 

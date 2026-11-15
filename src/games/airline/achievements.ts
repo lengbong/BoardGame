@@ -1,6 +1,7 @@
 import { MODEL } from './aircraft';
 import { AWARD_KINDS, trophyCount } from './awards';
 import { CHALLENGES } from './challenges';
+import { SCENARIOS } from './scenarios';
 import { dist } from './cities';
 import { isFreighter } from './freighters';
 import { REAL_AIRLINE } from './realAirlines';
@@ -56,7 +57,9 @@ export type BadgeGlyph =
   | 'flame'
   | 'eras'
   | 'compass'
-  | 'hourglass';
+  | 'hourglass'
+  | 'scroll'
+  | 'scrolls';
 
 /** 여러 판에 걸친 진행 (게임이 끝날 때마다 더한다) */
 export interface FameProgress {
@@ -64,6 +67,8 @@ export interface FameProgress {
   eras: number[];
   /** 성공한 도전 과제 id */
   challenges: string[];
+  /** 성공한 역사 시나리오 id (하나도 없으면 키가 없다: 예전 저장과 같은 모양) */
+  scenarios?: string[];
   /** 사람 회사가 있는 게임을 끝까지 마친 수 */
   games: number;
 }
@@ -171,9 +176,9 @@ function didCharter(state: AirlineState, ci: number): boolean {
   return (state.charters ?? []).some((o) => o.by === ci && o.t !== undefined && o.t < state.t);
 }
 
-/** 이 회사가 이겼는지 (도전 과제는 따로 센다) */
+/** 이 회사가 이겼는지 (도전 과제·역사 시나리오는 따로 센다) */
 export function isWinner(state: AirlineState, ci: number): boolean {
-  return state.phase === 'gameover' && !!state.result && state.options.mode !== 'challenge' && state.result.winners.includes(ci);
+  return state.phase === 'gameover' && !!state.result && state.options.mode !== 'challenge' && state.options.mode !== 'scenario' && state.result.winners.includes(ci);
 }
 
 /** 이 회사가 도전 과제를 성공했는지 */
@@ -181,6 +186,16 @@ export function challengeDone(state: AirlineState, ci: number): string | null {
   if (state.phase !== 'gameover' || state.options.mode !== 'challenge' || !state.challenge || !state.result?.success) return null;
   return state.challenge.company === ci ? state.challenge.id : null;
 }
+
+/** 이 회사가 역사 시나리오를 성공했는지 (도전 과제와 따로 센다) */
+export function scenarioDone(state: AirlineState, ci: number): string | null {
+  if (state.phase !== 'gameover' || state.options.mode !== 'scenario' || !state.scenario || !state.result?.success) return null;
+  return state.scenario.company === ci ? state.scenario.id : null;
+}
+
+/** 여러 판에 걸친 진행의 시나리오 목록 (모르는 id는 버리고 목록 차례로) */
+const scenarioIds = (list: readonly unknown[]): string[] => SCENARIOS.map((d) => d.id).filter((id) => list.includes(id));
+const withScenarios = (ids: string[]): { scenarios?: string[] } => (ids.length > 0 ? { scenarios: ids } : {});
 
 const playedMonths = (state: AirlineState) => state.t - state.startT + 1;
 
@@ -231,6 +246,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { id: 'win-lcc', name: '저가항공 우승', desc: '🎒 저가항공으로 게임에서 이겨요', tier: 2, group: 'wins', art: 'backpack', test: ({ won, c }) => won && c.bizModel === 'lcc' },
   { id: 'win-cargo', name: '화물 전문 우승', desc: '📦 화물 전문으로 게임에서 이겨요', tier: 2, group: 'wins', art: 'crate', test: ({ won, c }) => won && c.bizModel === 'cargo' },
   { id: 'challenge-one', name: '도전 성공', desc: '도전 과제를 하나 성공해요', tier: 2, group: 'wins', art: 'summit', test: ({ state, ci }) => challengeDone(state, ci) !== null },
+  { id: 'scenario-one', name: '역사 속으로', desc: '역사 시나리오를 하나 성공해요', tier: 2, group: 'wins', art: 'scroll', test: ({ state, ci }) => scenarioDone(state, ci) !== null },
   { id: 'veteran', name: '단골 기장', desc: '게임을 다섯 판 끝까지 해요', tier: 2, group: 'wins', art: 'tally', steps: (p) => [Math.min(p.games, 5), 5], test: ({ final, progress }) => final && progress.games >= 5 },
   {
     id: 'supersonic',
@@ -296,6 +312,16 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
     test: ({ state, ci, progress }) => challengeDone(state, ci) !== null && CHALLENGES.every((d) => progress.challenges.includes(d.id)),
   },
   {
+    id: 'scenario-all',
+    name: '하늘길 역사가',
+    desc: `역사 시나리오 ${SCENARIOS.length}개를 모두 성공해요`,
+    tier: 3,
+    group: 'wins',
+    art: 'scrolls',
+    steps: (p) => [SCENARIOS.filter((d) => p.scenarios?.includes(d.id)).length, SCENARIOS.length],
+    test: ({ state, ci, progress }) => scenarioDone(state, ci) !== null && SCENARIOS.every((d) => progress.scenarios?.includes(d.id)),
+  },
+  {
     id: 'marathon',
     name: '30년 비행',
     desc: '회사를 지키며 30년 이어진 게임을 끝까지 마쳐요',
@@ -331,7 +357,7 @@ export function hashStr(s: string): string {
 
 /** 한 판의 열쇠 (시작 때 정해지고 끝까지 같다) */
 export function gameKey(state: Pick<AirlineState, 'startYear' | 'startT' | 'options' | 'companies'>): string {
-  return hashStr([state.startYear, state.startT, state.options.mode, state.options.challenge ?? '', ...state.companies.map((c) => `${c.seat}:${c.kind}:${c.name}:${c.hub}`)].join('|'));
+  return hashStr([state.startYear, state.startT, state.options.mode, state.options.challenge ?? state.options.scenario ?? '', ...state.companies.map((c) => `${c.seat}:${c.kind}:${c.name}:${c.hub}`)].join('|'));
 }
 
 /** 끝난 판의 열쇠 (같은 끝을 두 번 세지 않게) */
@@ -376,6 +402,7 @@ export function parseAchStore(raw: unknown): AchStore {
   out.progress = {
     eras: START_ERAS.filter((e) => list(p.eras).includes(e)),
     challenges: CHALLENGES.map((d) => d.id).filter((id) => list(p.challenges).includes(id)),
+    ...withScenarios(scenarioIds(list(p.scenarios))),
     games: isInt(p.games) && p.games >= 0 && p.games < 1e6 ? p.games : 0,
   };
   out.seen = [...new Set(list(raw.seen).filter(isKey))].slice(-SEEN_KEEP);
@@ -394,15 +421,19 @@ export function addGameEnd(store: AchStore, state: AirlineState): AchStore {
   const eras = [...store.progress.eras];
   const challenges = [...store.progress.challenges];
   if (humans.some((ci) => isWinner(state, ci)) && START_ERAS.includes(state.startYear) && !eras.includes(state.startYear)) eras.push(state.startYear);
+  const scenarios = [...(store.progress.scenarios ?? [])];
   for (const ci of humans) {
     const ch = challengeDone(state, ci);
     if (ch && !challenges.includes(ch)) challenges.push(ch);
+    const sc = scenarioDone(state, ci);
+    if (sc && !scenarios.includes(sc)) scenarios.push(sc);
   }
   return {
     ...store,
     progress: {
       eras: START_ERAS.filter((e) => eras.includes(e)),
       challenges: CHALLENGES.map((d) => d.id).filter((id) => challenges.includes(id)),
+      ...withScenarios(scenarioIds(scenarios)),
       games: store.progress.games + 1,
     },
     seen: [...store.seen, key].slice(-SEEN_KEEP),

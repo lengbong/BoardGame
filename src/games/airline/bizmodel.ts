@@ -237,7 +237,8 @@ export function assignBizModels(companies: Company[], setup: AirlineSetup, year:
 /** 저가항공·화물 전문 컴퓨터가 고를 수 있는 색 */
 const SPECIALIST_COLORS = ['#e8590c', '#8e4ec6', '#12a594', '#d6409f', '#a18072', '#46a758'];
 
-function setBizModelAtStart(c: Company, model: BizModel): void {
+/** 시작할 때 사업 모델을 정한다 (도전 과제·역사 시나리오의 회사도) */
+export function setBizModelAtStart(c: Company, model: BizModel): void {
   c.bizModel = model;
   c.bizModelNext = null;
   if (model === 'lcc') c.service = 1;

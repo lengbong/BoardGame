@@ -5,6 +5,7 @@ import type { GameSettings } from '../common/settings';
 import { coColors } from './brand';
 import { CompanyBadge, SEAT_SHAPES } from './Art';
 import { CHALLENGE } from './challenges';
+import { ScenarioGoalBox } from './ScenarioTracker';
 import { fmtMoney } from './format';
 import { actor, endT, rankings } from './rules';
 import { companyValue, regionsServed } from './simulate';
@@ -48,7 +49,8 @@ export function Panel({ state, viewer, hint, canEnd, busy, onEndTurn, auto, onAu
   const [credits, setCredits] = useState(false);
 
   let goal: ReactNode;
-  if (state.challenge) {
+  if (state.scenario) goal = <ScenarioGoalBox state={state} />;
+  else if (state.challenge) {
     const def = CHALLENGE[state.challenge.id];
     goal = (
       <>

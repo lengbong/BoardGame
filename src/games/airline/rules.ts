@@ -2,15 +2,17 @@ import { withJosa } from '../../lib/korean';
 import { MODEL, MODELS, isAvailable, leadTime } from './aircraft';
 import { CAMPAIGN_INFO, MEDIA_INFO, adTarget, mediaOf } from './ads';
 import { BUSINESS_INFO } from './business';
-import { cabinBlocker, defaultCabin, sameCabin } from './cabin';
-import { BIZ_CHANGE_MONTHS, BIZ_INFO, assignBizModels, bizCabinBlocker, bizChangeCost, bizModelBlocker, bizModelFit, bizModelOf, cabinFor, settleBizModel } from './bizmodel';
+import { cabinBlocker, sameCabin } from './cabin';
+import { BIZ_CHANGE_MONTHS, BIZ_INFO, assignBizModels, bizCabinBlocker, bizChangeCost, bizModelBlocker, bizModelFit, bizModelOf, cabinFor, setBizModelAtStart, settleBizModel } from './bizmodel';
 import { CLASS_FARE_MAX, CLASS_FARE_MIN } from './classes';
 import { blockText, branchPolitics, makerPolitics, politicalNews, polity, routePolitics } from './politics';
 import { MAX_MEMBERS, allianceOf, joinAlliance, leaveAlliance, pruneAlliances } from './alliances';
 import { ISSUE_SHARE, PAYOUT, buyCost, buyStakeBlocker, buyoutCost, emptyStakes, issueBlocker, issueCash, mergeBlocker, sellStakeBlocker, sellValue, stakeOf, withStake } from './stocks';
 import { AIRLINE_AWARD_DEMAND, AIRLINE_AWARD_MONTHS, AWARD_INFO, yearAwards } from './awards';
 import { charterBlocker, charterPlaneIds, refreshCharters, tripsFor } from './charters';
-import { CHALLENGE, challengeDeadline, checkChallenge } from './challenges';
+import { CHALLENGE, challengeDeadline, checkChallenge, type ChallengeDef } from './challenges';
+import { scenarioMonthEnd, startScenario } from './scenarioRules';
+import { SCENARIO } from './scenarios';
 import { CHECK_POLICIES, condOf, dueForCheck, inCheck, monthlyWear, restoredCond, usedCond } from './condition';
 import { FACILITY_INFO, FACILITY_REFUND, companyCheckCost, extraCheckSlots, facilityBlocker, facilityCost, wearMult } from './facilities';
 import { allianceChoice, allianceScore, makeChoice, nextChoiceGap } from './choices';
@@ -248,7 +250,10 @@ function baseState(options: AirlineOptions, year: number, companies: Company[]):
 export function createGame(setup: AirlineSetup, rng: Rng = Math.random): AirlineState {
   const opts: AirlineOptions = { ...DEFAULT_OPTIONS, ...setup.options };
   if (opts.mode === 'challenge' && opts.challenge && CHALLENGE[opts.challenge]) return createChallenge(setup, opts, rng);
-  if (opts.mode === 'challenge') opts.mode = 'years';
+  // 역사 시나리오: 도전 과제처럼 정해 둔 회사·라이벌로 시작한다 (scenarios.ts)
+  const sc = opts.mode === 'scenario' && opts.scenario ? SCENARIO[opts.scenario] : undefined;
+  if (sc) return createChallenge(setup, { ...opts, challenge: null, aiStyle: sc.aiStyle, history: sc.history, rights: sc.rights }, rng, sc);
+  if (opts.mode === 'challenge' || opts.mode === 'scenario') opts.mode = 'years';
   const year = opts.era;
   const cash = START_MONEY[opts.money].cash;
   const taken: string[] = [];
@@ -322,8 +327,7 @@ export function createGame(setup: AirlineSetup, rng: Rng = Math.random): Airline
   return finishStart(state, rng);
 }
 
-function createChallenge(setup: AirlineSetup, opts: AirlineOptions, rng: Rng): AirlineState {
-  const def = CHALLENGE[opts.challenge!];
+function createChallenge(setup: AirlineSetup, opts: AirlineOptions, rng: Rng, def: ChallengeDef = CHALLENGE[opts.challenge!]): AirlineState {
   // 도전하는 회사: 사람 자리 (사람이 없으면 첫 자리, 컴퓨터끼리 시험할 때)
   const humanSeat = setup.seats.findIndex((s) => s.kind === 'human');
   const seat = humanSeat >= 0 ? humanSeat : Math.max(0, setup.seats.findIndex((s) => s.kind !== 'empty'));
@@ -331,25 +335,38 @@ function createChallenge(setup: AirlineSetup, opts: AirlineOptions, rng: Rng): A
   const me = newCompany(0, kind, companyName(setup.seats[seat]?.name ?? '', 0), def.hub, def.cash, def.credit ?? Math.round(def.cash * 0.5), def.year);
   me.debt = def.debt ?? 0;
   if (def.branches) me.branches = [...new Set([def.hub, ...def.branches])];
-  const rivals = def.rivals.map((r, k) => newCompany((k + 1) as SeatIndex, r.kind, DEFAULT_NAMES[k + 1], r.hub, 2500, 1250, def.year));
-  // 실제 항공사 모드: 라이벌 본거지에 그 해 날던 실제 항공사가 있으면 그 이름으로
+  if (def.model) setBizModelAtStart(me, def.model);
+  // 라이벌: 역사 시나리오는 돈·사업 모델·지점·처음 비행기까지 정해 둔다
+  const rivals = def.rivals.map((r, k) => {
+    const rv = newCompany((k + 1) as SeatIndex, r.kind, r.name ?? DEFAULT_NAMES[k + 1], r.hub, r.cash ?? 2500, Math.round((r.cash ?? 2500) * 0.5), def.year);
+    if (r.branches) rv.branches = [...new Set([r.hub, ...r.branches])];
+    if (r.model) setBizModelAtStart(rv, r.model);
+    return rv;
+  });
+  // 실제 항공사 모드: 라이벌 본거지에 그 해 날던 실제 항공사가 있으면 그 이름으로 (지어낸 이름·저가항공·화물 전문은 빼고)
   if (opts.names === 'real') {
     const used: string[] = [];
-    for (const rv of rivals) {
+    rivals.forEach((rv, k) => {
+      const r = def.rivals[k];
+      if (r.name || (r.model && r.model !== 'full')) return;
       const a = airlinesAt(def.year).find((x) => x.hub === rv.hub && !used.includes(x.id));
-      if (!a) continue;
+      if (!a) return;
       used.push(a.id);
       rv.airline = a.id;
       rv.name = a.name;
-    }
+    });
     const colors = pickColors([me, ...rivals].map((c) => ({ seat: c.seat, airline: c.airline })));
     [me, ...rivals].forEach((c, k) => (c.color = colors[k]));
   }
   let state = baseState({ ...opts, era: opts.era }, def.year, [me, ...rivals]);
+  if (def.month && def.month > 1) {
+    const t = mOf(def.year, def.month);
+    state = { ...state, t, startT: t, q: qOfM(t), startQ: qOfM(t) };
+  }
   // 처음 비행기와 노선
-  if (def.fleet) {
-    const c = me;
-    for (const f of def.fleet) {
+  [me, ...rivals].forEach((c, k) => {
+    const fleet = k === 0 ? def.fleet : def.rivals[k - 1].fleet;
+    for (const f of fleet ?? []) {
       const m = MODEL[f.model];
       let routeId: number | null = null;
       if (f.route) {
@@ -369,13 +386,15 @@ function createChallenge(setup: AirlineSetup, opts: AirlineOptions, rng: Rng): A
         deposit: 0,
         since: state.t - Math.round(f.age * 12),
         legs: routeId !== null ? [{ route: routeId, freq: Math.min(f.freq ?? 7, maxFreq(m, dist(f.route![0], f.route![1]))) }] : [],
-        cabin: defaultCabin(m),
+        cabin: cabinFor(c, m),
         meal: c.service,
         cond: usedCond(f.age),
       });
     }
-  }
+  });
   if (def.oil) state.oil = def.oil;
+  // 역사 시나리오: 이야기·단계 목표 (scenarioRules.ts)
+  if (opts.mode === 'scenario') return finishStart(announceYear(startScenario(state, def)), rng);
   state = addNews(state, { icon: def.emoji, title: `도전 과제: ${def.title}`, text: `${def.story} 목표: ${def.goal}`, tone: 'big' });
   state = announceYear(state);
   const startValue = Math.round(companyValue(state, 0));
@@ -476,6 +495,7 @@ export const yearNow = (state: AirlineState) => yearOf(state.q);
 export function endT(state: AirlineState): number {
   if (state.options.mode === 'years') return state.startT + state.options.years * 12 - 1;
   if (state.options.mode === 'challenge' && state.challenge) return state.challenge.deadline;
+  if (state.options.mode === 'scenario' && state.scenario) return state.scenario.deadline;
   return state.startT + GOAL_YEAR_LIMIT * 12 - 1;
 }
 
@@ -2104,6 +2124,11 @@ function checkEnd(state: AirlineState, reports: QuarterReport['companies'] | nul
       return finish({ winners: [], reason: s.companies[ch.company].out ? '회사가 운항을 멈췄어요' : '기한 안에 목표를 이루지 못했어요', success: false });
     }
     return s;
+  }
+  // 역사 시나리오: 달마다 단계 목표를 살핀다 (scenarioRules.ts)
+  if (s.options.mode === 'scenario' && s.scenario) {
+    const r = scenarioMonthEnd(s, t);
+    return r.result ? { ...r.state, phase: 'gameover' as const, result: r.result } : r.state;
   }
 
   const humans = s.companies.map((c, i) => (c.kind === 'human' ? i : -1)).filter((i) => i >= 0);

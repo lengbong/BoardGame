@@ -28,6 +28,8 @@ import { Meter } from './ui';
 import { RightsSetup } from './RightsSetup';
 import { LoyaltyHowTo } from './LoyaltyCard';
 import { RivalsSetup } from './RivalsCard';
+import { ScenarioModeIcon, ScenarioPicker } from './ScenarioPicker';
+import { SCENARIO } from './scenarios';
 
 interface SetupProps {
   initialSetup: AirlineSetup;
@@ -107,6 +109,7 @@ const MODE_CHOICES: IconChoice<AirlineOptions['mode']>[] = [
   { value: 'years', short: '정해진 해까지', label: '정해진 해가 지나면 회사 가치 1등이 이겨요', icon: <ModeIcon kind="years" /> },
   { value: 'goal', short: '목표 먼저', label: '여러 지역 취항 + 회사 가치 목표를 먼저 이루면 이겨요', icon: <ModeIcon kind="goal" /> },
   { value: 'challenge', short: '도전 과제', label: '혼자서 정해진 조건을 기한 안에 이루기', icon: <ModeIcon kind="challenge" /> },
+  { value: 'scenario', short: '역사 시나리오', label: '실제 항공 역사의 한 시대에 정해진 회사로 시작해 단계 목표를 이루고 별 받기', icon: <ScenarioModeIcon /> },
 ];
 
 const YEAR_CHOICES: IconChoice<10 | 20 | 30>[] = [
@@ -179,6 +182,8 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
   const real = opt.names === 'real';
   const setOpt = (patch: Partial<AirlineOptions>) => setSetup((s) => ({ ...s, options: { ...s.options, ...patch } }));
   const challenge = opt.mode === 'challenge';
+  const scenario = opt.mode === 'scenario';
+  const solo = challenge || scenario;
   const humanIdx = setup.seats.findIndex((s) => s.kind === 'human');
   const count = activeSeatCount(setup.seats);
   const hubs = setup.hubs.map((h) => (h && hubCandidates(opt.era).includes(h) ? h : null));
@@ -189,10 +194,10 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
     if (!real || !id || !flying.has(id) || setup.seats[i]?.kind !== 'human') return null;
     return setup.airlines.findIndex((x, j) => x === id && setup.seats[j]?.kind === 'human') === i ? id : null;
   });
-  const canStart = challenge ? !!opt.challenge : count >= 2;
+  const canStart = scenario ? !!opt.scenario && !!SCENARIO[opt.scenario] : challenge ? !!opt.challenge : count >= 2;
 
   const start = () => {
-    if (challenge) {
+    if (solo) {
       const name = setup.seats[Math.max(0, humanIdx)]?.name ?? '';
       onStart({
         ...setup,
@@ -270,7 +275,9 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
         <IconPicker caption="게임 방식" value={opt.mode} options={MODE_CHOICES} onChange={(mode) => setOpt({ mode })} testId="al-mode" />
       </section>
 
-      {!challenge ? (
+      {scenario ? (
+        <ScenarioPicker setup={setup} onSetup={setSetup} />
+      ) : !challenge ? (
         <>
           <section className="setup-section">
             <h2>누가 할까요?</h2>
@@ -473,7 +480,7 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
           </button>
         </div>
         <button type="button" className="btn btn-primary btn-large" disabled={!canStart} onClick={start} data-testid="al-start">
-          {challenge ? '도전 시작' : '게임 시작'}
+          {scenario ? '시나리오 시작' : challenge ? '도전 시작' : '게임 시작'}
         </button>
       </section>
 
@@ -599,7 +606,7 @@ function HowTo() {
           <b>세계는 움직여요</b>: 해마다 새 기종이 나오고 옛 기종은 생산이 끝나요. 도시가 자라고 공항이 커지며, 기름값·경기·여행 붐·올림픽·엑스포 같은 사건이 손님과 비용을 바꿔요.
         </li>
         <li>
-          <b>이기기</b>: 정해진 해까지 회사 가치(현금 + 내 비행기·호텔 가치 + 리스 보증금·주문한 비행기 − 빚) 1등, 또는 여러 지역 취항과 가치 목표를 먼저 이루기, 또는 도전 과제 성공!
+          <b>이기기</b>: 정해진 해까지 회사 가치(현금 + 내 비행기·호텔 가치 + 리스 보증금·주문한 비행기 − 빚) 1등, 또는 여러 지역 취항과 가치 목표를 먼저 이루기, 또는 도전 과제 성공, 또는 역사 시나리오의 단계 목표를 차례로 이뤄 별(★ 3개까지) 받기!
         </li>
         <li>
           조작: 화면 <kbd>1</kbd> 지도 · <kbd>2</kbd> 비행기 · <kbd>3</kbd> 노선 · <kbd>4</kbd> 재무 · <kbd>5</kbd> 인사 · <kbd>6</kbd> 보고서 · <kbd>7</kbd> 뉴스, 이번 달 마치기 <kbd>Enter</kbd>, 닫기 <kbd>Esc</kbd>, 지도 확대 <kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd>. 처음이면 지도 아래 <b>🧑‍💼 경영 비서</b>의 첫 노선 ‘노선 열기’부터 눌러 보세요!

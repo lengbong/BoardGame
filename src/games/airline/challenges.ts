@@ -1,6 +1,6 @@
 import { companyValue, isIdle, regionsServed, routeFreq } from './simulate';
 import { quarterOf, qOf, yearOf } from './time';
-import type { AirlineState, CompanyReport } from './types';
+import type { AirlineState, BizModel, CompanyReport } from './types';
 
 /**
  * 도전 과제: 혼자서 정해진 조건을 기한 안에 이루기. (라이벌 항공사는 과제마다 정해져 있다)
@@ -18,6 +18,20 @@ export interface ChallengeFleet {
   fare?: number;
 }
 
+/** 라이벌 항공사 (역사 시나리오는 돈·사업 모델·처음 비행기까지 정해 둔다) */
+export interface ChallengeRival {
+  kind: 'ai-easy' | 'ai-normal';
+  hub: string;
+  /** 시작 자금 (없으면 2,500억) */
+  cash?: number;
+  /** 지어낸 이름 (주면 실제 항공사 이름을 빌리지 않는다) */
+  name?: string;
+  /** 사업 모델 (없으면 풀서비스) */
+  model?: BizModel;
+  branches?: string[];
+  fleet?: ChallengeFleet[];
+}
+
 export interface ChallengeDef {
   id: string;
   emoji: string;
@@ -25,6 +39,8 @@ export interface ChallengeDef {
   story: string;
   goal: string;
   year: number;
+  /** 시작하는 달 (없으면 1월, 분기 첫 달만) */
+  month?: number;
   hub: string;
   cash: number;
   debt?: number;
@@ -33,7 +49,9 @@ export interface ChallengeDef {
   years: number;
   fleet?: ChallengeFleet[];
   branches?: string[];
-  rivals: { kind: 'ai-easy' | 'ai-normal'; hub: string }[];
+  /** 내 회사 사업 모델 (없으면 풀서비스) */
+  model?: BizModel;
+  rivals: ChallengeRival[];
   /** 시작 유가 */
   oil?: number;
   /** 별 1~3 (어려움) */

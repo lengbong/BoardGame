@@ -1,5 +1,6 @@
 import { SEEN_KEEP, endKey, flyingRoutes, isKey, isName, isSeat, isTime, isYear, parseAirlineId, trophies } from './achievements';
 import { CHALLENGE } from './challenges';
+import { SCENARIO } from './scenarios';
 import { CITY, dist } from './cities';
 import { rankings } from './rules';
 import { companyValue } from './simulate';
@@ -25,6 +26,8 @@ export interface FameEntry {
   months: number;
   mode: WinMode;
   challenge: string | null;
+  /** 역사 시나리오 id (시나리오 게임만, 없으면 키가 없다) */
+  scenario?: string;
   model: BizModel;
   /** 최종 회사 가치 (억) */
   value: number;
@@ -62,7 +65,7 @@ export function emptyHof(): HofStore {
   return { v: 1, games: [], records: {}, seen: [] };
 }
 
-const MODES: readonly WinMode[] = ['years', 'goal', 'challenge'];
+const MODES: readonly WinMode[] = ['years', 'goal', 'challenge', 'scenario'];
 const MODELS: readonly BizModel[] = ['full', 'lcc', 'cargo'];
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v);
@@ -90,6 +93,7 @@ function parseEntry(v: unknown): FameEntry | null {
     months: v.months,
     mode: v.mode as WinMode,
     challenge: typeof v.challenge === 'string' && CHALLENGE[v.challenge] ? v.challenge : null,
+    ...(typeof v.scenario === 'string' && SCENARIO[v.scenario] ? { scenario: v.scenario } : {}),
     model: MODELS.includes(v.model as BizModel) ? (v.model as BizModel) : 'full',
     value: Math.round(v.value),
     place: v.place,
@@ -185,10 +189,11 @@ export function recordGameEnd(hof: HofStore, state: AirlineState, now: number): 
       months,
       mode: state.options.mode,
       challenge: state.options.mode === 'challenge' ? (state.challenge?.id ?? state.options.challenge) : null,
+      ...(state.options.mode === 'scenario' && state.scenario ? { scenario: state.scenario.id } : {}),
       model: c.bizModel,
       value,
       place: Math.min(4, order.indexOf(ci) + 1),
-      won: state.options.mode === 'challenge' ? !!state.result.success : state.result.winners.includes(ci),
+      won: state.options.mode === 'challenge' || state.options.mode === 'scenario' ? !!state.result.success : state.result.winners.includes(ci),
       at: now,
     });
   }

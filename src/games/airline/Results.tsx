@@ -7,6 +7,8 @@ import { fmtMoney, fmtPax, pct, signedMoney } from './format';
 import { GRADE_INFO } from './goals';
 import { AwardCeremony } from './AwardsArt';
 import { FameResult } from './AchievementsView';
+import { ScenarioResult } from './ScenarioTracker';
+import { SCENARIO } from './scenarios';
 import { rankings } from './rules';
 import { companyValue, regionsServed } from './simulate';
 import { qLabel } from './time';
@@ -181,10 +183,10 @@ export function GameOver({ state, onRestart, onChangeSetup, onExit, onLook }: Ga
   const order = rankings(state);
   const humans = state.companies.filter((c) => c.kind === 'human');
   const winner = result.winners.length > 0 ? state.companies[result.winners[0]] : null;
-  const challenge = state.challenge ? CHALLENGE[state.challenge.id] : null;
+  const challenge = state.challenge ? CHALLENGE[state.challenge.id] : state.scenario ? SCENARIO[state.scenario.id] : null;
   const humanWon = winner?.kind === 'human';
   const humanLost = humans.length >= 1 && !humanWon;
-  const title = challenge ? (result.success ? '도전 성공!' : '도전 실패') : winner ? `${winner.name} 우승!` : '게임 끝';
+  const title = challenge ? (result.success ? (state.scenario ? '시나리오 성공!' : '도전 성공!') : state.scenario ? '시나리오 실패' : '도전 실패') : winner ? `${winner.name} 우승!` : '게임 끝';
 
   return (
     <div className="overlay al-result-overlay" role="dialog" aria-modal="true" aria-labelledby="al-result-title">
@@ -199,6 +201,7 @@ export function GameOver({ state, onRestart, onChangeSetup, onExit, onLook }: Ga
           {challenge && <> · {challenge.title}</>}
         </p>
         {challenge && state.challenge && <p className="al-muted">{state.challenge.progress}</p>}
+        {state.scenario && <ScenarioResult state={state} />}
         <ol className="al-rank-list">
           {order.map((i, rank) => {
             const c = state.companies[i];

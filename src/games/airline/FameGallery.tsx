@@ -6,6 +6,7 @@ import { CompanyBadge, SEAT_SHAPES } from './Art';
 import { AchBadge, HallArt } from './BadgeArt';
 import { BIZ_INFO } from './bizmodel';
 import { CHALLENGE, CHALLENGES } from './challenges';
+import { SCENARIO, SCENARIOS } from './scenarios';
 import { CITY } from './cities';
 import { fameVersion, loadAchStore, loadHof, resetFame, subscribeFame } from './fameStore';
 import { fmtMoney, fmtPax, km } from './format';
@@ -39,7 +40,8 @@ export function monthsText(m: number): string {
   return [y > 0 ? `${y}년` : '', r > 0 ? `${r}달` : ''].filter(Boolean).join(' ') || '1달';
 }
 
-function modeText(mode: WinMode, challenge: string | null): string {
+function modeText(mode: WinMode, challenge: string | null, scenario?: string): string {
+  if (mode === 'scenario') return scenario && SCENARIO[scenario] ? `${SCENARIO[scenario].emoji} ${SCENARIO[scenario].title}` : '📜 역사 시나리오';
   if (mode === 'challenge') return challenge && CHALLENGE[challenge] ? `${CHALLENGE[challenge].emoji} ${CHALLENGE[challenge].title}` : '도전 과제';
   return mode === 'goal' ? '🎯 목표 먼저' : '📅 정해진 해까지';
 }
@@ -77,6 +79,12 @@ function Steps({ def, ach }: { def: AchievementDef; ach: AchStore }) {
       {def.id === 'challenge-all' &&
         CHALLENGES.map((c) => (
           <small key={c.id} className={`al-ach-chip${ach.progress.challenges.includes(c.id) ? ' al-on' : ''}`} title={c.title}>
+            {c.emoji}
+          </small>
+        ))}
+      {def.id === 'scenario-all' &&
+        SCENARIOS.map((c) => (
+          <small key={c.id} className={`al-ach-chip${ach.progress.scenarios?.includes(c.id) ? ' al-on' : ''}`} title={c.title}>
             {c.emoji}
           </small>
         ))}
@@ -175,10 +183,10 @@ export function HallList({ hof, highlight }: { hof: HofStore; highlight?: string
           <span className="al-hof-main">
             <span className="al-hof-name">
               <FameName name={e.name} seat={e.seat} airline={e.airline} />
-              {e.won && <small className="al-hof-won">{e.mode === 'challenge' ? '도전 성공' : '우승'}</small>}
+              {e.won && <small className="al-hof-won">{e.mode === 'challenge' ? '도전 성공' : e.mode === 'scenario' ? '시나리오 성공' : '우승'}</small>}
             </span>
             <small className="al-muted">
-              {e.startYear}년 시작 · {monthsText(e.months)} · {modeText(e.mode, e.challenge)} · {BIZ_INFO[e.model].icon} {BIZ_INFO[e.model].name}
+              {e.startYear}년 시작 · {monthsText(e.months)} · {modeText(e.mode, e.challenge, e.scenario)} · {BIZ_INFO[e.model].icon} {BIZ_INFO[e.model].name}
               {e.hub && CITY[e.hub] ? ` · 본사 ${CITY[e.hub].name}` : ''} · {e.place}등 · {dateText(e.at)}
             </small>
           </span>

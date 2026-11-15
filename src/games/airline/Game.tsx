@@ -9,6 +9,7 @@ import type { GameSettings } from '../common/settings';
 import { coColors, realOf } from './brand';
 import { aiManage, type AiLevel } from './ai';
 import { useFameTracker } from './AchievementsView';
+import { useScenarioPopups } from './ScenarioTracker';
 import { CompanyBadge, SEAT_SHAPES } from './Art';
 import { ChoiceModal } from './ChoiceModal';
 import { CITY, dist, pairKey } from './cities';
@@ -129,6 +130,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   const viewer = actorCo?.kind === 'human' ? act : (lastHuman.current ?? humans[0] ?? Math.max(0, act));
   const me = game.companies[viewer];
   const locked = flying || report !== null;
+  const scenarioUi = useScenarioPopups(game, settings.speed, locked || choiceOpen);
   const canAct = game.phase === 'manage' && act === viewer && actorCo?.kind === 'human' && !locked;
 
   // 내 차례에 새 결정 사건이 있으면 한 번 열어 준다
@@ -666,6 +668,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
         </button>
       )}
       {fameUi}
+      {scenarioUi}
     </div>
   );
 }

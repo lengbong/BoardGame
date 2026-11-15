@@ -284,6 +284,27 @@ function Glyph({ kind }: { kind: BadgeGlyph }): ReactNode {
           <path d="M28.5 41.5h7l-3.5-3.5z" {...F} />
         </>
       );
+    case 'scroll':
+      // 펼친 두루마리 위에 지나간 하늘길 (역사 시나리오)
+      return (
+        <>
+          <path d="M21 21.5h22v21H21z" {...W} />
+          <path d="M19 19.5a2.5 2.5 0 0 1 5 0v25a2.5 2.5 0 0 1-5 0zM40 19.5a2.5 2.5 0 0 1 5 0v25a2.5 2.5 0 0 1-5 0z" {...F} />
+          <path d="M26 38c3-7 7-9 12-11" {...W} strokeWidth={2} strokeDasharray="2.4 2.6" />
+          <path d="M37 24.5l3 2.2-3.4 1.8z" {...F} />
+        </>
+      );
+    case 'scrolls':
+      // 두루마리와 별 셋 (역사 시나리오 모두)
+      return (
+        <>
+          <path d="M22 30.5h20v14H22z" {...W} />
+          <path d="M20 29a2.2 2.2 0 0 1 4.4 0v17a2.2 2.2 0 0 1-4.4 0zM39.6 29a2.2 2.2 0 0 1 4.4 0v17a2.2 2.2 0 0 1-4.4 0z" {...F} />
+          <Star cx={22} cy={21} r={4.4} />
+          <Star cx={32} cy={17.5} r={5.2} />
+          <Star cx={42} cy={21} r={4.4} />
+        </>
+      );
   }
 }
 

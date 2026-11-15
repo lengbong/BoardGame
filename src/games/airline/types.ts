@@ -2,6 +2,7 @@ import type { SeatIndex, SeatKind, Seats } from '../common/players';
 import type { RightsAction, RightsBook, RightsEvent, RightsMode } from './rightsTypes';
 import type { BrandPosState, LoyaltyAction, LoyaltyEvent, LoyaltyState } from './loyaltyTypes';
 import type { RivalAction, RivalBook } from './rivalTypes';
+import type { ScenarioProgress } from './scenarioTypes';
 
 export type { SeatIndex, SeatKind } from '../common/players';
 export type { Rng } from '../../lib/random';
@@ -531,7 +532,7 @@ export type AiStyle = 'relaxed' | 'normal' | 'fierce';
 export type NameMode = 'real' | 'fictional';
 
 export type StartEra = 1963 | 1983 | 2003;
-export type WinMode = 'goal' | 'years' | 'challenge';
+export type WinMode = 'goal' | 'years' | 'challenge' | 'scenario';
 export type MoneyLevel = 'rich' | 'normal' | 'tight';
 
 export interface AirlineOptions {
@@ -546,6 +547,8 @@ export interface AirlineOptions {
   money: MoneyLevel;
   /** 도전 과제 id (mode가 challenge일 때) */
   challenge: string | null;
+  /** 역사 시나리오 id (mode가 scenario일 때, scenarios.ts). 예전 저장에는 없다 */
+  scenario?: string | null;
   /** 컴퓨터 성향 */
   aiStyle: AiStyle;
   /** 항공사 이름 */
@@ -1024,6 +1027,8 @@ export interface AirlineState {
   nextId: number;
   result: GameResult | null;
   challenge: ChallengeProgress | null;
+  /** 역사 시나리오의 단계 진행 (scenarioTypes.ts, 예전 저장에는 없다) */
+  scenario?: ScenarioProgress;
   events: GameEvent[];
   nextEventId: number;
   log: LogEntry[];

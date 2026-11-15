@@ -6,6 +6,7 @@ import { MEAL_ICONS, MEAL_NAMES } from './cabin';
 import { CITY, REGIONS, REGION_INFO } from './cities';
 import { fmtMoney, signedMoney } from './format';
 import { FuelCard } from './FuelCard';
+import { CheckPolicy } from './ConditionArt';
 import { tankWorth } from './fuel';
 import { GRADE_INFO, goalProgress } from './goals';
 import { ADS_MAX, allianceOutlook, borrowBlocker, campaignBlocker, campaignCost, proposeBlocker, repayBlocker } from './rules';
@@ -573,7 +574,8 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
           <Meter value={spareCover(me)} tone={spareCover(me) >= 1 ? 'good' : 'blue'} label={`예비기가 메우는 정도 ${Math.round(spareCover(me) * 100)}%`} />
           <small>{Math.round(spareCover(me) * 100)}%</small>
         </div>
-        <MoreInfo>정비를 꼼꼼히 하면 승무원·정비비가 늘지만 지연·결항·기체 점검이 줄어요. 비행기가 낡을수록 더 중요해요. 예비 승무원은 아픈 사람·늦은 비행 때문에 생기는 지연을 줄여요.</MoreInfo>
+        <CheckPolicy state={state} viewer={viewer} canAct={canAct} perform={perform} />
+        <MoreInfo>정비를 꼼꼼히 하면 승무원·정비비가 늘지만 지연·결항·기체 점검이 줄고 기체 상태도 천천히 닳아요. 비행기가 낡을수록 더 중요해요. 예비 승무원은 아픈 사람·늦은 비행 때문에 생기는 지연을 줄여요.</MoreInfo>
       </section>
 
       <FuelCard state={state} viewer={viewer} canAct={canAct} perform={perform} next={next} />

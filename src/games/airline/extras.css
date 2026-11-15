@@ -135,3 +135,52 @@
   width: 76px;
   flex: none;
 }
+
+/* ---------------------------------------------------------------- 기체 상태·C점검 */
+.al-cond-bar {
+  vertical-align: middle;
+  flex: none;
+}
+.al-cond-track {
+  fill: var(--border);
+}
+.al-cond-good .al-cond-fill {
+  fill: var(--al-good);
+}
+.al-cond-warn .al-cond-fill {
+  fill: var(--al-warn);
+}
+.al-cond-bad .al-cond-fill {
+  fill: var(--al-bad);
+}
+.al-cond-mark {
+  stroke: var(--text);
+  stroke-width: 1.5;
+  opacity: 0.6;
+}
+.al-cond-num.al-cond-good {
+  color: var(--al-good);
+}
+.al-cond-num.al-cond-warn {
+  color: var(--al-warn);
+}
+.al-cond-num.al-cond-bad {
+  color: var(--al-bad);
+}
+.al-pl-cond {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  font-size: 12px;
+  margin-top: 2px;
+}
+.al-pl-cond > .al-sicon {
+  color: var(--text-muted);
+}
+.al-pl-cond .al-flag {
+  margin-left: 0;
+}
+.al-check-policy {
+  margin-top: 8px;
+}

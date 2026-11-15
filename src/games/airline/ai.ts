@@ -2,6 +2,7 @@ import { MODEL, availableModels, leadTime } from './aircraft';
 import { MAX_ROUTES } from './limits';
 import { CAMPAIGN_INFO, MEDIA_INFO, mediaOf } from './ads';
 import { cabinPresets, sameCabin } from './cabin';
+import { checkAtOf, inCheck } from './condition';
 import { TANK_LEVELS, tankBlocker, tankOf, tonPrice } from './fuel';
 import { makerPolitics, routePolitics } from './politics';
 import { ACADEMY_COST, STAFF_GROUPS, hireCost, hireTime, staffNeed, staffPipe } from './staff';
@@ -54,6 +55,7 @@ import {
   routeIndex,
   slotCapacity,
   slotsUsed,
+  spareCover,
   type DraftPlane,
 } from './simulate';
 import { monthOf, yearOf } from './time';
@@ -69,6 +71,9 @@ const Q = 3;
  * (노선 수로 재면 비행기 한 대가 도는 작은 노선 몇 개만으로 끝나 버려서 비행기 수로 잰다)
  */
 const STARTUP_PLANES = 4;
+
+/** 오래 제자리인 작은 회사가 길을 트려고 받아들이는 새 노선의 달 손해 (억) */
+const STUCK_LOSS = 4;
 
 /** 그 뒤 새 노선은 이 회사 노선이 보통 버는 달 이익의 이만큼은 벌어야 연다 (많아야 원래 문턱) */
 const OPEN_SHARE = 0.15;
@@ -306,6 +311,10 @@ export class Planner {
     if (maint !== c.maint) this.act({ type: 'setMaint', level: maint });
     const reserve = c.crisis > 0 ? 0 : c.onTime < 0.78 ? 2 : 1;
     if (reserve !== c.crewReserve) this.act({ type: 'setCrewReserve', level: reserve });
+    // C점검 시점: 돈이 급하면 늦게. 지연·결항이 잦아도 일찍 점검하는 건 예비기가 점검 동안 대신 날 때만
+    // (비행기 몇 대뿐인 회사는 점검하는 달마다 그 노선이 비어 버린다)
+    const at = c.crisis > 0 || c.cash < this.reserve() ? 35 : c.onTime < 0.8 && spareCover(c) >= 0.5 ? 65 : 50;
+    if (at !== checkAtOf(c)) this.act({ type: 'setCheckAt', at });
   }
 
   /**
@@ -358,6 +367,8 @@ export class Planner {
       if (r.stats && r.stats.profit < 0) this.act({ type: 'closeRoute', route: r.id });
     }
     for (const o of [...this.c.orders]) if (this.c.cash < 0) this.act({ type: 'cancelOrder', order: o.id });
+    // 이번 달 C점검은 미룬다 (점검 값을 아끼고 비행기를 띄운다)
+    for (const p of [...this.c.planes]) if (this.c.cash < 0 && inCheck(p, this.s.t)) this.act({ type: 'checkPlane', plane: p.id, on: false });
     // 사 둔 연료를 팔아 급한 돈을 마련한다
     const stock = tankOf(this.c).stock;
     if (this.c.cash < 0 && stock >= 1) this.act({ type: 'sellFuel', tons: Math.floor(Math.min(stock, (-this.c.cash + 20) / (tonPrice(this.s.oil) * 0.9))) || Math.floor(stock) });
@@ -775,7 +786,13 @@ export class Planner {
    *   그만한 크기의 노선도 열어서 노선망과 갈아타는 손님을 키운다 (예전에는 노선 4개에서 15년 멈췄다).
    */
   private minOpenProfit(cand: Candidate): number {
-    if (this.c.planes.length < STARTUP_PLANES) return -cand.needBranch.reduce((sum, city) => sum + branchUpkeep(city, this.s.q), 0);
+    if (this.c.planes.length < STARTUP_PLANES) {
+      const upkeep = cand.needBranch.reduce((sum, city) => sum + branchUpkeep(city, this.s.q), 0);
+      // 두 해 넘게 노선 한두 개에 머문 작은 회사는 돈이 넉넉하면 조금 손해 보는 노선도 열어 길을 튼다
+      // (외딴 본사는 첫 장거리 노선이 문턱 언저리라, 문턱을 넘느냐가 판마다 운에 달려 있었다)
+      const stuck = this.s.t - this.s.startT >= 24 && this.c.routes.length <= 2 && this.c.cash > 1000;
+      return -upkeep - (stuck ? STUCK_LOSS : 0);
+    }
     return this.minGain(5 / Q);
   }
 

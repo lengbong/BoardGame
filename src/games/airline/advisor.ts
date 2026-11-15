@@ -4,8 +4,9 @@ import { ACADEMY_COST, STAFF_GROUPS, STAFF_INFO, hireCost, hireTime, staffCap, s
 import { weather } from './calendar';
 import { CITY, REGIONS, airportClass, dist } from './cities';
 import { goalProgress } from './goals';
-import { CRISIS_MONTHS, MAX_ROUTES, applyAction, bestFreq, buyBlocker, creditLimit, fmtFine, fmtMoney, idlePlanes, oilTarget, planeById, routeById, usedBlocker } from './rules';
+import { CRISIS_MONTHS, MAX_ROUTES, applyAction, bestFreq, buyBlocker, checkBlocker, creditLimit, fmtFine, fmtMoney, idlePlanes, oilTarget, planeById, routeById, usedBlocker } from './rules';
 import { FUEL_TON, TANK_LEVELS, tankBlocker, tankCap, tankOf, tankSpace, tonPrice } from './fuel';
+import { checkCost, condOf, inCheck, restoredCond } from './condition';
 import {
   MAINT_COST,
   MAINT_NAMES,
@@ -563,6 +564,20 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
       label: `광고 ${fmtMoney(amount)}`,
       apply: (s) => afterAct(s, ci, { type: 'setAds', region, amount }),
       weight: 70,
+    });
+  }
+
+  // 8-0. 기체 상태: 아주 닳은 비행기는 점검 시점과 상관없이 점검을 권한다
+  const worn = c.planes.filter((p) => p.legs.length > 0 && !inCheck(p, state.t) && condOf(p) < 28).sort((a, b) => condOf(a) - condOf(b))[0];
+  if (worn && !checkBlocker(state, ci, worn.id)) {
+    out.push({
+      key: `check-${worn.id}`,
+      icon: '🔧',
+      title: `${MODEL[worn.model].name} 기체 상태 ${Math.round(condOf(worn))}%: C점검 보내기`,
+      detail: `많이 닳아 고장·지연·결항이 잦아요. 이번 달 정비고에 넣으면 약 ${fmtMoney(checkCost(worn))}이 들고 그달은 쉬지만${spareCover(c) > 0 ? ' (예비기가 대신 날아요)' : ''}, 상태가 ${restoredCond(planeAge(state, worn))}%로 돌아와요.`,
+      label: 'C점검',
+      apply: (s2) => afterAct(s2, ci, { type: 'checkPlane', plane: worn.id, on: true }),
+      weight: 165,
     });
   }
 

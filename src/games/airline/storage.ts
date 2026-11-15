@@ -113,6 +113,9 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
     if (p.cabin !== undefined && !(isObj(p.cabin) && cabinBlocker(MODEL[p.model], p.cabin) === null)) return false;
     if (p.meal !== undefined && !(isInt(p.meal) && p.meal >= 1 && p.meal <= 5)) return false;
     if (p.got !== undefined && !isInt(p.got)) return false;
+    // 기체 상태·C점검 (예전 저장에는 없다)
+    if (p.cond !== undefined && !(isNum(p.cond) && p.cond >= 0 && p.cond <= 100)) return false;
+    if (p.check !== undefined && !isInt(p.check)) return false;
   }
   if (!Array.isArray(k.orders) || !k.orders.every((o) => isObj(o) && isInt(o.id) && o.id < nextId && typeof o.model === 'string' && !!MODEL[o.model] && isInt(o.due) && isNum(o.price))) return false;
   if (!Array.isArray(k.mods) || !k.mods.every((m) => isObj(m) && isInt(m.id) && MOD_KINDS.includes(m.kind) && isNum(m.value) && isInt(m.until) && typeof m.label === 'string')) return false;
@@ -128,6 +131,7 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
   // 실제 항공사·색 (예전 판 저장에는 없을 수 있다)
   if (k.airline !== undefined && k.airline !== null && typeof k.airline !== 'string') return false;
   if (k.color !== undefined && k.color !== null && !(typeof k.color === 'string' && /^#[0-9a-f]{6}$/i.test(k.color))) return false;
+  if (k.checkAt !== undefined && !(isNum(k.checkAt) && k.checkAt >= 20 && k.checkAt <= 90)) return false;
   // 연료 탱크 (예전 저장에는 없다)
   if (k.fuel !== undefined && !(isObj(k.fuel) && isInt(k.fuel.level) && k.fuel.level >= 0 && k.fuel.level <= MAX_TANK && isNum(k.fuel.stock) && k.fuel.stock >= 0 && isNum(k.fuel.avg) && k.fuel.avg >= 0 && (k.fuel.auto === null || isNum(k.fuel.auto)))) return false;
   if (!isObj(k.ads) || !isObj(k.awareness) || !REGIONS.every((r) => isNum(k.ads[r]) && isNum(k.awareness[r]))) return false;

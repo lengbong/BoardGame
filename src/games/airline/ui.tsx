@@ -1,9 +1,31 @@
-import { useState, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { CompanyBadge, SEAT_SHAPES } from './Art';
 import { coColors, inkOn, realOf } from './brand';
 import { photoCredit } from './images';
 import type { RealAirline } from './realAirlines';
 import type { Company } from './types';
+
+/** 흐린 버튼을 눌렀을 때 왜 안 되는지 알림으로 띄우는 길 (Game이 넣어 준다) */
+export const SayContext = createContext<(text: string) => void>(() => {});
+export const useSay = () => useContext(SayContext);
+
+/**
+ * 흐린(못 누르는) 버튼을 감싸서, 눌렀을 때 까닭을 알림으로 보여 준다.
+ * 꺼진 버튼은 누름을 받지 못하므로, 버튼을 누름이 지나가게 하고(CSS) 감싼 칸이 대신 받는다.
+ */
+export function Why({ why, children, className }: { why: string | null | undefined; children: ReactNode; className?: string }) {
+  const say = useSay();
+  if (!why) return className ? <span className={className}>{children}</span> : <>{children}</>;
+  return (
+    <span className={`${className ?? 'al-why-wrap'} al-blocked`} title={why} onClick={(e) => {
+        e.stopPropagation();
+        say(why);
+      }}
+    >
+      {children}
+    </span>
+  );
+}
 
 /** 할 수 있으면 누를 수 있고, 못 하면 흐리게 + 이유를 작게 보여 주는 버튼 */
 export function ActButton({
@@ -28,7 +50,7 @@ export function ActButton({
   quiet?: boolean;
 }) {
   return (
-    <span className="al-act">
+    <Why why={blocker} className="al-act">
       <button
         type="button"
         className={`btn${primary ? ' btn-primary' : ''}${small ? ' btn-small' : ''}${blocker ? '' : ' al-can'}`}
@@ -40,7 +62,7 @@ export function ActButton({
         {children}
       </button>
       {blocker && !quiet && <small className="al-why">{blocker}</small>}
-    </span>
+    </Why>
   );
 }
 

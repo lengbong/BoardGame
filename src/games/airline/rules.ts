@@ -966,6 +966,18 @@ export function actionBlocker(state: AirlineState, action: AirlineAction): strin
       return action.on ? checkBlocker(state, ci, action.plane) : null;
     case 'buildFacility':
       return facilityBlocker(state, ci, action.city, action.kind);
+    case 'sellFuel':
+      return sellFuelBlocker(state, ci, action.tons);
+    case 'setBizModel':
+      return bizModelBlocker(c, action.model);
+    case 'buyStake':
+      return buyStakeBlocker(state, ci, action.company, action.pct);
+    case 'sellStake':
+      return sellStakeBlocker(state, ci, action.company, action.pct);
+    case 'issueShares':
+      return issueBlocker(state, ci);
+    case 'merge':
+      return mergeBlocker(state, ci, action.company);
     default:
       return null;
   }

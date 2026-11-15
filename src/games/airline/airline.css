@@ -710,6 +710,47 @@
   align-items: flex-start;
   gap: 2px;
 }
+/* 흐린 버튼을 누르면 까닭을 알려 준다: 꺼진 버튼은 누름이 지나가고 감싼 칸이 받는다 */
+.al-why-wrap {
+  display: inline-flex;
+}
+.al-blocked {
+  cursor: not-allowed;
+}
+.al-blocked > button:disabled {
+  pointer-events: none;
+}
+/* 왜 안 되는지 알림 (창 위에도 보이게 맨 위에) */
+.al-nope-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  z-index: 200;
+  max-width: min(560px, calc(100vw - 24px));
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--al-bad);
+  color: var(--al-bad);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.35;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  animation: al-nope-in 0.18s ease-out both;
+}
+@keyframes al-nope-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .al-nope-toast {
+    animation: none;
+  }
+}
 .al-why {
   font-size: 11.5px;
   color: var(--al-bad);

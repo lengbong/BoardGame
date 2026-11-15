@@ -7,7 +7,7 @@ import { routeFreq, slotCapacity } from './simulate';
 import { BAND_INFO, bandCaps, bandCounts, bandUsed, curfew, timeFit, type Times } from './timetable';
 import { yearOf } from './time';
 import type { AirlineAction, AirlineState, Route } from './types';
-import { ActButton } from './ui';
+import { ActButton, Why } from './ui';
 import { BandDial, FitBar, RouteIcon } from './RoutesArt';
 import { MoreInfo, StaffIcon } from './StaffArt';
 
@@ -116,13 +116,17 @@ export function TimetableCard({ state, viewer, canAct, perform, route }: { state
                 {b.icon} {b.name} <small>{b.hours}</small>
               </span>
               <span className="al-stepper" role="group" aria-label={`${b.name} 주간 편수`}>
-                <button type="button" className="al-step-btn" disabled={!!block || !!downWhy} title={downWhy ?? undefined} onClick={() => down && perform({ type: 'setTimes', route: route.id, times: down })} aria-label={`${b.name} 줄이기`}>
-                  −
-                </button>
+                <Why why={block ?? downWhy}>
+                  <button type="button" className="al-step-btn" disabled={!!block || !!downWhy} onClick={() => down && perform({ type: 'setTimes', route: route.id, times: down })} aria-label={`${b.name} 줄이기`}>
+                    −
+                  </button>
+                </Why>
                 <b>{total > 0 ? `주 ${counts[i]}` : route.times[i]}</b>
-                <button type="button" className="al-step-btn" disabled={!!block || !!upWhy} title={upWhy ?? undefined} onClick={() => up && perform({ type: 'setTimes', route: route.id, times: up })} aria-label={`${b.name} 늘리기`}>
-                  +
-                </button>
+                <Why why={block ?? upWhy}>
+                  <button type="button" className="al-step-btn" disabled={!!block || !!upWhy} onClick={() => up && perform({ type: 'setTimes', route: route.id, times: up })} aria-label={`${b.name} 늘리기`}>
+                    +
+                  </button>
+                </Why>
               </span>
               <small className="al-muted al-tt-room">
                 {closed
@@ -138,9 +142,11 @@ export function TimetableCard({ state, viewer, canAct, perform, route }: { state
           const why = p.times[3] > 0 && night.length > 0 ? '밤 운항 금지' : timesBlocker(state, viewer, route.id, p.times);
           const on = p.times.every((x, i) => x === route.times[i]);
           return (
-            <button key={p.label} type="button" className={`al-chip${on ? ' al-on' : ''}`} disabled={!!block || (!!why && !on)} title={why ?? p.title} onClick={() => perform({ type: 'setTimes', route: route.id, times: p.times })}>
-              {p.label}
-            </button>
+            <Why key={p.label} why={block ?? (on ? null : why)}>
+              <button type="button" className={`al-chip${on ? ' al-on' : ''}`} disabled={!!block || (!!why && !on)} title={why ?? p.title} onClick={() => perform({ type: 'setTimes', route: route.id, times: p.times })}>
+                {p.label}
+              </button>
+            </Why>
           );
         })}
       </div>

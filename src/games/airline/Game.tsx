@@ -27,7 +27,7 @@ import { GameOver, QuarterReport } from './Results';
 import { RouteOpeningCard, type Opening } from './RouteOpening';
 import { RoutesView, type Planner } from './RoutesView';
 import { NewsWithRivals } from './RivalsCard';
-import { actor, applyAction, autoStopReason, idlePlanes, rankings } from './rules';
+import { actionBlocker, actor, applyAction, autoStopReason, idlePlanes, rankings } from './rules';
 import { companyValue, monthDemandMult, routeFreq } from './simulate';
 import { AIRLINE_JINGLES, AIRLINE_MAIN, AIRLINE_TITLE, routeFanfare } from './song';
 import { alSound } from './sounds';
@@ -38,7 +38,7 @@ import { StaffIcon } from './StaffArt';
 import { StaffView } from './StaffView';
 import { staffCap, staffNeed } from './staff';
 import type { AirlineAction, AirlineSetup, AirlineState, QuarterReport as Report } from './types';
-import { IataBadge, Kbd } from './ui';
+import { IataBadge, Kbd, SayContext } from './ui';
 
 type Tab = 'map' | 'fleet' | 'routes' | 'finance' | 'staff' | 'report' | 'news';
 
@@ -149,7 +149,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   }, [banner, delays.turn]);
   useEffect(() => {
     if (!notice) return;
-    const t = window.setTimeout(() => setNotice(null), 4500);
+    const t = window.setTimeout(() => setNotice(null), 2800);
     return () => window.clearTimeout(t);
   }, [notice]);
   useEffect(() => {
@@ -327,20 +327,29 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   const stopAuto = () => setAuto((a) => Object.fromEntries(Object.entries(a).filter(([k]) => Number(k) !== viewer)));
 
   // ------------------------------------------------------------ 사람의 행동
-  const say = useCallback((text: string) => setNotice({ id: fxSeq++, text }), []);
+  // 왜 안 되는지 알림 (화면 아래에 잠깐 뜬다)
+  const [nope, setNope] = useState<{ id: number; text: string } | null>(null);
+  const sayNope = useCallback((text: string) => {
+    alSound.nope();
+    setNope({ id: fxSeq++, text });
+  }, []);
+  useEffect(() => {
+    if (!nope) return;
+    const t = window.setTimeout(() => setNope(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [nope]);
 
   const perform = useCallback(
     (a: AirlineAction) => {
       if (!canAct) return;
       const next = applyAction(game, a);
       if (next === game) {
-        alSound.nope();
-        say('지금은 할 수 없어요.');
+        sayNope(actionBlocker(game, a) ?? '지금은 할 수 없어요.');
         return;
       }
       setGame(next);
     },
-    [canAct, game, say],
+    [canAct, game, sayNope],
   );
 
   const apply = useCallback(
@@ -348,13 +357,12 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
       if (!canAct) return;
       const next = fn(game);
       if (next === game) {
-        alSound.nope();
-        say('지금은 할 수 없어요.');
+        sayNope('지금은 할 수 없어요.');
         return;
       }
       setGame(next);
     },
-    [canAct, game, say],
+    [canAct, game, sayNope],
   );
 
   const endTurn = useCallback(() => {
@@ -515,10 +523,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
           selected={selected}
           onOpenChoice={() => setChoiceOpen(true)}
           onAuto={() => startAuto('event')}
-          onSay={(text) => {
-            alSound.nope();
-            say(text);
-          }}
+          onSay={sayNope}
         />
       </div>
     );
@@ -544,7 +549,13 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   else content = <NewsWithRivals state={game} onCity={showCity} viewer={viewer} canAct={canAct} perform={perform} />;
 
   return (
+    <SayContext.Provider value={sayNope}>
     <div className="al-game">
+      {nope && (
+        <div key={nope.id} className="al-nope-toast" role="alert" data-testid="al-nope">
+          ⚠ {nope.text}
+        </div>
+      )}
       <div className="al-main">
         <header className="al-topbar">
           <div className="al-date" title="지금 분기">
@@ -674,5 +685,6 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
       {fameUi}
       {scenarioUi}
     </div>
+    </SayContext.Provider>
   );
 }

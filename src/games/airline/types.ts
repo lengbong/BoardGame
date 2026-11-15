@@ -488,6 +488,10 @@ export interface Company {
   checkAt?: number;
   /** 공항 시설 (없으면 없음) */
   facilities?: Facility[];
+  /** 마지막으로 증자한 달 */
+  lastIssue?: number;
+  /** 다른 회사에 인수되어 합쳐졌으면 그 회사 번호 (out도 true) */
+  mergedInto?: number;
   /** 사업 모델 (풀서비스·저가항공·화물 전문) */
   bizModel: BizModel;
   /** 바꾸는 중인 사업 모델 (t 달에 바뀐다) */
@@ -894,6 +898,11 @@ export type AirlineAction =
   | { type: 'setCheckAt'; at: number }
   /** 전세기 의뢰를 이 쉬는 비행기로 맡는다 (이번 달에 다녀온다) */
   | { type: 'charter'; offer: number; plane: number }
+  /** 주식: 다른 회사 주식 사기·팔기 (%), 증자, 과반을 가진 회사 인수 */
+  | { type: 'buyStake'; company: number; pct: number }
+  | { type: 'sellStake'; company: number; pct: number }
+  | { type: 'issueShares' }
+  | { type: 'merge'; company: number }
   /** 공항 시설 짓기·팔기 */
   | { type: 'buildFacility'; city: string; kind: FacilityKind }
   | { type: 'sellFacility'; city: string; kind: FacilityKind }
@@ -920,6 +929,7 @@ export type GameEvent =
   | { id: number; type: 'check'; company: number; plane: number; on: boolean }
   | { id: number; type: 'facility'; company: number; city: string; kind: FacilityKind }
   | { id: number; type: 'charter'; company: number; offer: number }
+  | { id: number; type: 'stock'; company: number; target: number; what: 'buy' | 'sell' | 'issue' | 'merge' }
   | { id: number; type: 'turn'; company: number }
   | { id: number; type: 'month'; t: number }
   | { id: number; type: 'quarter'; q: number }
@@ -984,6 +994,8 @@ export interface AirlineState {
   charters?: CharterOffer[];
   /** 항공 동맹 (예전 저장에는 없다: 1:1 제휴는 불러올 때 동맹으로 옮긴다) */
   alliances?: Alliance[];
+  /** 주식 (stocks.ts): stakes[i][j] = 회사 i의 주식 가운데 회사 j가 가진 몫 (%). 없으면 아무도 안 가졌다 */
+  stakes?: number[][];
   nextId: number;
   result: GameResult | null;
   challenge: ChallengeProgress | null;

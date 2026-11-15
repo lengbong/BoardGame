@@ -374,3 +374,65 @@
   color: var(--text-muted);
   font-size: 12px;
 }
+
+/* ---------------------------------------------------------------- 주식 */
+.al-stock-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.al-stock-list > li {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.al-stock-list > li.al-stock-self {
+  background: var(--surface-2);
+}
+.al-stock-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+}
+.al-stock-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+}
+.al-stock-price small {
+  font-size: 11.5px;
+}
+.al-own-bar {
+  display: block;
+  width: 100%;
+  height: 10px;
+  margin: 4px 0;
+}
+.al-own-rest {
+  fill: var(--border);
+}
+.al-own-mark {
+  stroke: var(--text);
+  stroke-width: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+.al-own-cap {
+  stroke: var(--text-muted);
+  stroke-width: 0.8;
+  stroke-dasharray: 2 2;
+  vector-effect: non-scaling-stroke;
+}
+.al-stock-mine {
+  display: block;
+  font-size: 12px;
+}
+.al-stock-card .al-loan-row > span:first-child {
+  width: 40px;
+  flex: none;
+}

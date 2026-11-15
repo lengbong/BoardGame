@@ -3,6 +3,7 @@ import { MAX_ROUTES } from './limits';
 import { CAMPAIGN_INFO, MEDIA_INFO, mediaOf } from './ads';
 import { cabinPresets, sameCabin } from './cabin';
 import { MAX_MEMBERS, allianceOf } from './alliances';
+import { MERGE_AT, buyCost, buyStakeBlocker, buyoutCost, dividendYield, mergeBlocker, stakeOf } from './stocks';
 import { charterBlocker, charterPlaneIds, charterProfit, openCharters } from './charters';
 import { checkAtOf, inCheck } from './condition';
 import { countFacility, facilityBlocker, facilityCost } from './facilities';
@@ -41,6 +42,7 @@ import {
   branchCost,
   branchUpkeep,
   businessCost,
+  companyValue,
   creditLimit,
   draftsOf,
   estimateExisting,
@@ -240,6 +242,7 @@ export class Planner {
       this.buildFacilities();
       this.setOps();
       this.manageFuel();
+      this.manageStakes();
       this.tuneTimes();
       this.maybePropose();
       this.manageLoans(false);
@@ -346,6 +349,49 @@ export class Planner {
     if (tankOf(this.c).level > 0 && tankOf(this.c).auto !== want) this.act({ type: 'setFuelAuto', ratio: want });
   }
 
+  /**
+   * 주식: 돈이 아주 넉넉하면 남는 돈을 다른 회사 주식에 넣는다.
+   * - 치열한 회사는 다섯 해가 지나면, 돈이 바닥난 컴퓨터 회사나 크기가 우리의 20%도 안 되는 컴퓨터 회사를 사들여 51%를 넘기면 합친다
+   *   (보통·느긋은 사들이지 않는다: 라이벌이 하나둘 사라지면 사람과 겨룰 상대가 줄어든다)
+   * - 그 밖에는 배당 수익률이 좋은 회사를 20%까지 (사람 회사는 49%까지만 살 수 있다)
+   */
+  private manageStakes(): void {
+    const spare = () => this.c.cash - this.reserve() * 6 - 500;
+    if (spare() <= 0) return;
+    const mine = companyValue(this.s, this.ci);
+    // 1) 이미 과반이면 합친다
+    for (let i = 0; i < this.s.companies.length; i++) {
+      if (i !== this.ci && !mergeBlocker(this.s, this.ci, i) && buyoutCost(this.s, this.ci, i) < spare()) {
+        this.act({ type: 'merge', company: i });
+        return;
+      }
+    }
+    // 2) 작은 컴퓨터 회사 사들이기
+    const hunt = this.style === 'fierce' && this.s.t - this.s.startT >= 60;
+    if (hunt) {
+      const prey = this.s.companies
+        .map((x, i) => ({ x, i }))
+        .filter(({ x, i }) => i !== this.ci && !x.out && x.kind !== 'human' && (x.crisis > 0 || companyValue(this.s, i) < mine * 0.2))
+        .sort((p, q) => stakeOf(this.s, q.i, this.ci) - stakeOf(this.s, p.i, this.ci))[0];
+      if (prey) {
+        // 한 차례에 과반까지 사들일 수 있다 (인수 제안을 한꺼번에 내는 셈)
+        for (let k = 0; k < 6; k++) {
+          const pct = Math.min(10, Math.ceil(MERGE_AT - stakeOf(this.s, prey.i, this.ci)));
+          if (pct <= 0 || buyStakeBlocker(this.s, this.ci, prey.i, pct) || buyCost(this.s, prey.i, pct) > spare()) break;
+          this.act({ type: 'buyStake', company: prey.i, pct });
+        }
+        if (!mergeBlocker(this.s, this.ci, prey.i) && buyoutCost(this.s, this.ci, prey.i) < spare()) this.act({ type: 'merge', company: prey.i });
+        return;
+      }
+    }
+    // 3) 배당을 노린 투자
+    const best = this.s.companies
+      .map((x, i) => ({ x, i, y: dividendYield(this.s, i) }))
+      .filter(({ x, i, y }) => i !== this.ci && !x.out && y > 0.04 && stakeOf(this.s, i, this.ci) < 20)
+      .sort((p, q) => q.y - p.y)[0];
+    if (best && !buyStakeBlocker(this.s, this.ci, best.i, 5) && buyCost(this.s, best.i, 5) < spare() * 0.5) this.act({ type: 'buyStake', company: best.i, pct: 5 });
+  }
+
   // ---------------------------------------------------------------- 결정 사건
 
   private decide(): void {
@@ -381,6 +427,11 @@ export class Planner {
       if (r.stats && r.stats.profit < 0) this.act({ type: 'closeRoute', route: r.id });
     }
     for (const o of [...this.c.orders]) if (this.c.cash < 0) this.act({ type: 'cancelOrder', order: o.id });
+    // 가진 다른 회사 주식을 판다
+    for (let i = 0; i < this.s.companies.length; i++) {
+      const pct = stakeOf(this.s, i, this.ci);
+      if (this.c.cash < 0 && pct > 0) this.act({ type: 'sellStake', company: i, pct });
+    }
     // 이번 달 C점검은 미룬다 (점검 값을 아끼고 비행기를 띄운다)
     for (const p of [...this.c.planes]) if (this.c.cash < 0 && inCheck(p, this.s.t)) this.act({ type: 'checkPlane', plane: p.id, on: false });
     // 사 둔 연료를 팔아 급한 돈을 마련한다

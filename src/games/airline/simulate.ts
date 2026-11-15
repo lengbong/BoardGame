@@ -234,8 +234,47 @@ export function businessValue(b: Business): number {
   return b.cost * 0.8;
 }
 
-/** 회사 가치 = 현금 + 내 비행기·주문한 비행기·리스 보증금·부대사업·사 둔 연료·탱크 가치 − 빚 */
-export function companyValue(state: Pick<AirlineState, 'q' | 't' | 'companies'>, ci: number): number {
+/** 주식·결산 기록까지 있을 수 있는 상태 (회사 가치·시가 총액 계산) */
+export type ValueState = Pick<AirlineState, 'q' | 't' | 'companies'> & Partial<Pick<AirlineState, 'stakes' | 'ledger'>>;
+
+/** 회사 가치 = 자기 자산 가치(baseValue) + 가진 다른 회사 주식의 시가 */
+export function companyValue(state: ValueState, ci: number): number {
+  const c = state.companies[ci];
+  if (c.out) return 0;
+  return baseValue(state, ci) + stakesValue(state, ci);
+}
+
+/** 지난 열두 달 이익 합 (주가 배수) */
+export function yearProfit(state: ValueState, ci: number): number {
+  let sum = 0;
+  for (const l of (state.ledger ?? []).slice(-12)) sum += l.companies[ci]?.profit ?? 0;
+  return sum;
+}
+
+/** 주가 배수: 자산 가치에 견준 한 해 이익(자기자본 이익률)이 클수록 높다 (0.6~2) */
+export function valuationMult(state: ValueState, ci: number): number {
+  const roe = yearProfit(state, ci) / Math.max(50, baseValue(state, ci));
+  return Math.max(0.6, Math.min(2, 0.9 + 3 * roe));
+}
+
+/** 시가 총액 (억): 자산 가치 × 주가 배수. 운항을 멈춘 회사는 0 */
+export function marketCap(state: ValueState, ci: number): number {
+  const c = state.companies[ci];
+  if (!c || c.out) return 0;
+  return Math.max(50, baseValue(state, ci)) * valuationMult(state, ci);
+}
+
+/** 이 회사가 가진 다른 회사 주식의 시가 합 */
+export function stakesValue(state: ValueState, ci: number): number {
+  const st = state.stakes;
+  if (!st) return 0;
+  let v = 0;
+  for (let i = 0; i < st.length; i++) if (i !== ci && (st[i]?.[ci] ?? 0) > 0) v += (st[i][ci] / 100) * marketCap(state, i);
+  return v;
+}
+
+/** 자기 자산 가치 = 현금 + 내 비행기·주문한 비행기·리스 보증금·부대사업·사 둔 연료·탱크·시설 가치 − 빚 */
+export function baseValue(state: Pick<AirlineState, 'q' | 't' | 'companies'>, ci: number): number {
   const c = state.companies[ci];
   if (c.out) return 0;
   let v = c.cash - c.debt;

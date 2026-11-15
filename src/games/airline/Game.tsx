@@ -207,6 +207,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
         else if (e.type === 'check') alSound.stamp();
         else if (e.type === 'facility') alSound.bell();
         else if (e.type === 'charter') alSound.takeoff();
+        else if (e.type === 'stock') e.what === 'sell' || e.what === 'issue' ? alSound.coins() : e.what === 'merge' ? alSound.chime() : alSound.pay();
       }
     }
     for (const e of game.events) {

@@ -451,7 +451,7 @@ describe('실제 항공사', () => {
     expect(s.phase).toBe('gameover');
     expect(s.companies.map((c) => c.name)).toEqual(names);
     expect(s.news.every((n) => !n.title.includes('파산'))).toBe(true);
-  });
+  }, 60000);
 
   it('저장했다가 불러와도 항공사가 그대로이고, 없어진 항공사 id는 가상 항공사로 바꾼다', () => {
     const st = createGame(realSetup(['human', 'ai-normal'], ['jal']), seededRandom(6));

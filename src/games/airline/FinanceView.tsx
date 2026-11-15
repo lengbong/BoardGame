@@ -9,6 +9,7 @@ import { FuelCard } from './FuelCard';
 import { CheckPolicy } from './ConditionArt';
 import { FacilityCard } from './FacilityCard';
 import { AlliancePanel } from './AlliancePanel';
+import { StockCard } from './StockCard';
 import { TrophyShelf } from './AwardsArt';
 import { facilitiesWorth } from './facilities';
 import { tankWorth } from './fuel';
@@ -537,6 +538,8 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
       <FuelCard state={state} viewer={viewer} canAct={canAct} perform={perform} next={next} />
 
       <FacilityCard state={state} viewer={viewer} canAct={canAct} perform={perform} />
+
+      {state.companies.length > 1 && <StockCard state={state} viewer={viewer} canAct={canAct} perform={perform} />}
 
       <section className="al-card al-service">
         <h4 className="al-fin-title">

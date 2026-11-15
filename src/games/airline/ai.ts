@@ -64,6 +64,9 @@ const Q = 3;
 /** 노선이 이보다 적으면 갓 시작한 회사로 보고 새 노선을 너그럽게 연다 */
 const STARTUP_ROUTES = 4;
 
+/** 그 뒤 새 노선은 이 회사 노선이 보통 버는 달 이익의 이만큼은 벌어야 연다 (많아야 원래 문턱) */
+const OPEN_SHARE = 0.15;
+
 /**
  * 컴퓨터 항공사. 한 분기 경영을 행동 목록으로 정한다 (끝에 endTurn은 넣지 않는다).
  * 쉬움: 본사에서 손님이 많은 도시로 천천히 노선을 늘리고, 운임은 조심스럽게, 잘 안 되는 노선만 닫는다.
@@ -685,14 +688,24 @@ export class Planner {
 
   /**
    * 이 후보를 열려면 넘어야 하는 달 이익 어림 (새 지점 유지비까지 뺀 값).
-   * 노선이 몇 개 없는 갓 시작한 회사는 본사 유지비와 미리 뽑아 둔 직원 임금을 어차피 내고 있으니,
-   * 노선 자체가 비행 비용과 리스료를 벌면(새 지점 유지비는 아직 못 벌어도) 연다.
-   * 손님이 적은 지역(1960년대 동남아처럼)에서도 첫해부터 노선망을 짜기 시작하고,
-   * 손님이 해마다 늘고 갈아타는 손님이 붙으면서 지점 유지비도 벌게 된다.
+   * - 노선이 몇 개 없는 갓 시작한 회사는 본사 유지비와 미리 뽑아 둔 직원 임금을 어차피 내고 있으니,
+   *   노선 자체가 비행 비용과 리스료를 벌면(새 지점 유지비는 아직 못 벌어도) 연다.
+   *   손님이 적은 지역(1960년대 동남아처럼)에서도 첫해부터 노선망을 짜기 시작한다.
+   * - 그 뒤 문턱은 회사 크기에 맞춘다: 이 회사 노선이 보통 버는 이익의 일부, 많아야 원래 문턱(달 5/3).
+   *   노선마다 많이 버는 큰 회사는 그대로이고, 노선 하나가 달 2~3쯤 버는 작은 회사는
+   *   그만한 크기의 노선도 열어서 노선망과 갈아타는 손님을 키운다 (예전에는 노선 4개에서 15년 멈췄다).
    */
   private minOpenProfit(cand: Candidate): number {
-    if (this.c.routes.length >= STARTUP_ROUTES) return 5 / Q;
-    return -cand.needBranch.reduce((sum, city) => sum + branchUpkeep(city, this.s.q), 0);
+    if (this.c.routes.length < STARTUP_ROUTES) return -cand.needBranch.reduce((sum, city) => sum + branchUpkeep(city, this.s.q), 0);
+    return Math.min(5 / Q, OPEN_SHARE * this.typicalRouteProfit());
+  }
+
+  /** 이 회사 노선 하나가 보통 버는 달 이익 (지난달 노선 이익의 가운데 값, 손해는 0으로). 아직 실적이 없으면 무한대 */
+  private typicalRouteProfit(): number {
+    const profits = this.c.routes.filter((r) => r.stats).map((r) => Math.max(0, r.stats!.profit));
+    if (profits.length === 0) return Infinity;
+    profits.sort((x, y) => x - y);
+    return profits[Math.floor(profits.length / 2)];
   }
 
   private expand(max: number): void {

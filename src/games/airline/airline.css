@@ -1101,7 +1101,7 @@
 }
 .al-plane-rows li {
   display: grid;
-  grid-template-columns: 60px minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 8px;
 }
@@ -1251,6 +1251,13 @@
   margin: 0;
   font-size: 13px;
 }
+.al-nr-right > .al-route-block {
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--al-bad) 35%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--al-bad) 9%, transparent);
+  font-weight: 600;
+}
 .al-dest-list {
   list-style: none;
   margin: 0;
@@ -1261,17 +1268,36 @@
   max-height: 440px;
   overflow: auto;
 }
+/* 그림 칸은 그림 너비대로, 글자·버튼은 한 덩어리로: 자리가 모자라면 버튼이 글자 아래 줄로 내려간다
+   (버튼 칸이 긴 이유 문구만큼 넓어져 글자 칸을 눌러 버리거나, 그림이 글자 위로 넘치지 않게) */
 .al-options li {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 6px 0;
   border-bottom: 1px dashed var(--border);
+}
+.al-opt-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  min-width: 0;
+}
+.al-opt-body > .al-act {
+  min-width: 0;
+}
+/* 리스·중고 버튼의 이유가 서로 달라 둘 다 보일 때 한 문장처럼 붙어 보이지 않게 */
+.al-opt-body .al-two {
+  column-gap: 12px;
 }
 .al-opt-text {
   display: flex;
+  flex: 1 1 12em;
   flex-direction: column;
+  min-width: 0;
   font-size: 13.5px;
 }
 .al-opt-text small {

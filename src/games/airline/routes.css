@@ -598,20 +598,11 @@ rect.al-c-lease {
 .al-nr-facts .al-chip-static {
   white-space: normal;
 }
-/* 그림 | 글, 버튼은 글 아래 줄에 (못 하는 이유가 길어도 글을 밀어내지 않게) */
+/* 그림 | 글·버튼 덩어리(.al-opt-body, 자리가 모자라면 버튼이 글 아래 줄로) */
 .al-routes-view .al-options li {
   grid-template-columns: 92px minmax(0, 1fr);
-  align-items: start;
+  align-items: center;
   padding: 8px 0;
-}
-.al-routes-view .al-options li > .al-plane-chip {
-  grid-row: span 2;
-  align-self: center;
-}
-.al-routes-view .al-options li > .al-two,
-.al-routes-view .al-options li > .al-act {
-  grid-column: 2;
-  justify-self: start;
 }
 .al-opt-text {
   gap: 3px;

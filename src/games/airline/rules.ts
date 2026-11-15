@@ -24,6 +24,8 @@ import { MAX_PLANES, MAX_ROUTES } from './limits';
 import { REAL_AIRLINE, airlinesAt } from './realAirlines';
 import { ACADEMY_COST, PAY_MAX, PAY_MIN, STAFF_GROUPS, STAFF_INFO, emptyStaff, fireCost, hireCost, hireTime, moraleTarget, staffCap, staffNeed, staffPipe, staffTotal } from './staff';
 import { bandCaps, bandCounts, bandUsed, defaultTimes, routeCurfew } from './timetable';
+import { rightsAssignBlocker, rightsMonth, rightsRoom, rightsRouteBlocker } from './rights';
+import { applyRightsAction, isRightsAction, rightsAfterMerge } from './rightsRules';
 import {
   LEASE_RATE,
   MAX_DELIVERIES,
@@ -95,6 +97,7 @@ export const DEFAULT_OPTIONS: AirlineOptions = {
   aiStyle: 'normal',
   names: 'real',
   history: true,
+  rights: 'simple',
 };
 
 /** 실제 역사(냉전·국교·큰 사건)를 따르는지 */
@@ -548,7 +551,8 @@ export function routeBlocker(state: AirlineState, ci: number, a: string, b: stri
   const d = dist(a, b);
   if (d < 150) return '너무 가까워요';
   if (d > maxRangeNow(state, ci)) return `${d.toLocaleString()}km를 한 번에 날 수 있는 비행기가 없어요`;
-  return null;
+  // 운수권 (rights.ts)
+  return rightsRouteBlocker(state, ci, a, b);
 }
 
 /** 이번 달에 바로 받은 비행기 수 (리스 + 중고) */
@@ -688,7 +692,8 @@ export function assignBlocker(state: AirlineState, ci: number, planeId: number, 
     const left = slotCapacity(state, ci, city) - slotsUsed(c, city, { plane: p.id, route: routeId });
     if (freq > left) return `${CITY[city].name} 슬롯이 모자라요 (남은 ${Math.max(0, left)}회)`;
   }
-  return null;
+  // 운수권 (rights.ts)
+  return rightsAssignBlocker(state, ci, p, r, freq);
 }
 
 /** 이 비행기를 이 노선에 띄울 때 고를 수 있는 가장 큰 횟수 (못 띄우면 0) */
@@ -704,6 +709,7 @@ export function bestFreq(state: AirlineState, ci: number, planeId: number, route
   let f = maxFreqFor(c, p, routeId);
   if (f < 1) return 0;
   for (const city of [r.a, r.b]) f = Math.min(f, slotCapacity(state, ci, city) - slotsUsed(c, city, { plane: p.id, route: routeId }));
+  f = Math.min(f, rightsRoom(state, ci, p, r));
   return f >= 1 ? f : 0;
 }
 
@@ -889,6 +895,8 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
   const c0 = state.companies[ci];
   if (c0.out) return state;
   const seat = c0.seat;
+  // 운수권 신청 (rightsRules.ts)
+  if (isRightsAction(action)) return applyRightsAction(state, action, ci);
 
   switch (action.type) {
     case 'openBranch': {
@@ -1338,7 +1346,8 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
     }
     case 'merge': {
       if (mergeBlocker(state, ci, action.company)) return state;
-      return mergeCompanies(state, ci, action.company);
+      // 인수된 회사의 운수권도 넘겨받는다 (rightsRules.ts)
+      return rightsAfterMerge(state, mergeCompanies(state, ci, action.company), ci, action.company);
     }
     case 'checkPlane': {
       const p = planeById(c0, action.plane);
@@ -1833,6 +1842,8 @@ export function runMonth(state: AirlineState, rng: Rng = Math.random): AirlineSt
   // 가격 경쟁 알림·운항 현장 소식
   s = priceWarNews(s);
   s = opsNews(s, out.ops, out.closures);
+  // 운수권 심사·돌려주기 (rights.ts)
+  s = rightsMonth(s, t);
 
   out.reports.forEach((rep, ci) => {
     rep.value = Math.round(companyValue(s, ci));

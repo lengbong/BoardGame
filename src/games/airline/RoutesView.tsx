@@ -10,6 +10,8 @@ import { cabinSeats } from './cabin';
 import { AIRPORT_INFO, CITIES, CITY, REGIONS, REGION_INFO, airportClass, dist, pairKey } from './cities';
 import { fareText, fmtMoney, fmtPax, km, pct, signedFine, signedMoney } from './format';
 import { FARE_MAX, FARE_MIN, applyAction, assignBlocker, bestFreq, buyBlocker, depositFor, maxRangeNow, routeBlocker, routeOnPair, usedBlocker } from './rules';
+import { RightsFlag, RightsLine } from './RightsCard';
+import { rightsLeftFor } from './rights';
 import {
   WEEK_HOURS,
   branchCost,
@@ -207,7 +209,7 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
   const extra = useMemo(() => {
     const out: { m: ModelDef; freq: number; gain: number }[] = [];
     const base = draftsOf(state, me, r.id);
-    const left = Math.min(slotCapacity(state, viewer, r.a) - slotsUsed(me, r.a), slotCapacity(state, viewer, r.b) - slotsUsed(me, r.b));
+    const left = Math.min(slotCapacity(state, viewer, r.a) - slotsUsed(me, r.a), slotCapacity(state, viewer, r.b) - slotsUsed(me, r.b), rightsLeftFor(state, viewer, r.a, r.b));
     for (const m of modelsFor(me, year)) {
       if (m.range < d || airportClass(CITY[r.a], year) < m.runway || airportClass(CITY[r.b], year) < m.runway) continue;
       const f = Math.min(maxFreq(m, d), left);
@@ -291,6 +293,7 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
                 {planes.length}대 · 주 {myFreq}회 왕복 · 좌석 {mySeats.toLocaleString('ko-KR')}
               </small>
             </h4>
+            <RightsLine state={state} viewer={viewer} a={r.a} b={r.b} canAct={canAct} perform={perform} />
             {planes.length === 0 && <p className="al-muted">비행기가 없어서 운항하지 않아요. 아래에서 넣어 주세요.</p>}
             <ul className="al-plane-rows">
               {planes.map((p) => {
@@ -755,7 +758,7 @@ export function EstimateCard({
 
 // ------------------------------------------------------------------ 새 노선 찾기
 
-function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }: RoutesViewProps & { planner: Planner }) {
+function NewRoute({ state, viewer, canAct, perform, apply, planner, onPlanner, onFocus }: RoutesViewProps & { planner: Planner }) {
   const me = state.companies[viewer];
   const year = yearOf(state.q);
   const [region, setRegion] = useState<RegionId | 'all'>('all');
@@ -782,7 +785,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
     if (!to) return [];
     const d = dist(from, to);
     const out: { m: ModelDef; freq: number; e: RouteEstimate }[] = [];
-    const left = Math.min(slotCapacity(state, viewer, from) - slotsUsed(me, from), slotCapacity(state, viewer, to) - slotsUsed(me, to));
+    const left = Math.min(slotCapacity(state, viewer, from) - slotsUsed(me, from), slotCapacity(state, viewer, to) - slotsUsed(me, to), rightsLeftFor(state, viewer, from, to));
     const dem = pairDemand(state, from, to);
     for (const m of modelsFor(me, year)) {
       if (m.range < d || airportClass(CITY[from], year) < m.runway || airportClass(CITY[to], year) < m.runway) continue;
@@ -834,7 +837,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
       .map((p) => {
         const m = MODEL[p.model];
         if (m.range < d || airportClass(CITY[from], year) < m.runway || airportClass(CITY[to], year) < m.runway) return null;
-        const f = Math.min(maxFreq(m, d), Math.floor((WEEK_HOURS - planeHours(me, p)) / (2 * legHours(m, d)) + 1e-9));
+        const f = Math.min(maxFreq(m, d), Math.floor((WEEK_HOURS - planeHours(me, p)) / (2 * legHours(m, d)) + 1e-9), rightsLeftFor(state, viewer, from, to));
         if (f < 1) return null;
         const e = estimateRoute(state, viewer, from, to, [{ model: m.id, freq: f, age: planeAge(state, p), fixed: 0 }], 0);
         return { p, m, freq: f, e };
@@ -906,6 +909,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                     {x.c.name}
                     {x.mine && <span className="al-flag al-flag-ok">내 노선</span>}
                     {!x.reach && <span className="al-flag">너무 멀어요</span>}
+                    {x.reach && !x.mine && <RightsFlag state={state} viewer={viewer} a={from} b={x.c.id} />}
                   </span>
                   <span className="al-dr-demand" title={`한 방향 주간 잠재 손님 ${fmtPax(x.demand)}`}>
                     <FinIcon kind="people" size={13} />
@@ -959,6 +963,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                   ))
                 )}
               </p>
+              <RightsLine state={state} viewer={viewer} a={from} b={to} canAct={canAct} perform={perform} />
               {/* 노선 자체를 못 여는 이유는 여기 한 번만 (버튼마다 되풀이하지 않는다) */}
               {why && (
                 <p className="al-why al-route-block" role="note" data-testid="al-route-block">

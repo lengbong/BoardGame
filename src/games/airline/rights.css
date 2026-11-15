@@ -1,0 +1,117 @@
+/* 하늘길 항공사: 운수권과 항공 협정 (RightsCard.tsx · RightsSetup.tsx) */
+
+.al-rt-icon {
+  flex: none;
+  vertical-align: -4px;
+}
+/* ------------------------------------------------------------ 운수권 */
+.al-rights {
+  min-width: 0;
+}
+.al-rt-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.al-rt-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(90px, 0.8fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.al-rt-list li:last-child {
+  border-bottom: 0;
+}
+.al-rt-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.al-rt-name small {
+  font-size: 11.5px;
+}
+.al-rt-use {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.al-rt-use .al-meter {
+  flex: 1;
+  min-width: 36px;
+}
+.al-rt-use small {
+  white-space: nowrap;
+}
+.al-rt-tight .al-rt-name b {
+  color: var(--al-bad);
+}
+.al-rt-free {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin: 8px 0 0;
+}
+.al-rt-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 6px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 13px;
+}
+.al-rt-line.al-rt-tight {
+  border-color: var(--al-bad);
+}
+.al-rt-line-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.al-rt-line-text .al-meter {
+  width: 80px;
+  flex: none;
+}
+.al-rt-tier {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.al-rt-flag {
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------ 설정 */
+.al-rt-setup {
+  display: contents;
+}
+.al-rt-setup > .choice-field {
+  margin-top: 12px;
+}
+.al-rt-apply {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ------------------------------------------------------------ 좁은 화면 */
+@media (max-width: 560px) {
+  .al-rt-list li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .al-rt-list li > .al-act,
+  .al-rt-list li > small:last-child {
+    grid-column: 1 / -1;
+  }
+}

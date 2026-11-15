@@ -24,6 +24,7 @@ import type { AiStyle, AirlineOptions, AirlineSetup, MoneyLevel, NameMode, Start
 import { IataBadge } from './ui';
 import { BizModelSetup, humanModels } from './BizModelCard';
 import { Meter } from './ui';
+import { RightsSetup } from './RightsSetup';
 
 interface SetupProps {
   initialSetup: AirlineSetup;
@@ -298,6 +299,7 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
                 ? '역사 사건 없이 무작위 사건만 일어나고, 어느 나라든 오갈 수 있어요.'
                 : '냉전과 국교(막힌 하늘길, 소련 비행기)를 따르고, 석유 파동·걸프 전쟁·9·11·사스·금융 위기·코로나19 같은 실제 사건이 그 해에 일어나요.'}
             </p>
+            <RightsSetup opt={opt} setOpt={setOpt} />
           </section>
 
           <section className="setup-section">

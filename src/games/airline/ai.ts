@@ -67,6 +67,8 @@ import {
   type DraftPlane,
 } from './simulate';
 import { monthOf, yearOf } from './time';
+import { aiRights } from './aiRights';
+import { rightsLeftFor } from './rights';
 import type { AdMedia, AirlineAction, AirlineState, BusinessKind, Cabin, CampaignKind, Company, FacilityKind, ModelDef, RegionId, Rng } from './types';
 
 export type AiLevel = 'ai-easy' | 'ai-normal';
@@ -99,6 +101,7 @@ const OPEN_SHARE = 0.15;
 export function planTurn(state: AirlineState, ci: number, level: AiLevel, rng: Rng = Math.random): AirlineAction[] {
   const ai = new Planner(state, ci, level, rng);
   ai.run();
+  aiRights(ai);
   return ai.actions;
 }
 
@@ -106,6 +109,7 @@ export function planTurn(state: AirlineState, ci: number, level: AiLevel, rng: R
 export function aiManage(state: AirlineState, ci: number, level: AiLevel, rng: Rng = Math.random): AirlineState {
   const ai = new Planner(state, ci, level, rng);
   ai.run();
+  aiRights(ai);
   return ai.s;
 }
 
@@ -732,6 +736,7 @@ export class Planner {
         const d = dist(a, b);
         if (d < 300 || d > maxRange) continue;
         if (history && routePolitics(c.hub, a, b, year)) continue;
+        if (rightsLeftFor(this.s, this.ci, a, b) < 1) continue;
         if (!fromA.some((m) => this.fits(m, a, b))) continue;
         if (!this.normal && d > 6500) continue;
         if (skipDistance(c, d)) continue;
@@ -777,7 +782,7 @@ export class Planner {
     const branchMoney = needBranch.reduce((sum, x) => sum + branchCost(x, this.s.q), 0);
     const upkeep = needBranch.reduce((sum, x) => sum + branchUpkeep(x, this.s.q), 0);
     let best: Candidate | null = null;
-    const slotLimit = Math.min(this.slotsLeft(a), this.slotsLeft(b));
+    const slotLimit = Math.min(this.slotsLeft(a), this.slotsLeft(b), rightsLeftFor(this.s, this.ci, a, b));
     const dem = pairDemand(this.s, a, b);
     const reach = (dem.biz + dem.leisure) * 0.7;
     const hubBonus = this.normal && (a === this.c.hub || b === this.c.hub) ? 1.06 : 1;

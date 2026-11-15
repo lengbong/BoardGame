@@ -10,6 +10,7 @@ import { CheckPolicy } from './ConditionArt';
 import { FacilityCard } from './FacilityCard';
 import { AlliancePanel } from './AlliancePanel';
 import { StockCard } from './StockCard';
+import { RightsCard } from './RightsCard';
 import { TrophyShelf } from './AwardsArt';
 import { facilitiesWorth } from './facilities';
 import { tankWorth } from './fuel';
@@ -300,6 +301,8 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
       </section>
 
       <BizModelCard state={state} viewer={viewer} canAct={canAct} perform={perform} />
+
+      <RightsCard state={state} viewer={viewer} canAct={canAct} perform={perform} />
 
       <section className="al-card al-alliance">
         <AlliancePanel state={state} viewer={viewer} canAct={canAct} perform={perform} />

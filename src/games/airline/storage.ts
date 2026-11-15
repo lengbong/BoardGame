@@ -11,6 +11,7 @@ import { CHALLENGE } from './challenges';
 import { MAX_TANK } from './fuel';
 import { FACILITY_KINDS } from './facilities';
 import { isValidV4Company, migrateV3, parseModels } from './migrate4';
+import { isValidRightsState, parseRightsOption } from './rightsSave';
 import { CITY, REGIONS } from './cities';
 import { REAL_AIRLINE } from './realAirlines';
 import { STAFF_GROUPS, emptyStaff, staffNeed } from './staff';
@@ -61,6 +62,8 @@ export function parseOptions(v: unknown): AirlineOptions {
     aiStyle: o.aiStyle === 'relaxed' || o.aiStyle === 'fierce' || o.aiStyle === 'normal' ? o.aiStyle : DEFAULT_OPTIONS.aiStyle,
     names: o.names === 'fictional' || o.names === 'real' ? o.names : DEFAULT_OPTIONS.names,
     history: o.history !== false,
+    // 운수권 (없으면 키를 두지 않는다: rightsSave.ts)
+    ...parseRightsOption(o as Record<string, unknown>),
   };
 }
 
@@ -198,6 +201,8 @@ export function isValidState(v: unknown): v is AirlineState {
   if (s.challenge !== null && !(isObj(s.challenge) && typeof s.challenge.id === 'string' && CHALLENGE[s.challenge.id] && isIndex(s.challenge.company, n))) return false;
   if (s.result !== null && !(isObj(s.result) && Array.isArray(s.result.winners))) return false;
   if (!isInt(s.nextEventId) || !isInt(s.nextLogId)) return false;
+  // 운수권 장부 (예전 저장에는 없다: rightsSave.ts)
+  if (!isValidRightsState(s)) return false;
   return true;
 }
 

@@ -1,4 +1,5 @@
 import type { SeatIndex, SeatKind, Seats } from '../common/players';
+import type { RightsAction, RightsBook, RightsEvent, RightsMode } from './rightsTypes';
 
 export type { SeatIndex, SeatKind } from '../common/players';
 export type { Rng } from '../../lib/random';
@@ -545,6 +546,8 @@ export interface AirlineOptions {
   names: NameMode;
   /** 실제 역사 (냉전·국교·석유 파동·9·11·코로나…). 없으면 켜짐 */
   history?: boolean;
+  /** 운수권·항공 협정 (rights.ts). 없으면 끄기 (예전 저장) */
+  rights?: RightsMode;
 }
 
 export interface AirlineSetup {
@@ -907,6 +910,8 @@ export type AirlineAction =
   | { type: 'buildFacility'; city: string; kind: FacilityKind }
   | { type: 'sellFacility'; city: string; kind: FacilityKind }
   | { type: 'sellBusiness'; city: string; kind: BusinessKind }
+  /** 운수권 신청 (rightsTypes.ts) */
+  | RightsAction
   | { type: 'endTurn' };
 
 /** 화면 연출용: 마지막 행동에서 일어난 일 */
@@ -934,6 +939,7 @@ export type GameEvent =
   | { id: number; type: 'month'; t: number }
   | { id: number; type: 'quarter'; q: number }
   | { id: number; type: 'bankrupt'; company: number }
+  | RightsEvent
   | { id: number; type: 'gameover' };
 
 export interface LogEntry {
@@ -996,6 +1002,8 @@ export interface AirlineState {
   alliances?: Alliance[];
   /** 주식 (stocks.ts): stakes[i][j] = 회사 i의 주식 가운데 회사 j가 가진 몫 (%). 없으면 아무도 안 가졌다 */
   stakes?: number[][];
+  /** 운수권 장부 (예전 저장에는 없다: rights.ts) */
+  rights?: RightsBook;
   nextId: number;
   result: GameResult | null;
   challenge: ChallengeProgress | null;

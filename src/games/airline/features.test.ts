@@ -368,6 +368,11 @@ describe('경영 비서: 쉬는 비행기', () => {
     expect(keep?.title).toBe('쉬는 F27 프렌드십은 예비기로 두기');
     expect(keep?.detail).toContain('13대');
     expect(keep?.apply).toBeUndefined();
+    // 할 일이 아니라 알려 주는 말이라 다른 권유 뒤에 둔다 (뒤에는 ‘자동 진행’만 올 수 있다)
+    expect(tips.slice(tips.indexOf(keep!) + 1).every((a) => a.key === 'auto')).toBe(true);
+    // 다른 권유가 다섯 개를 채우면 보이지 않는다
+    expect(tips.indexOf(keep!)).toBeGreaterThanOrEqual(5);
+    expect(advise(s, 0).some((a) => a.key === 'keepspare')).toBe(false);
     // 리스기를 줄이려는 주문은 예비기를 그대로 두는 것이라 권해도 되고, 그렇다고 말해 준다
     const order = tips.find((a) => a.key === 'order-f27');
     expect(order?.detail).toContain('쉬는 F27 프렌드십은 예비기로 그대로 둬요');

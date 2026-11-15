@@ -213,6 +213,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
       }
     }
   }
+  // 예비기 안내는 할 일이 아니라 알려 주는 말이라, 다른 권유가 적은 달에만 보이게 가장 뒤에 둔다 (‘자동 진행’ 바로 앞)
   if (keep.length > 0) {
     const flyingNow = c.planes.filter((p) => p.legs.length > 0).length;
     const one = MODEL[keep[0].model].name;
@@ -221,7 +222,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
       icon: '🛟',
       title: keep.length === 1 ? `쉬는 ${withJosa(one, '은/는')} 예비기로 두기` : `쉬는 비행기 ${keep.length}대는 예비기로 두기`,
       detail: `비행기가 ${flyingNow}대 날고 있어요. 띄울 노선이 마땅치 않은 ${withJosa(keep.map((p) => MODEL[p.model].name).join('·'), '은/는')} 팔거나 리스기와 바꾸지 말고 예비기로 두세요. 기체 점검이나 고장으로 빠진 비행기 대신 날고, 결항이 줄어요.`,
-      weight: 200,
+      weight: 40,
     });
   }
 

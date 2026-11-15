@@ -910,6 +910,67 @@ function humansAmong(state: AirlineState, cis: number[]): number[] {
   return cis.filter((i) => state.companies[i]?.kind === 'human' && !state.companies[i].out);
 }
 
+/**
+ * 이 행동을 지금 할 수 없는 까닭 (할 수 있거나, 까닭을 따로 적어 두지 않은 행동이면 null).
+ * 경영 비서의 ‘적용’이 안 될 때 왜 안 되는지 알려 주는 데 쓴다.
+ */
+export function actionBlocker(state: AirlineState, action: AirlineAction): string | null {
+  if (state.phase !== 'manage') return '지금은 경영할 때가 아니에요';
+  const ci = actor(state);
+  const c = state.companies[ci];
+  if (!c || c.out) return '운항을 멈춘 회사예요';
+  switch (action.type) {
+    case 'openBranch':
+      return branchBlocker(state, ci, action.city);
+    case 'closeBranch':
+      return closeBranchBlocker(state, ci, action.city);
+    case 'openRoute':
+      return routeBlocker(state, ci, action.a, action.b);
+    case 'closeRoute':
+      return routeById(c, action.route) ? null : '없는 노선이에요';
+    case 'buy':
+      return buyBlocker(state, ci, action.model, false);
+    case 'lease':
+      return buyBlocker(state, ci, action.model, true);
+    case 'buyUsed':
+      return usedBlocker(state, ci, action.listing);
+    case 'sell':
+      return sellBlocker(state, ci, action.plane);
+    case 'assign':
+      return action.route === null ? null : assignBlocker(state, ci, action.plane, action.route, action.freq);
+    case 'campaign':
+      return campaignBlocker(state, ci, action.kind, action.region);
+    case 'hire':
+      return hireBlocker(state, ci, action.group, action.n, action.fast);
+    case 'fire':
+      return fireBlocker(state, ci, action.group, action.n);
+    case 'buildAcademy':
+      return academyBlocker(state, ci);
+    case 'setTimes':
+      return timesBlocker(state, ci, action.route, action.times);
+    case 'setCabin':
+      return cabinChangeBlocker(state, ci, action.plane, action.cabin, !!action.all);
+    case 'borrow':
+      return borrowBlocker(state, ci, action.amount);
+    case 'repay':
+      return repayBlocker(state, ci, action.amount);
+    case 'build':
+      return buildBlocker(state, ci, action.city, action.kind);
+    case 'buildTank':
+      return tankBlocker(state, ci);
+    case 'buyFuel':
+      return buyFuelBlocker(state, ci, action.tons);
+    case 'charter':
+      return charterBlocker(state, ci, action.offer, action.plane);
+    case 'checkPlane':
+      return action.on ? checkBlocker(state, ci, action.plane) : null;
+    case 'buildFacility':
+      return facilityBlocker(state, ci, action.city, action.kind);
+    default:
+      return null;
+  }
+}
+
 export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng = Math.random): AirlineState {
   if (state.phase !== 'manage') return state;
   const ci = actor(state);

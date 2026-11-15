@@ -19,6 +19,8 @@ import { CITIES, CITY, REGIONS, airportClass, citySize, dist, pairKey } from './
 import {
   applyAction,
   bestFreq,
+  actionBlocker,
+  assignBlocker,
   branchBlocker,
   buildBlocker,
   buyBlocker,
@@ -141,6 +143,15 @@ interface SparePlane {
   age: number;
 }
 
+/** 안 된 행동이 무엇이었는지 까닭 앞에 붙이는 말 */
+function blockLabel(a: AirlineAction): string {
+  if (a.type === 'lease') return `${MODEL[a.model]?.name ?? '비행기'} 리스: `;
+  if (a.type === 'buy') return `${MODEL[a.model]?.name ?? '비행기'} 주문: `;
+  if (a.type === 'buyUsed') return '중고 비행기: ';
+  if (a.type === 'openBranch') return `${CITY[a.city]?.name ?? ''} 지점: `;
+  return '';
+}
+
 export class Planner {
   s: AirlineState;
   actions: AirlineAction[] = [];
@@ -151,6 +162,8 @@ export class Planner {
    * 보통 컴퓨터가 직접 경영할 때(run)만 켠다. 사람에게 보여 주는 추천 노선은 새 비행기를 들이는 기준 그대로.
    */
   private fillSpare = false;
+  /** 행동이 안 됐을 때 그 까닭을 듣는 곳 (경영 비서가 사람에게 알려 준다) */
+  onBlock?: (why: string) => void;
 
   constructor(
     state: AirlineState,
@@ -177,7 +190,13 @@ export class Planner {
   /** 행동을 해 보고 되면 기록한다 */
   act(a: AirlineAction): boolean {
     const next = applyAction(this.s, a, this.rng);
-    if (next === this.s) return false;
+    if (next === this.s) {
+      if (this.onBlock) {
+        const why = actionBlocker(this.s, a);
+        if (why) this.onBlock(blockLabel(a) + why);
+      }
+      return false;
+    }
     this.s = next;
     this.actions.push(a);
     return true;
@@ -864,8 +883,20 @@ export class Planner {
 
   /** 후보대로 지점·노선을 열고 비행기를 들여 띄운다 (plane이 있으면 그 비행기로) */
   openCandidate(cand: Candidate, plane?: number, how: 'auto' | 'lease' | 'used' = 'auto'): boolean {
-    for (const city of cand.needBranch) if (branchBlocker(this.s, this.ci, city)) return false;
-    if (!cand.needBranch.length && routeBlocker(this.s, this.ci, cand.a, cand.b)) return false;
+    for (const city of cand.needBranch) {
+      const why = branchBlocker(this.s, this.ci, city);
+      if (why) {
+        this.onBlock?.(`${CITY[city].name} 지점: ${why}`);
+        return false;
+      }
+    }
+    if (!cand.needBranch.length) {
+      const why = routeBlocker(this.s, this.ci, cand.a, cand.b);
+      if (why) {
+        this.onBlock?.(why);
+        return false;
+      }
+    }
     const before = this.s;
     const beforeActions = this.actions.length;
     const undo = () => {
@@ -887,7 +918,12 @@ export class Planner {
       planeId = this.c.planes[this.c.planes.length - 1].id;
     }
     const f = Math.min(cand.freq, bestFreq(this.s, this.ci, planeId, route.id));
-    if (f < 1 || !this.act({ type: 'assign', plane: planeId, route: route.id, freq: f })) return undo();
+    if (f < 1) {
+      const why = assignBlocker(this.s, this.ci, planeId, route.id, 1);
+      if (why) this.onBlock?.(why);
+      return undo();
+    }
+    if (!this.act({ type: 'assign', plane: planeId, route: route.id, freq: f })) return undo();
     this.opened++;
     return true;
   }
@@ -1308,8 +1344,9 @@ export function suggestRoutes(state: AirlineState, ci: number, limit = 5, from?:
  * 추천 노선을 한 번에 열기: 지점 → 노선 → 리스(또는 중고, 또는 내 비행기 번호) → 띄우기.
  * 못 하면 그대로 돌려준다
  */
-export function openSuggestion(state: AirlineState, ci: number, cand: Candidate, how: 'lease' | 'used' | number = 'lease'): AirlineState {
+export function openSuggestion(state: AirlineState, ci: number, cand: Candidate, how: 'lease' | 'used' | number = 'lease', onBlock?: (why: string) => void): AirlineState {
   const ai = new Planner(state, ci, 'ai-normal', () => 0.5);
+  ai.onBlock = onBlock;
   const ok = typeof how === 'number' ? ai.openCandidate(cand, how) : ai.openCandidate(cand, undefined, how);
   return ok ? ai.s : state;
 }

@@ -1769,6 +1769,12 @@
 .al-notice {
   color: var(--al-bad);
 }
+.al-tip-why {
+  display: block;
+  margin-top: 2px;
+  color: var(--al-bad);
+  font-weight: 600;
+}
 .al-goal {
   display: flex;
   flex-direction: column;

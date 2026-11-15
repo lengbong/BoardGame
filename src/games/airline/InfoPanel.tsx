@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { MODEL } from './aircraft';
-import { advise } from './advisor';
+import { advise, applyAdvice } from './advisor';
 import { BUSINESS_INFO, BUSINESS_KINDS } from './business';
 import { FacilityRow } from './FacilityCard';
 import { allianceOf, alliesOf } from './alliances';
@@ -34,6 +34,8 @@ interface Common {
   onSelect: (sel: Selection) => void;
   onOpenChoice: () => void;
   onAuto?: () => void;
+  /** 안 되는 까닭을 알림으로 보여 준다 */
+  onSay?: (text: string) => void;
 }
 
 const notMine = '내 차례에만 할 수 있어요';
@@ -510,7 +512,9 @@ function RoutePanel({ state, viewer, canAct, onEditRoute, onPlanRoute, onSelect,
 
 // ------------------------------------------------------------------ 아무것도 고르지 않았을 때
 
-function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, onAuto }: Common) {
+function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, onAuto, onSay }: Common) {
+  // 적용이 안 된 권유와 그 까닭 (상태가 바뀌면 사라진다)
+  const [fail, setFail] = useState<{ state: AirlineState; key: string; why: string } | null>(null);
   const me = state.companies[viewer];
   const tips = useMemo(() => (canAct ? advise(state, viewer) : []), [state, viewer, canAct]);
   const flying = me.planes.filter((p) => p.legs.length > 0);
@@ -543,6 +547,11 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
                 <div className="al-tip-text">
                   <b>{t.title}</b>
                   <small>{t.detail}</small>
+                  {fail && fail.state === state && fail.key === t.key && (
+                    <small className="al-tip-why" role="alert" data-testid="al-advice-why">
+                      ⚠ 지금은 할 수 없어요: {fail.why}
+                    </small>
+                  )}
                 </div>
                 <div className="al-tip-acts">
                   {t.key === 'choice' ? (
@@ -558,8 +567,11 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
                       type="button"
                       className="btn btn-small btn-primary"
                       onClick={() => {
-                        const next = t.apply!(state);
-                        if (next !== state) setState(next);
+                        const res = applyAdvice(t, state);
+                        if (res.why) {
+                          setFail({ state, key: t.key, why: res.why });
+                          onSay?.(`${t.label ?? '적용'}: ${res.why}`);
+                        } else setState(res.state);
                       }}
                       data-testid="al-advice-apply"
                     >

@@ -3,12 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { MODEL } from './aircraft';
 import { defaultCabin } from './cabin';
 import { seededRandom } from '../../lib/random';
-import { advise } from './advisor';
+import { advise, applyAdvice } from './advisor';
 import { aiTurn, planTurn } from './ai';
 import { SCENARIO_IDS, allianceScore, makeChoice } from './choices';
 import { goalMet, gradeYear, newGoals } from './goals';
 import { CRISIS_MONTHS, MAX_PLANES, actor, applyAction, choiceBlocker, createGame, hubCandidates, proposeBlocker, routeOnPair, runMonth } from './rules';
-import { computeQuarter, networks } from './simulate';
+import { MAX_DELIVERIES, computeQuarter, networks } from './simulate';
 import { allianceOf } from './alliances';
 import { isValidState, parseSaved } from './storage';
 import { colorDistance, coColors, gameHub, pickColors, usableColor } from './brand';
@@ -286,6 +286,32 @@ describe('경영 비서', () => {
       } else s = aiTurn(s, rng);
     }
     expect(applied).toBeGreaterThan(10);
+  });
+});
+
+describe('경영 비서: 안 되는 까닭', () => {
+  it('리스를 한 달 한도까지 받았으면 첫 노선을 열 수 없고, 왜 안 되는지 알려 준다', () => {
+    const s0 = createGame(setup(['human', 'ai-normal'], {}, ['seoul']), seededRandom(4));
+    const tip = advise(s0, 0)[0];
+    expect(tip.key.startsWith('first')).toBe(true);
+    // 권유를 받은 뒤 이번 달 리스·중고 한도를 다 썼다
+    const s = { ...s0, companies: s0.companies.map((c, i) => (i === 0 ? { ...c, taken: MAX_DELIVERIES } : c)) };
+    const res = applyAdvice(tip, s);
+    expect(res.state).toBe(s);
+    expect(res.why).toContain(`한 달에 ${MAX_DELIVERIES}대까지`);
+    // 될 때는 까닭이 없다
+    const ok = applyAdvice(tip, s0);
+    expect(ok.why).toBeNull();
+    expect(ok.state.companies[0].routes).toHaveLength(1);
+  });
+
+  it('돈이 모자라면 얼마가 필요한지 알려 준다', () => {
+    const s0 = createGame(setup(['human', 'ai-normal'], {}, ['seoul']), seededRandom(4));
+    const tip = advise(s0, 0)[0];
+    const s = { ...s0, companies: s0.companies.map((c, i) => (i === 0 ? { ...c, cash: 0 } : c)) };
+    const res = applyAdvice(tip, s);
+    expect(res.state).toBe(s);
+    expect(res.why).toMatch(/돈이 모자라요|지금은 할 수 없어요/);
   });
 });
 

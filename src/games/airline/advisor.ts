@@ -6,7 +6,7 @@ import { ACADEMY_COST, STAFF_GROUPS, STAFF_INFO, hireCost, hireTime, staffCap, s
 import { weather } from './calendar';
 import { CITY, REGIONS, airportClass, dist } from './cities';
 import { goalProgress } from './goals';
-import { CRISIS_MONTHS, MAX_ROUTES, applyAction, bestFreq, buyBlocker, checkBlocker, creditLimit, fmtFine, fmtMoney, idlePlanes, oilTarget, planeById, routeById, usedBlocker } from './rules';
+import { CRISIS_MONTHS, MAX_ROUTES, applyAction, assignBlocker, bestFreq, buyBlocker, checkBlocker, creditLimit, fmtFine, fmtMoney, idlePlanes, oilTarget, planeById, routeById, usedBlocker } from './rules';
 import { FUEL_TON, TANK_LEVELS, tankBlocker, tankCap, tankOf, tankSpace, tonPrice } from './fuel';
 import { condOf, inCheck, restoredCond } from './condition';
 import { companyCheckCost, facilityBlocker, facilityCost } from './facilities';
@@ -57,8 +57,26 @@ function routeName(c: Company, routeId: number): string {
   return r ? `${cityName(r.a)}–${cityName(r.b)}` : '노선';
 }
 
+/** 적용이 안 됐을 때의 까닭 (applyAdvice가 한 번 적용하는 동안만 쓴다) */
+let blocked: string | null = null;
+const note = (why: string) => {
+  blocked = why;
+};
+
 function planner(s: AirlineState, ci: number): Planner {
-  return new Planner(s, ci, 'ai-normal', () => 0.5);
+  const pl = new Planner(s, ci, 'ai-normal', () => 0.5);
+  pl.onBlock = note;
+  return pl;
+}
+
+/** 권유를 적용해 본다. 안 되면 상태는 그대로이고 why에 까닭이 담긴다 */
+export function applyAdvice(a: Advice, s: AirlineState): { state: AirlineState; why: string | null } {
+  if (!a.apply) return { state: s, why: null };
+  blocked = null;
+  const next = a.apply(s);
+  const why = blocked;
+  blocked = null;
+  return next === s ? { state: s, why: why ?? '지금은 할 수 없어요' } : { state: next, why: null };
 }
 
 /** 이 회사에게 지금 권할 일들 (많아야 5개) */
@@ -84,7 +102,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
         detail: `${cand.model.name}을 리스해 주 ${cand.freq}회 띄우면 달 이익 약 ${fmtMoney(cand.profit)}을 기대해요.${first && c.kind === 'human' ? ' 첫해에는 리스 보증금이 없어요.' : ''}`,
         gain: cand.profit,
         label: '노선 열기',
-        apply: (s) => openSuggestion(s, ci, cand),
+        apply: (s) => openSuggestion(s, ci, cand, 'lease', note),
         weight: 900,
       });
     }
@@ -314,7 +332,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
         apply: (s2) => {
           const closed = applyAction(s2, { type: 'closeRoute', route: worst.id });
           if (closed === s2) return s2;
-          const opened = openSuggestion(closed, ci, cand, freed ? freed.id : 'lease');
+          const opened = openSuggestion(closed, ci, cand, freed ? freed.id : 'lease', note);
           return opened === closed ? s2 : opened;
         },
         weight: 130 + cand.profit - (worst.stats?.profit ?? 0),
@@ -339,8 +357,8 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
         gain: cand.profit,
         label: '노선 열기',
         apply: (s2) => {
-          const next = openSuggestion(s2, ci, cand, how);
-          return next === s2 && how !== 'lease' ? openSuggestion(s2, ci, cand, 'lease') : next;
+          const next = openSuggestion(s2, ci, cand, how, note);
+          return next === s2 && how !== 'lease' ? openSuggestion(s2, ci, cand, 'lease', note) : next;
         },
         weight: 150 + cand.profit,
       });
@@ -740,7 +758,12 @@ function leaseAndAssign(s: AirlineState, ci: number, model: string, routeId: num
   if (!pl.act({ type: 'lease', model })) return s;
   const pid = pl.c.planes[pl.c.planes.length - 1].id;
   const f = Math.min(freq, bestFreq(pl.s, ci, pid, routeId));
-  if (f < 1 || !pl.act({ type: 'assign', plane: pid, route: routeId, freq: f })) return s;
+  if (f < 1) {
+    const why = assignBlocker(pl.s, ci, pid, routeId, 1);
+    if (why) note(why);
+    return s;
+  }
+  if (!pl.act({ type: 'assign', plane: pid, route: routeId, freq: f })) return s;
   return pl.s;
 }
 

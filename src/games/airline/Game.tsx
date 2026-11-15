@@ -149,7 +149,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   }, [banner, delays.turn]);
   useEffect(() => {
     if (!notice) return;
-    const t = window.setTimeout(() => setNotice(null), 2800);
+    const t = window.setTimeout(() => setNotice(null), 4500);
     return () => window.clearTimeout(t);
   }, [notice]);
   useEffect(() => {
@@ -515,6 +515,10 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
           selected={selected}
           onOpenChoice={() => setChoiceOpen(true)}
           onAuto={() => startAuto('event')}
+          onSay={(text) => {
+            alSound.nope();
+            say(text);
+          }}
         />
       </div>
     );

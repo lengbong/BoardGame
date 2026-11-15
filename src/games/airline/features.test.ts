@@ -404,6 +404,31 @@ describe('경영 비서: 쉬는 비행기', () => {
     expect(tips.some((a) => a.key.startsWith(`route-plane${own}-`) || a.key === `idle-${own}` || a.key === `idle-sell-${own}`)).toBe(true);
   });
 
+  it('쉬는 비행기로 열 새 노선이 있어도 지점을 낼 돈이 모자라면 돌려주라고 하고 까닭을 알려 준다', () => {
+    const { s, own } = fleet();
+    s.companies[0].planes = s.companies[0].planes.map((p) => (p.id === own ? { ...p, leased: true, rent: 1 } : p));
+    // 돈이 넉넉하면 새 노선(서울–타이베이, 지점 함께)을 연다
+    expect(advise(s, 0, 20).some((a) => a.key === `route-plane${own}-seoul-taipei`)).toBe(true);
+    s.companies[0].cash = 5;
+    const tips = advise(s, 0, 20);
+    expect(tips.some((a) => a.key.startsWith(`route-plane${own}-`))).toBe(false);
+    const ret = tips.find((a) => a.key === `idle-sell-${own}`);
+    expect(ret?.title).toBe('쉬는 F27 프렌드십 돌려주기');
+    expect(ret?.detail).toContain('서울–타이베이');
+    expect(ret?.detail).toContain('남겨 둘 돈');
+  });
+
+  it('예비기 몫이라도 새 노선에서 크게 벌면 노선 열기를 권하고, 다른 쉬는 비행기를 예비기로 둔다', () => {
+    const { s, own, chartered } = fleet();
+    grow(s, 13);
+    // 737-200도 이번 달 쉰다 (전세기 없음). 737-200은 서울–홍콩에서 크게 벌고, F27은 조금만 번다
+    s.charters = [];
+    const tips = advise(s, 0, 20);
+    expect(tips.some((a) => a.key.startsWith(`route-plane${chartered}-`))).toBe(true);
+    expect(tips.find((a) => a.key === 'keepspare')?.title).toBe('쉬는 F27 프렌드십은 예비기로 두기');
+    expect(tips.some((a) => a.key.startsWith(`route-plane${own}-`))).toBe(false);
+  });
+
   it('비행기가 적으면 예비기로 두라고 하지 않는다', () => {
     const { s } = fleet();
     expect(advise(s, 0, 20).some((a) => a.key === 'keepspare')).toBe(false);

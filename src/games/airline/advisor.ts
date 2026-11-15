@@ -67,6 +67,13 @@ function pairName(a: string, b: string): string {
 const IDLE_MIN_GAIN = 1;
 /** 새 비행기를 들여 여는 새 노선은 달 이익이 이만큼(억)은 넘어야 권한다 */
 const NEW_ROUTE_MIN = 3;
+/** 예비기 몫의 쉬는 비행기라도 새 노선에서 쉴 때보다 이만큼(억) 넘게 더 벌면 예비기보다 노선 열기를 권한다 */
+const SPARE_ROUTE_MIN = 5;
+
+/** 새 노선에 지점·보증금을 쓰고도 남겨 둘 현금 (이보다 적어지면 돈이 모자라다고 보고 권하지 않는다) */
+function openReserve(state: AirlineState, ci: number): number {
+  return Math.max(60, (state.report?.companies[ci]?.ticket ?? 0) * 0.45);
+}
 
 /** 새 노선을 여는 권유 (경영 비서 목록에 늘 한 자리를 남겨 둔다). 권할 노선이 없을 때의 까닭 알림(noroute)도 그 자리를 쓴다 */
 export function isRouteAdvice(a: Pick<Advice, 'key'>): boolean {
@@ -137,8 +144,20 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     if (!bestLegs.has(id)) bestLegs.set(id, planner(state, ci).bestExistingLeg(id, true));
     return bestLegs.get(id)!;
   };
-  // 비행기가 많으면 띄울 곳 없는 쉬는 내 비행기 몇 대는 예비기로 둔다 (팔거나 리스기와 바꾸지 않는다)
-  const keep = spareKeep(state, c, idle, legOf);
+  // 쉬는 비행기로 열 만한 새 노선도 한 번만 따진다. 지점을 낼 돈이 모자라는 노선은 권하지 않는다
+  const reserve = openReserve(state, ci);
+  const affordable = (x: Candidate): boolean => x.capital <= 0 || c.cash - x.capital > reserve;
+  const wide = planner(state, ci);
+  wide.wide = true;
+  const routeLists = new Map<number, Candidate[]>();
+  const routesOf = (id: number): Candidate[] => {
+    if (!routeLists.has(id)) routeLists.set(id, wide.idleCandidates(id, 4));
+    return routeLists.get(id)!;
+  };
+  // 비행기가 많으면 크게 벌 곳 없는 쉬는 내 비행기 몇 대는 예비기로 둔다 (팔거나 리스기와 바꾸지 않는다).
+  // 새 노선에서 크게(SPARE_ROUTE_MIN) 벌 수 있는 비행기는 예비기로 두지 않고 노선을 연다
+  const bigRoute = (id: number): boolean => routesOf(id).some((x) => affordable(x) && x.profit >= SPARE_ROUTE_MIN);
+  const keep = spareKeep(state, c, idle, legOf, bigRoute);
   const keepIds = new Set(keep.map((p) => p.id));
   const free = idle.filter((p) => !keepIds.has(p.id));
   // 쉬는 내 비행기가 노선을 넘겨받을 수 있는 리스기가 있으면, 팔지 말고 리스기를 돌려주는 게 낫다 (아래 ‘리스기 바꾸기’)
@@ -149,8 +168,6 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   {
     // 이미 다른 쉬는 비행기에게 권한 노선 (같은 노선을 두 번 권하지 않는다)
     const idleRoutes = new Set<number>();
-    const wide = planner(state, ci);
-    wide.wide = true;
     // 띄울 곳이 없던 기종 (같은 기종·리스 여부는 다시 찾지 않는다)
     const hopeless = new Set<string>();
     let shown = 0;
@@ -164,7 +181,10 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
       const m = MODEL[p.model];
       // 둘 다 리스료·보험료를 뺀, 쉴 때보다 더 버는 돈으로 견준다
       const ex = legOf(p.id);
-      const nr = wide.idleCandidates(p.id, 4).find((x) => !idlePairs.has(pairKey(x.a, x.b)));
+      const routes = routesOf(p.id).filter((x) => !idlePairs.has(pairKey(x.a, x.b)));
+      const nr = routes.find(affordable);
+      // 벌 만하지만 지점을 낼 돈이 모자라 못 여는 노선 (팔기·돌려주기를 권할 때 까닭으로 알린다)
+      const poor = routes.find((x) => !affordable(x) && x.profit >= IDLE_MIN_GAIN);
       const exTaken = ex !== null && idleRoutes.has(ex.route);
       const exGain = ex && !exTaken ? ex.gain : -Infinity;
       const nrGain = nr ? nr.profit : -Infinity;
@@ -205,7 +225,11 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
           key: `idle-sell-${p.id}`,
           icon: '😴',
           title: `쉬는 ${m.name} ${p.leased ? '돌려주기' : '팔기'}`,
-          detail: `이미 있는 노선에도, 새 노선에도 띄워서 달 ${fmtMoney(IDLE_MIN_GAIN)}이 남는 곳이 없어요. ${p.leased ? '돌려주면 리스료가 나가지 않아요 (위약금 한 달 치).' : '팔면 현금이 생겨요.'}`,
+          detail: `${
+            poor
+              ? `새 노선 ${pairName(poor.a, poor.b)}에 띄우면 달 약 ${fmtMoney(poor.profit)}을 더 벌지만, 지점을 내는 데 ${fmtMoney(poor.capital)}을 쓰면 남겨 둘 돈(${fmtMoney(reserve)})보다 현금이 적어져요.`
+              : `이미 있는 노선에도, 새 노선에도 띄워서 달 ${fmtMoney(IDLE_MIN_GAIN)}이 남는 곳이 없어요.`
+          } ${p.leased ? '돌려주면 리스료가 나가지 않아요 (위약금 한 달 치).' : '팔면 현금이 생겨요.'}`,
           label: p.leased ? '돌려주기' : '팔기',
           apply: (s) => afterAct(s, ci, { type: 'sell', plane: p.id }),
           weight: 300,
@@ -221,7 +245,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
       key: 'keepspare',
       icon: '🛟',
       title: keep.length === 1 ? `쉬는 ${withJosa(one, '은/는')} 예비기로 두기` : `쉬는 비행기 ${keep.length}대는 예비기로 두기`,
-      detail: `비행기가 ${flyingNow}대 날고 있어요. 띄울 노선이 마땅치 않은 ${withJosa(keep.map((p) => MODEL[p.model].name).join('·'), '은/는')} 팔거나 리스기와 바꾸지 말고 예비기로 두세요. 기체 점검이나 고장으로 빠진 비행기 대신 날고, 결항이 줄어요.`,
+      detail: `비행기가 ${flyingNow}대 날고 있어요. 크게 벌 노선이 없는 ${withJosa(keep.map((p) => MODEL[p.model].name).join('·'), '은/는')} 팔거나 리스기와 바꾸지 말고 예비기로 두세요. 기체 점검이나 고장으로 빠진 비행기 대신 날고, 결항이 줄어요.`,
       weight: 40,
     });
   }
@@ -405,7 +429,6 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   // 후보는 모든 지점에서 찾는다 (suggestRoutes). 쉬는 비행기로 이미 권한 노선은 빼고
   if (c.routes.length > 0 && c.planes.length > 0) {
     const cand = suggestRoutes(state, ci, 3).find((x) => !idlePairs.has(pairKey(x.a, x.b)));
-    const reserve = Math.max(60, (state.report?.companies[ci]?.ticket ?? 0) * 0.45);
     const full = c.routes.length >= MAX_ROUTES;
     const worst = full
       ? [...c.routes].filter((r) => r.stats && state.t - r.since >= 6).sort((x, y) => (x.stats?.profit ?? 0) - (y.stats?.profit ?? 0))[0]
@@ -873,9 +896,9 @@ const SPARE_FLEET = 12;
  * 예비기로 둘 쉬는 내 비행기. 날고 있는 비행기가 많으면 8%쯤(적어도 한 대)을 둔다 (spareCover가 그만큼에서 다 찬다).
  * 리스기는 쉬어도 리스료가 나가니 예비기로 두지 않는다 (띄울 곳이 없으면 돌려주라고 권한다).
  * 이미 있는 노선에 띄워 달 IDLE_MIN_GAIN 넘게 더 버는 비행기는 띄우는 게 나으니 빼고, 젊은 비행기부터 고른다.
- * 새 노선을 열 수 있어도 예비기가 먼저다 (컴퓨터 항공사도 예비기를 먼저 남겨 둔다). 점검 중인 비행기는 예비기가 못 된다.
+ * 새 노선은 크게(SPARE_ROUTE_MIN 넘게) 벌 때만 예비기보다 먼저다 (작게 버는 노선보다는 결항을 줄이는 예비기가 낫다). 점검 중인 비행기는 예비기가 못 된다.
  */
-function spareKeep(state: AirlineState, c: Company, idle: Plane[], legOf: (id: number) => BestLeg): Plane[] {
+function spareKeep(state: AirlineState, c: Company, idle: Plane[], legOf: (id: number) => BestLeg, bigRoute: (id: number) => boolean): Plane[] {
   const flying = c.planes.filter((p) => p.legs.length > 0).length;
   if (flying < SPARE_FLEET) return [];
   const need = Math.max(1, Math.round(flying * 0.08));
@@ -889,6 +912,7 @@ function spareKeep(state: AirlineState, c: Company, idle: Plane[], legOf: (id: n
     // 아래에서 ‘띄우기’를 권할 비행기는 예비기로 두지 않는다 (같은 기준이라 예비기 몫인데 팔라고 하는 일이 없다)
     const best = legOf(p.id);
     if (best && best.gain >= IDLE_MIN_GAIN) continue;
+    if (bigRoute(p.id)) continue;
     out.push(p);
   }
   return out;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BAR, compile, parseChords, parseLine, RANGE, scoreSeconds, TPB, UNPITCHED, type Score } from '../../lib/orchestra';
-import { AIRLINE_JINGLES, AIRLINE_MAIN, AIRLINE_TITLE } from './song';
+import { AIRLINE_JINGLES, AIRLINE_MAIN, AIRLINE_TITLE, LONG_HAUL_KM, routeFanfare } from './song';
 
 const NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 const BGM: Score[] = [AIRLINE_TITLE, AIRLINE_MAIN];
@@ -62,6 +62,26 @@ describe('하늘길 항공사 음악', () => {
       }
     }
     expect(wrong).toEqual([]);
+  });
+
+  it('취항 팡파르: 가까운 노선은 짧게, 대륙을 건너는 노선은 더 길고 크게', () => {
+    expect(routeFanfare(1200)).toBe(AIRLINE_JINGLES.routeShort);
+    expect(routeFanfare(LONG_HAUL_KM)).toBe(AIRLINE_JINGLES.routeLong);
+    expect(routeFanfare(9600)).toBe(AIRLINE_JINGLES.routeLong);
+    expect(scoreSeconds(AIRLINE_JINGLES.routeShort)).toBeLessThan(3.5);
+    expect(scoreSeconds(AIRLINE_JINGLES.routeLong)).toBeLessThan(5.5);
+    expect(scoreSeconds(AIRLINE_JINGLES.routeLong)).toBeGreaterThan(scoreSeconds(AIRLINE_JINGLES.routeShort));
+  });
+
+  it('취항 팡파르의 심벌은 축하 카드에서 비행기가 내릴 때(1.75~2.15초) 친다', () => {
+    for (const s of [AIRLINE_JINGLES.routeShort, AIRLINE_JINGLES.routeLong]) {
+      const c = compile(s);
+      const hit = c.events.find((e) => e.inst === 'crash')!;
+      // playJingle은 0.12초 뒤에 시작한다
+      const at = 0.12 + (hit.tick / TPB) * (60 / s.bpm);
+      expect(at, s.title).toBeGreaterThan(1.6);
+      expect(at, s.title).toBeLessThan(2.3);
+    }
   });
 
   it('곡마다 소리 크기가 정해져 있다 (예전 음악과 비슷한 크기로 맞춤)', () => {

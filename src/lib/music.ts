@@ -11,6 +11,7 @@ import { getAudioContext, noiseBuffer } from './sound';
  * 새 게임은 자기 폴더에 Song 객체를 만들어 startMusic(song)으로 틀 수 있다. (예: games/sudoku/song.ts)
  * 금관·현악·팀파니가 있는 큰 곡은 orchestra.ts의 Score로 쓰고 같은 startMusic으로 튼다. (예: games/airline/song.ts)
  * 짧은 팡파르는 playJingle(score): 배경음악이 잠깐 멈췄다가 팡파르가 끝나면 다음 마디부터 이어진다.
+ * 자주 나오는 팡파르는 playJingle(score, { duck: 0.25 }): 배경음악을 멈추지 않고 작게 깔아 둔다.
  */
 
 const STEPS_PER_BAR = 8;
@@ -339,33 +340,60 @@ export function stopMusic(): void {
   quietUntil = 0;
 }
 
+export interface JingleOptions {
+  /** 소리 크기 (악보에 volume이 있으면 그것) */
+  volume?: number;
+  /**
+   * 배경음악을 멈추지 않고 이만큼(0~1)으로 줄여 겹친다. 자주 나오는 팡파르(새 노선 취항)용.
+   * 없으면 배경음악을 멈췄다가 팡파르가 끝나면 다음 마디부터 다시 (분기 결산, 게임 끝).
+   */
+  duck?: number;
+}
+
+/** 배경음악 소리를 잠깐 줄였다가 end초부터 다시 키운다 */
+function duckSong(g: AudioParam, now: number, end: number, volume: number, level: number): void {
+  const low = Math.max(volume * level, 0.0001);
+  g.cancelScheduledValues(now);
+  g.setValueAtTime(Math.max(g.value, 0.0001), now);
+  g.linearRampToValueAtTime(low, now + 0.15);
+  g.setValueAtTime(low, end);
+  g.linearRampToValueAtTime(volume, end + 1);
+}
+
 /**
- * 짧은 팡파르를 한 번 연주한다 (분기 결산, 게임 끝).
- * 나오던 배경음악은 잠깐 소리를 줄여 멈추고, 팡파르가 끝나면 다음 마디부터 다시 커진다.
+ * 짧은 팡파르를 한 번 연주한다 (분기 결산, 게임 끝, 새 노선 취항).
+ * 나오던 배경음악은 소리를 줄여 멈추고, 팡파르가 끝나면 다음 마디부터 다시 커진다.
+ * duck을 주면 멈추지 않고 작게 깔아 둔다. (다른 팡파르 때문에 이미 쉬는 중이면 그대로 쉬다가 이 팡파르 뒤에 이어진다)
  */
-export function playJingle(score: Score, volume = 0.2): void {
+export function playJingle(score: Score, options: JingleOptions = {}): void {
   const ac = getAudioContext();
   if (!ac) return;
   unlockOnGesture(ac);
   const now = ac.currentTime;
-  if (master && timer !== null) {
-    fadeOut(master.gain, now, 0.25);
-    if (player) player.hold(now);
-    else if (!heldOld) {
-      heldOld = true;
-      step = Math.ceil(step / STEPS_PER_BAR) * STEPS_PER_BAR;
+  const start = now + 0.12;
+  const seconds = scoreSeconds(score);
+  const end = start + seconds;
+  const resting = now < quietUntil;
+  if (options.duck !== undefined && !resting) {
+    if (master && timer !== null) duckSong(master.gain, now, end, currentVolume, options.duck);
+  } else {
+    if (master && timer !== null) {
+      fadeOut(master.gain, now, 0.25);
+      if (player) player.hold(now);
+      else if (!heldOld) {
+        heldOld = true;
+        step = Math.ceil(step / STEPS_PER_BAR) * STEPS_PER_BAR;
+      }
     }
+    quietUntil = end + 0.3;
   }
   if (jingleBus) {
     const old = jingleBus;
     fadeOut(old.master.gain, now, 0.2);
     window.setTimeout(() => closeBus(old), 400);
   }
-  const start = now + 0.12;
-  const bus = createBus(ac, score.volume ?? volume);
+  const bus = createBus(ac, score.volume ?? options.volume ?? 0.2);
   new ScorePlayer(compile(score), bus, start).pump(Infinity);
-  const seconds = scoreSeconds(score);
-  quietUntil = start + seconds + 0.3;
   jingleBus = bus;
   window.setTimeout(
     () => {

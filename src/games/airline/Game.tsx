@@ -10,7 +10,7 @@ import { coColors, realOf } from './brand';
 import { aiManage, type AiLevel } from './ai';
 import { CompanyBadge, SEAT_SHAPES } from './Art';
 import { ChoiceModal } from './ChoiceModal';
-import { CITY, pairKey } from './cities';
+import { CITY, dist, pairKey } from './cities';
 import { FinanceView } from './FinanceView';
 import { FleetView } from './FleetView';
 import { fmtMoney, signedMoney } from './format';
@@ -23,7 +23,7 @@ import { RouteOpeningCard, type Opening } from './RouteOpening';
 import { RoutesView, type Planner } from './RoutesView';
 import { actor, applyAction, autoStopReason, idlePlanes, rankings } from './rules';
 import { companyValue, monthDemandMult, routeFreq } from './simulate';
-import { AIRLINE_JINGLES, AIRLINE_MAIN, AIRLINE_TITLE } from './song';
+import { AIRLINE_JINGLES, AIRLINE_MAIN, AIRLINE_TITLE, routeFanfare } from './song';
 import { alSound } from './sounds';
 import { AIRLINE_DELAYS, clearSavedAirlineGame, saveAirlineGame } from './storage';
 import { mLabel, monthOf, qLabel } from './time';
@@ -160,13 +160,20 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
     prevGame.current = game;
     if (!prev || prev === game) return;
     const { pulses: p, summary } = diffPulses(prev, game);
+    let fanfare = false;
     if (p.length > 0 && delays.fx) {
       setPulses(p);
-      // 사람 회사가 새 노선을 열면 축하 카드
+      // 사람 회사가 새 노선을 열면 축하 카드 (음악을 켜 두면 거리에 맞는 취항 팡파르, 배경음악은 작게 깔린다)
       const mine = p.filter((x) => x.kind === 'route' && game.companies[x.company]?.kind === 'human');
       const last = mine.at(-1);
       const route = last ? game.companies[last.company].routes.find((r) => pairKey(r.a, r.b) === last.key) : undefined;
-      if (last && route) setOpening({ id: last.id, company: last.company, a: route.a, b: route.b, more: mine.length - 1 });
+      if (last && route) {
+        setOpening({ id: last.id, company: last.company, a: route.a, b: route.b, more: mine.length - 1 });
+        if (musicOn.current) {
+          playJingle(routeFanfare(dist(route.a, route.b)), { duck: 0.25 });
+          fanfare = true;
+        }
+      }
     }
     const prevActor = actor(prev);
     const monthEnd = game.events.some((e) => e.type === 'month');
@@ -181,8 +188,9 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
     if (prevActor >= 0 && prev.companies[prevActor].kind === 'human') {
       for (const e of game.events) {
         if (e.type === 'branch' || e.type === 'build') alSound.bell();
-        else if (e.type === 'route') alSound.chime();
-        else if (e.type === 'plane') alSound.stamp();
+        else if (e.type === 'route') {
+          if (!fanfare) alSound.chime();
+        } else if (e.type === 'plane') alSound.stamp();
         else if (e.type === 'sell') e.amount > 0 ? alSound.coins() : alSound.pay();
         else if (e.type === 'money') e.what === 'borrow' ? alSound.coins() : alSound.pay();
         else if (e.type === 'assign') alSound.takeoff();

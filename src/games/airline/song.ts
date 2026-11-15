@@ -6,7 +6,7 @@ import type { Score } from '../../lib/orchestra';
  *
  * - AIRLINE_TITLE  '하늘길 서곡' (설정 화면·게임 끝): 내림나장조 100 BPM, 끝에서 다장조로 올라가는 절정
  * - AIRLINE_MAIN   '창공의 항로' (경영 화면): 바장조 104 BPM, 호른 → 트럼펫 → 오보에 → 고조 → 사장조 절정
- * - AIRLINE_JINGLES 분기 결산(흑자·적자), 게임 끝(우승·마무리) 짧은 팡파르
+ * - AIRLINE_JINGLES 분기 결산(흑자·적자), 게임 끝(우승·마무리), 새 노선 취항(가까운·먼 노선) 짧은 팡파르
  *
  * 악보 적는 법은 src/lib/orchestra.ts 맨 위에 있다.
  */
@@ -340,9 +340,83 @@ const FINALE: Score = {
   ],
 };
 
+/*
+ * 새 노선 취항 — 축하 카드에 맞춰 이륙(팀파니 롤·올라가는 선율) → 비행기가 내릴 때 '빠-밤!'.
+ * 카드: 비행기가 0.15초에 떠서 2.15초에 내리고, 도착 도시는 1.75초에 튀어나온다.
+ * 배경음악(바장조 '창공의 항로')을 멈추지 않고 줄여서 겹치므로 같은 바장조로 쓴다.
+ */
+
+/** 가까운 노선: 짧고 경쾌하게 (도착 도시가 튀어나올 때 마디 첫 박) */
+const ROUTE_SHORT: Score = {
+  kind: 'orchestra',
+  title: '취항',
+  bpm: 140,
+  volume: 0.09,
+  sections: [
+    {
+      name: '이륙과 도착',
+      bars: 2,
+      parts: [
+        { inst: 'trumpet', notes: 'r:q C5:et D5 E5 G5:q Bb5:q | A5:h.> r:q' },
+        { inst: 'horn', notes: 'r:q [E4,G4]:q [E4,G4]:q [E4,Bb4]:q | [F4,A4,C5]:h. r:q', vol: 0.75 },
+        { inst: 'strings', notes: '[Bb3,C4,E4]:w< | [A3,C4,F4]:h. r:q' },
+        { inst: 'violins', notes: 'r:h C5:s D5 E5 F5 G5 A5 Bb5 C6 | F6:h. r:q', vol: 0.7 },
+        { inst: 'bass', notes: 'C2:w | F1:h. r:q', with: [{ inst: 'cello', shift: 12 }] },
+        { inst: 'timproll', notes: 'C3:w | r:w', vol: 0.8 },
+        { inst: 'timp', notes: 'r:w | F2:q r:h.' },
+        { inst: 'cymroll', notes: 'x:w | r:w', vol: 0.7 },
+        { inst: 'crash', notes: 'r:w | x:h. r:q', vol: 0.8 },
+        { inst: 'bassdrum', notes: 'r:w | x:q r:h.' },
+        { inst: 'glock', notes: 'r:w | F6:et A6 C7 F7:h.', vol: 0.8 },
+        { inst: 'triangle', notes: 'r:w | x:h. r:q' },
+      ],
+    },
+  ],
+};
+
+/** 대륙을 건너는 먼 노선: 서곡의 '따다다 빠-암'으로 떠서, 비행기가 내릴 때 크게, 내림육·내림칠 화음을 지나 마무리 */
+const ROUTE_LONG: Score = {
+  kind: 'orchestra',
+  title: '장거리 취항',
+  bpm: 120,
+  volume: 0.085,
+  sections: [
+    {
+      name: '대륙 건너기',
+      bars: 3,
+      parts: [
+        { inst: 'trumpet', notes: 'C5:et> C5 C5 F5:q.> C5:e F5 A5 | A5:h> Ab5:q> Bb5:q> | C6:h> r:h' },
+        { inst: 'horn', notes: 'r:q [D4,F4]:q. [D4,F4]:e [D4,F4]:q | [C4,F4,A4]:h [Db4,F4,Ab4]:q [Eb4,G4,Bb4]:q | [F4,A4,C5]:h r:h' },
+        { inst: 'trombone', notes: '[C3,Bb3]:w< | [F2,C3]:h [Db3,Ab3]:q [Eb3,Bb3]:q | [F2,C3]:h r:h' },
+        { inst: 'strings', notes: '[Bb3,D4,F4]:w< | [A3,C4,F4]:h [Ab3,Db4,F4]:q [G3,Bb3,Eb4]:q | [A3,C4,F4,A4]:h r:h' },
+        { inst: 'violins', notes: 'r:h C5:s D5 E5 F5 G5 A5 Bb5 C6 | A6:h Ab6:q Bb6:q | C7:h r:h', vol: 0.6 },
+        { inst: 'bass', notes: 'C2:w< | F1:h Db2:q Eb2:q | F1:h r:h', with: [{ inst: 'cello', shift: 12 }] },
+        { inst: 'timproll', notes: 'C3:w | r:w | r:w' },
+        { inst: 'timp', notes: 'r:w | F2:h Db3:q Eb3:q | F2:h r:h' },
+        { inst: 'snare', notes: 'r:w | r:h x:q x:q | r:w' },
+        { inst: 'cymroll', notes: 'x:w | r:w | r:w', vol: 0.8 },
+        { inst: 'crash', notes: 'r:w | x:w | x:h r:h' },
+        { inst: 'bassdrum', notes: 'r:w | x:h r:h | x:h r:h' },
+        { inst: 'glock', notes: 'r:w | [A6,C7]:h r:h | [F6,A6,C7]:h r:h', vol: 0.7 },
+        { inst: 'triangle', notes: 'r:w | r:w | x:h r:h' },
+      ],
+    },
+  ],
+};
+
+/** 이보다 먼 노선(km)은 장거리 취항 팡파르 */
+export const LONG_HAUL_KM = 5000;
+
 export const AIRLINE_JINGLES = {
   quarterGood: QUARTER_GOOD,
   quarterBad: QUARTER_BAD,
   victory: VICTORY,
   finale: FINALE,
+  routeShort: ROUTE_SHORT,
+  routeLong: ROUTE_LONG,
 } as const;
+
+/** 새 노선 거리에 맞는 취항 팡파르 */
+export function routeFanfare(km: number): Score {
+  return km >= LONG_HAUL_KM ? ROUTE_LONG : ROUTE_SHORT;
+}

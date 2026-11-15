@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { MODEL } from './aircraft';
 import { advise } from './advisor';
+import { BUSINESS_INFO, BUSINESS_KINDS } from './business';
 import { LandmarkIcon } from './Art';
 import { SEASON_NAMES, WEATHER_INFO, leisureMonthMult, weather } from './calendar';
 import { AIRPORT_INFO, CITIES, CITY, FEE_INFO, REGION_INFO, airportClass, citySize, dist, pairKey } from './cities';
@@ -67,8 +68,7 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
     .flatMap((co, i) => (co.out ? [] : co.routes.filter((r) => r.a === city || r.b === city).map((r) => ({ co, i, r }))))
     .sort((x, y) => Number(y.i === viewer) - Number(x.i === viewer) || routeFreq(y.co, y.r.id) - routeFreq(x.co, x.r.id))
     .slice(0, 8);
-  const hotel = me.businesses.find((b) => b.city === city && b.kind === 'hotel');
-  const agency = me.businesses.find((b) => b.city === city && b.kind === 'agency');
+  const kinds = BUSINESS_KINDS.filter((k) => BUSINESS_INFO[k].why(c, size) === null || me.businesses.some((b) => b.city === city && b.kind === k));
   const m0 = monthOf(state.t) - 1;
   const season = Array.from({ length: 12 }, (_, i) => leisureMonthMult(city, i));
   const wx = weather(city, m0);
@@ -203,21 +203,19 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
               <ActButton primary blocker={canAct ? null : notMine} onClick={() => onPlanRoute(city)} testId="al-plan-from">
                 ✈️ 여기서 노선 열기
               </ActButton>
-              <div className="al-biz-row">
-                {hotel ? (
-                  <span className="tag">🏨 호텔 운영 중</span>
-                ) : (
-                  <ActButton small blocker={block(buildBlocker(state, viewer, city, 'hotel'))} onClick={() => perform({ type: 'build', city, kind: 'hotel' })} title="관광 손님이 늘고 숙박 수입이 생겨요">
-                    🏨 호텔 {fmtMoney(businessCost(city, 'hotel', state.q))}
-                  </ActButton>
-                )}
-                {agency ? (
-                  <span className="tag">🧳 여행사 운영 중</span>
-                ) : (
-                  <ActButton small blocker={block(buildBlocker(state, viewer, city, 'agency'))} onClick={() => perform({ type: 'build', city, kind: 'agency' })} title="이 도시 노선의 손님이 조금 늘어요">
-                    🧳 여행사 {fmtMoney(businessCost(city, 'agency', state.q))}
-                  </ActButton>
-                )}
+              <div className="al-biz-row" aria-label="부대사업">
+                {kinds.map((k) => {
+                  const info = BUSINESS_INFO[k];
+                  return me.businesses.some((b) => b.city === city && b.kind === k) ? (
+                    <span key={k} className="tag" title={info.desc}>
+                      {info.icon} {info.name} 운영 중
+                    </span>
+                  ) : (
+                    <ActButton key={k} small blocker={block(buildBlocker(state, viewer, city, k))} onClick={() => perform({ type: 'build', city, kind: k })} title={info.desc} testId={`al-build-${k}`}>
+                      {info.icon} {info.name} {fmtMoney(businessCost(city, k, state.q))}
+                    </ActButton>
+                  );
+                })}
               </div>
               {me.hub !== city && (
                 <ActButton small blocker={block(closeBranchBlocker(state, viewer, city))} onClick={() => perform({ type: 'closeBranch', city })}>
@@ -451,7 +449,7 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
             비행기 <b>{me.planes.length}</b>대 (가동률 {Math.round(use * 100)}%){me.orders.length > 0 && ` · 주문 ${me.orders.length}`}
           </li>
           <li>
-            평판 <b>{Math.round(me.reputation)}</b> · 서비스 {me.service}단계 · 정시 운항 <b>{Math.round(me.onTime * 100)}%</b>
+            평판 <b>{Math.round(me.reputation)}</b> · 기내식 평균 {(me.planes.length > 0 ? me.planes.reduce((t, p) => t + p.meal, 0) / me.planes.length : me.service).toFixed(1)}단계 · 정시 운항 <b>{Math.round(me.onTime * 100)}%</b>
             {me.partner !== null && ` · 제휴 ${state.companies[me.partner].name}`}
           </li>
         </ul>

@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { coColors } from './brand';
 import { MODEL, availableModels } from './aircraft';
 import { openSuggestion, type Candidate } from './ai';
-import { PlaneArt, SEAT_SHAPES } from './Art';
+import { SEAT_SHAPES } from './Art';
+import { PlaneImage } from './PlaneImage';
+import { cabinSeats } from './cabin';
 import { AIRPORT_INFO, CITIES, CITY, REGIONS, REGION_INFO, airportClass, dist, pairKey } from './cities';
 import { fareText, fmtMoney, fmtPax, km, pct, signedMoney } from './format';
 import { FARE_MAX, FARE_MIN, applyAction, assignBlocker, bestFreq, buyBlocker, depositFor, maxRangeNow, routeBlocker, routeOnPair, usedBlocker } from './rules';
@@ -229,11 +231,11 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
                 const use = planeHours(me, p) / WEEK_HOURS;
                 return (
                   <li key={p.id}>
-                    <PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={SEAT_SHAPES[me.seat]} width={58} />
+                    <PlaneImage model={m.id} paint={{ main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] }} className="al-plane-chip" />
                     <span className="al-pr-name">
                       <b>{m.name}</b>
                       <small>
-                        {m.seats}석 · {p.leased ? '리스' : '내 것'} · 가동 {Math.round(use * 100)}%
+                        {cabinSeats(m, p.cabin)}석 · {p.leased ? '리스' : '내 것'} · 가동 {Math.round(use * 100)}%
                       </small>
                       {elsewhere.length > 0 && (
                         <small className="al-muted" title={elsewhere.map((x) => `${CITY[x!.a].name}–${CITY[x!.b].name}`).join(', ')}>
@@ -344,7 +346,7 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
           <TimetableCard state={state} viewer={viewer} canAct={canAct} perform={perform} route={r} />
         </div>
         <div className="al-editor-right">
-          <EstimateCard est={est} lastProfit={r.stats?.profit ?? null} lastLf={r.stats?.lf ?? null} />
+          <EstimateCard est={est} lastProfit={r.stats?.profit ?? null} lastLf={r.stats?.lf ?? null} lastPremLf={r.stats?.premLf ?? null} />
           <section className="al-card al-route-ops">
             <h4>운항과 지난 열두 달</h4>
             {(() => {
@@ -423,7 +425,19 @@ const COST_PARTS: { key: keyof RouteEstimate['cost']; name: string; cls: string 
 ];
 
 /** 이번 달 어림 (손님·탑승률·수입·비용·이익) */
-export function EstimateCard({ est, lastProfit, lastLf, title = '이번 달 어림' }: { est: RouteEstimate; lastProfit: number | null; lastLf: number | null; title?: string }) {
+export function EstimateCard({
+  est,
+  lastProfit,
+  lastLf,
+  lastPremLf = null,
+  title = '이번 달 어림',
+}: {
+  est: RouteEstimate;
+  lastProfit: number | null;
+  lastLf: number | null;
+  lastPremLf?: number | null;
+  title?: string;
+}) {
   const total = Math.max(est.revenue, est.cost.total, 1);
   return (
     <section className="al-card al-estimate" aria-live="polite">
@@ -478,6 +492,7 @@ export function EstimateCard({ est, lastProfit, lastLf, title = '이번 달 어�
         <p className="al-muted al-last">
           지난달 실제: 이익 {signedMoney(lastProfit)}
           {lastLf !== null && ` · 탑승률 ${pct(lastLf)}`}
+          {lastPremLf !== null && ` · 고급 좌석 ${pct(lastPremLf)}`}
         </p>
       )}
     </section>
@@ -661,7 +676,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                 <ul className="al-options">
                   {options.map((o) => (
                     <li key={o.m.id}>
-                      <PlaneArt body={o.m.body} engines={o.m.engines} color={color.main} dark={color.dark} shape={SEAT_SHAPES[me.seat]} width={70} />
+                      <PlaneImage model={o.m.id} paint={{ main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] }} className="al-plane-chip al-plane-chip-big" />
                       <span className="al-opt-text">
                         <b>{o.m.name}</b>
                         <small>
@@ -703,7 +718,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                   <ul className="al-options">
                     {mine.map((o) => (
                       <li key={o.p.id}>
-                        <PlaneArt body={o.m.body} engines={o.m.engines} color={color.main} dark={color.dark} shape={SEAT_SHAPES[me.seat]} width={70} />
+                        <PlaneImage model={o.m.id} paint={{ main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] }} className="al-plane-chip al-plane-chip-big" />
                         <span className="al-opt-text">
                           <b>{o.m.name}</b>
                           <small>

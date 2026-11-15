@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { GameControls } from '../../components/GameControls';
 import { KIND_LABEL, SEAT_KIND_OPTIONS } from '../common/players';
 import type { GameSettings } from '../common/settings';
@@ -31,9 +31,13 @@ interface PanelProps {
   onSettings: (s: GameSettings) => void;
   onNewGame: () => void;
   onExit: () => void;
+  /** 지도에서 이 회사 노선만 보는 중 */
+  focusCo?: number | null;
+  /** 있으면 줄을 눌러 지도에서 그 회사 노선만 본다 (같은 회사를 다시 누르면 null) */
+  onFocusCo?: (company: number | null) => void;
 }
 
-export function Panel({ state, viewer, hint, canEnd, busy, onEndTurn, auto, onAuto, onStopAuto, settings, onSettings, onNewGame, onExit }: PanelProps) {
+export function Panel({ state, viewer, hint, canEnd, busy, onEndTurn, auto, onAuto, onStopAuto, settings, onSettings, onNewGame, onExit, focusCo = null, onFocusCo }: PanelProps) {
   const act = actor(state);
   const shown = state.phase === 'gameover' ? state.companies[state.result?.winners[0] ?? viewer] : state.companies[act];
   const color = coColors(shown);
@@ -144,8 +148,25 @@ export function Panel({ state, viewer, hint, canEnd, busy, onEndTurn, auto, onAu
             const col = coColors(c);
             const pos = state.order.indexOf(i);
             const status = c.out ? '운항 중단' : state.phase !== 'manage' ? '' : i === act ? '경영 중' : pos >= 0 && pos < state.turnPos ? '✓ 마침' : '기다림';
+            const focused = onFocusCo !== undefined && focusCo === i;
             return (
-              <li key={i} className={`al-prow${i === act ? ' is-current' : ''}${c.out ? ' al-out' : ''}`} data-testid={`al-player-${i}`}>
+              <li
+                key={i}
+                className={`al-prow${i === act ? ' is-current' : ''}${c.out ? ' al-out' : ''}${onFocusCo ? ' al-prow-pick' : ''}${focused ? ' al-prow-focus' : ''}`}
+                style={{ '--al-co': col.main } as CSSProperties}
+                data-testid={`al-player-${i}`}
+              >
+                {onFocusCo && (
+                  <button
+                    type="button"
+                    className="al-prow-btn"
+                    aria-pressed={focused}
+                    aria-label={focused ? `${c.name}: 모든 항공사 노선 보기` : `${c.name} 노선만 지도에 보기`}
+                    title={focused ? '모든 항공사 노선 보기' : `${c.name} 노선만 지도에 보기`}
+                    onClick={() => onFocusCo(focused ? null : i)}
+                    data-testid={`al-player-focus-${i}`}
+                  />
+                )}
                 <span className="al-rank">{c.out ? '—' : rank + 1}</span>
                 <CompanyBadge color={col.main} shape={SEAT_SHAPES[c.seat]} size={18} />
                 <span className="al-prow-main">

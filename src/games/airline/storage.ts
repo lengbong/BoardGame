@@ -2,6 +2,9 @@ import { loadJson, removeKey, saveJson } from '../../lib/storage';
 import { SEAT_KIND_OPTIONS } from '../common/players';
 import type { Speed } from '../common/speed';
 import { MODEL } from './aircraft';
+import { MEDIA } from './ads';
+import { BUSINESS_KINDS } from './business';
+import { cabinBlocker, defaultCabin } from './cabin';
 import { CHALLENGE } from './challenges';
 import { CITY, REGIONS } from './cities';
 import { REAL_AIRLINE } from './realAirlines';
@@ -52,6 +55,7 @@ export function parseOptions(v: unknown): AirlineOptions {
     challenge: typeof o.challenge === 'string' && CHALLENGE[o.challenge] ? o.challenge : null,
     aiStyle: o.aiStyle === 'relaxed' || o.aiStyle === 'fierce' || o.aiStyle === 'normal' ? o.aiStyle : DEFAULT_OPTIONS.aiStyle,
     names: o.names === 'fictional' || o.names === 'real' ? o.names : DEFAULT_OPTIONS.names,
+    history: o.history !== false,
   };
 }
 
@@ -104,6 +108,10 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
     if (!isObj(p) || !isInt(p.id) || p.id >= nextId || typeof p.model !== 'string' || !MODEL[p.model] || typeof p.leased !== 'boolean') return false;
     if (!isNum(p.rent) || !isNum(p.deposit) || !isInt(p.since) || !Array.isArray(p.legs)) return false;
     if (!p.legs.every((l) => isObj(l) && isInt(l.route) && routeIds.has(l.route) && isInt(l.freq) && l.freq >= 1 && l.freq <= 28)) return false;
+    // 좌석 배치·기내식 (예전 판 저장에는 없을 수 있다 → 불러올 때 표준 배치)
+    if (p.cabin !== undefined && !(isObj(p.cabin) && cabinBlocker(MODEL[p.model], p.cabin) === null)) return false;
+    if (p.meal !== undefined && !(isInt(p.meal) && p.meal >= 1 && p.meal <= 5)) return false;
+    if (p.got !== undefined && !isInt(p.got)) return false;
   }
   if (!Array.isArray(k.orders) || !k.orders.every((o) => isObj(o) && isInt(o.id) && o.id < nextId && typeof o.model === 'string' && !!MODEL[o.model] && isInt(o.due) && isNum(o.price))) return false;
   if (!Array.isArray(k.mods) || !k.mods.every((m) => isObj(m) && isInt(m.id) && MOD_KINDS.includes(m.kind) && isNum(m.value) && isInt(m.until) && typeof m.label === 'string')) return false;
@@ -120,8 +128,11 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
   if (k.airline !== undefined && k.airline !== null && typeof k.airline !== 'string') return false;
   if (k.color !== undefined && k.color !== null && !(typeof k.color === 'string' && /^#[0-9a-f]{6}$/i.test(k.color))) return false;
   if (!isObj(k.ads) || !isObj(k.awareness) || !REGIONS.every((r) => isNum(k.ads[r]) && isNum(k.awareness[r]))) return false;
+  // 광고 매체·캠페인 (예전 판 저장에는 없을 수 있다)
+  if (k.adMedia !== undefined && !(isObj(k.adMedia) && REGIONS.every((r) => MEDIA.includes(k.adMedia![r])))) return false;
+  if (k.lastCampaign !== undefined && !isInt(k.lastCampaign)) return false;
   if (!isInt(k.service) || k.service < 1 || k.service > 5 || !isNum(k.reputation)) return false;
-  if (!Array.isArray(k.businesses) || !k.businesses.every((b) => isObj(b) && isCity(b.city) && (b.kind === 'hotel' || b.kind === 'agency') && isNum(b.cost))) return false;
+  if (!Array.isArray(k.businesses) || !k.businesses.every((b) => isObj(b) && isCity(b.city) && BUSINESS_KINDS.includes(b.kind) && isNum(b.cost))) return false;
   if (typeof k.out !== 'boolean' || !isInt(k.crisis) || !isObj(k.stats)) return false;
   return true;
 }
@@ -244,7 +255,12 @@ export function parseSaved(v: unknown): SavedAirlineGame | null {
   if (!isValidSetup(saved.setup) || !isValidState(saved.state)) return null;
   const options = parseOptions(saved.state.options);
   // 항공사 자료가 바뀌어 없어진 항공사는 가상 항공사로 (이름·색은 그대로)
-  const companies = saved.state.companies.map((c) => ({ ...c, airline: c.airline && REAL_AIRLINE[c.airline] ? c.airline : null, color: c.color ?? null }));
+  const companies = saved.state.companies.map((c) => ({
+    ...c,
+    airline: c.airline && REAL_AIRLINE[c.airline] ? c.airline : null,
+    color: c.color ?? null,
+    planes: c.planes.map((p) => ({ ...p, cabin: p.cabin ?? defaultCabin(MODEL[p.model]), meal: p.meal ?? c.service })),
+  }));
   return {
     setup: { ...saved.setup, hubs: saved.setup.hubs ?? [null, null, null, null], airlines: parseAirlines(saved.setup.airlines), options: parseOptions(saved.setup.options) },
     state: { ...saved.state, companies, options, events: [] },

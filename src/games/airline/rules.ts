@@ -1,11 +1,15 @@
 import { withJosa } from '../../lib/korean';
 import { MODEL, MODELS, isAvailable, leadTime } from './aircraft';
+import { CAMPAIGN_INFO, MEDIA_INFO, adTarget, mediaOf } from './ads';
+import { BUSINESS_INFO } from './business';
+import { cabinBlocker, defaultCabin, sameCabin } from './cabin';
+import { blockText, branchPolitics, makerPolitics, politicalNews, polity, routePolitics } from './politics';
 import { CHALLENGE, challengeDeadline, checkChallenge } from './challenges';
 import { allianceChoice, allianceScore, makeChoice, nextChoiceGap } from './choices';
 import { autoAirline, gameHub, pickColors } from './brand';
 import { AIRPORT_INFO, CITIES, CITY, REGIONS, REGION_INFO, airportClass, citySize, dist, pairKey } from './cities';
 import { WEATHER_INFO, type WeatherCause } from './calendar';
-import { FIXED_EVENTS, FIXED_ICON, fixedEventsAt, rollRandomEvent } from './events';
+import { FIXED_EVENTS, FIXED_ICON, fixedEventsAt, historicOil, historyAt, rollRandomEvent } from './events';
 import { addMonth, closeQuarter, freshAcc, goalMet, gradeYear, newGoals } from './goals';
 import { MAX_PLANES, MAX_ROUTES } from './limits';
 import { REAL_AIRLINE, airlinesAt } from './realAirlines';
@@ -34,20 +38,25 @@ import {
   reputationTarget,
   routeFreq,
   routeIndex,
+  routeOf,
   sellPrice,
   slotCapacity,
   slotsUsed,
 } from './simulate';
 import { isQuarterEnd, mLabel, mOf, monthOf, qLabel, qOfM, yearOf, yearOfM } from './time';
 import type {
+  AdMedia,
   AirlineAction,
   AirlineOptions,
   AirlineSetup,
   AirlineState,
   BusinessKind,
+  Cabin,
+  CampaignKind,
   Choice,
   Company,
   DistOmit,
+  Effect,
   GameEvent,
   GameResult,
   NewsItem,
@@ -73,7 +82,11 @@ export const DEFAULT_OPTIONS: AirlineOptions = {
   challenge: null,
   aiStyle: 'normal',
   names: 'real',
+  history: true,
 };
+
+/** 실제 역사(냉전·국교·큰 사건)를 따르는지 */
+export const historyOn = (state: Pick<AirlineState, 'options'>) => state.options.history !== false;
 
 export const START_MONEY: Record<AirlineOptions['money'], { cash: number; name: string }> = {
   rich: { cash: 4000, name: '넉넉하게' },
@@ -115,10 +128,12 @@ export function hubCandidates(year: number): string[] {
 export function autoHub(year: number, taken: readonly string[], rng: Rng): string {
   const cands = hubCandidates(year).filter((id) => !taken.includes(id));
   const takenRegions = taken.map((id) => CITY[id].region);
+  // 냉전 동안 하늘길이 거의 막힌 곳은 덜 고른다
+  const closed = (id: string) => year < 1990 && ['중국', '소련', '베트남'].includes(polity(id, year));
   const weights = cands.map((id) => {
     const c = CITY[id];
     const s = citySize(c, year);
-    return s * s * (takenRegions.includes(c.region) ? 0.35 : 1) * (s >= 5 ? 1 : 0.3);
+    return s * s * (takenRegions.includes(c.region) ? 0.35 : 1) * (s >= 5 ? 1 : 0.3) * (closed(id) ? 0.1 : 1);
   });
   const total = weights.reduce((a, b) => a + b, 0);
   let r = rng() * total;
@@ -188,7 +203,7 @@ function baseState(options: AirlineOptions, year: number, companies: Company[]):
     companies,
     order: companies.map((_, i) => i),
     turnPos: 0,
-    oil: 1,
+    oil: options.history !== false ? historicOil(year) : 1,
     rate: 6,
     effects: [],
     slotBoost: {},
@@ -334,6 +349,8 @@ function createChallenge(setup: AirlineSetup, opts: AirlineOptions, rng: Rng): A
         deposit: 0,
         since: state.t - Math.round(f.age * 12),
         legs: routeId !== null ? [{ route: routeId, freq: Math.min(f.freq ?? 7, maxFreq(m, dist(f.route![0], f.route![1]))) }] : [],
+        cabin: defaultCabin(m),
+        meal: c.service,
       });
     }
   }
@@ -412,7 +429,7 @@ export function planeById(c: Company, id: number): Plane | undefined {
 }
 
 export function routeById(c: Company, id: number): Route | undefined {
-  return c.routes.find((r) => r.id === id);
+  return routeOf(c, id);
 }
 
 export function hasBranch(c: Company, city: string): boolean {
@@ -476,6 +493,8 @@ export function branchBlocker(state: AirlineState, ci: number, city: string): st
   const c = state.companies[ci];
   if (!CITY[city]) return '없는 도시예요';
   if (hasBranch(c, city)) return '이미 지점이 있어요';
+  const pol = historyOn(state) ? branchPolitics(c.hub, city, yearNow(state)) : null;
+  if (pol) return blockText(pol);
   const cost = branchCost(city, state.q);
   if (c.cash < cost) return `돈이 모자라요 (${fmtMoney(cost)} 필요)`;
   return null;
@@ -507,6 +526,8 @@ export function routeBlocker(state: AirlineState, ci: number, a: string, b: stri
   if (!hasBranch(c, b)) return `${CITY[b].name}에 지점이 없어요`;
   if (routeOnPair(c, a, b)) return '이미 있는 노선이에요';
   if (c.routes.length >= MAX_ROUTES) return `노선은 ${MAX_ROUTES}개까지예요`;
+  const pol = historyOn(state) ? routePolitics(c.hub, a, b, yearNow(state)) : null;
+  if (pol) return blockText(pol);
   const d = dist(a, b);
   if (d < 150) return '너무 가까워요';
   if (d > maxRangeNow(state, ci)) return `${d.toLocaleString()}km를 한 번에 날 수 있는 비행기가 없어요`;
@@ -521,6 +542,51 @@ export function deliveriesThisQuarter(state: AirlineState, ci: number): number {
 /** 비행기 수 (기다리는 주문 포함) */
 export const fleetCount = (c: Company) => c.planes.length + c.orders.length;
 
+/** 좌석 배치를 바꾸는 값: 우리 회사에 온 달에는 공짜, 그 뒤에는 새 비행기 값의 2% (같은 배치면 0) */
+export function refitCost(state: Pick<AirlineState, 't'>, p: Plane, cabin: Cabin): number {
+  if (sameCabin(p.cabin, cabin)) return 0;
+  if ((p.got ?? p.since) === state.t) return 0;
+  return Math.max(1, Math.round(MODEL[p.model].price * REFIT_RATE));
+}
+export const REFIT_RATE = 0.02;
+
+/** 배치를 바꿀 비행기들 (all이면 같은 기종 모두, 이미 같은 배치는 뺀다) */
+export function cabinTargets(c: Company, p: Plane, cabin: Cabin, all: boolean): Plane[] {
+  return (all ? c.planes.filter((x) => x.model === p.model) : [p]).filter((x) => !sameCabin(x.cabin, cabin));
+}
+
+/** 좌석 배치를 바꿀 수 없는 까닭 (바꿀 수 있으면 null) */
+export function cabinChangeBlocker(state: AirlineState, ci: number, planeId: number, cabin: Cabin, all = false): string | null {
+  const c = state.companies[ci];
+  const p = c.planes.find((x) => x.id === planeId);
+  if (!p) return '없는 비행기예요';
+  const why = cabinBlocker(MODEL[p.model], cabin);
+  if (why) return why;
+  const targets = cabinTargets(c, p, cabin, all);
+  if (targets.length === 0) return '지금과 같은 배치예요';
+  const cost = targets.reduce((sum, x) => sum + refitCost(state, x, cabin), 0);
+  if (cost > c.cash) return `돈이 모자라요 (${fmtMoney(cost)} 필요)`;
+  return null;
+}
+
+/** 캠페인 값 (광고 규모에 따라) */
+export function campaignCost(state: Pick<AirlineState, 'q'>, kind: CampaignKind): number {
+  return Math.round(CAMPAIGN_INFO[kind].costK * adScale(state.q));
+}
+
+/** 캠페인을 벌일 수 없는 까닭 */
+export function campaignBlocker(state: AirlineState, ci: number, kind: CampaignKind, region?: RegionId): string | null {
+  const c = state.companies[ci];
+  const info = CAMPAIGN_INFO[kind];
+  if (!info) return '없는 캠페인이에요';
+  if (yearNow(state) < info.from) return `${info.from}년부터 할 수 있어요`;
+  if (c.lastCampaign !== undefined && qOfM(c.lastCampaign) === state.q) return '캠페인은 한 분기에 하나만 해요';
+  if (info.region && (!region || !REGIONS.includes(region))) return '지역을 골라요';
+  const cost = campaignCost(state, kind);
+  if (c.cash < cost) return `돈이 모자라요 (${fmtMoney(cost)} 필요)`;
+  return null;
+}
+
 /** 새 비행기 주문(lease=false) 또는 리스(lease=true)를 할 수 있는지 */
 export function buyBlocker(state: AirlineState, ci: number, modelId: string, lease: boolean): string | null {
   const c = state.companies[ci];
@@ -528,6 +594,8 @@ export function buyBlocker(state: AirlineState, ci: number, modelId: string, lea
   if (!m) return '없는 기종이에요';
   if (!isAvailable(m, yearNow(state))) return yearNow(state) < m.intro ? `${m.intro}년에 나와요` : '생산이 끝난 기종이에요';
   if (fleetCount(c) >= MAX_PLANES) return `비행기는 주문까지 ${MAX_PLANES}대까지예요`;
+  const pol = historyOn(state) ? makerPolitics(c.hub, m, yearNow(state)) : null;
+  if (pol) return pol;
   if (lease && c.taken >= MAX_DELIVERIES) return `리스·중고는 한 달에 ${MAX_DELIVERIES}대까지예요`;
   const cost = lease ? depositFor(state, ci, modelId) : orderPrice(state, m, c);
   if (c.cash < cost) return `돈이 모자라요 (${fmtMoney(cost)} 필요)`;
@@ -539,6 +607,8 @@ export function usedBlocker(state: AirlineState, ci: number, listing: number): s
   const u = state.market.find((x) => x.id === listing);
   if (!u) return '이미 팔린 비행기예요';
   if (fleetCount(c) >= MAX_PLANES) return `비행기는 주문까지 ${MAX_PLANES}대까지예요`;
+  const pol = historyOn(state) ? makerPolitics(c.hub, MODEL[u.model], yearNow(state)) : null;
+  if (pol) return pol;
   if (c.taken >= MAX_DELIVERIES) return `리스·중고는 한 달에 ${MAX_DELIVERIES}대까지예요`;
   if (c.cash < u.price) return `돈이 모자라요 (${fmtMoney(u.price)} 필요)`;
   return null;
@@ -621,7 +691,10 @@ export function buildBlocker(state: AirlineState, ci: number, city: string, kind
   const c = state.companies[ci];
   if (!CITY[city]) return '없는 도시예요';
   if (!hasBranch(c, city)) return '지점이 있는 도시에만 지어요';
+  if (!BUSINESS_INFO[kind]) return '없는 사업이에요';
   if (c.businesses.some((b) => b.city === city && b.kind === kind)) return '이미 있어요';
+  const why = BUSINESS_INFO[kind].why(CITY[city], citySize(CITY[city], yearNow(state)));
+  if (why) return why;
   const cost = businessCost(city, kind, state.q);
   if (c.cash < cost) return `돈이 모자라요 (${fmtMoney(cost)} 필요)`;
   return null;
@@ -854,7 +927,7 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
       const deposit = depositFor(state, ci, m.id);
       const s = edit(state, ci, (c, s) => {
         c.cash -= deposit;
-        c.planes.push({ id: s.nextId, model: m.id, leased: true, rent, deposit, since: s.t, legs: [] });
+        c.planes.push({ id: s.nextId, model: m.id, leased: true, rent, deposit, since: s.t, legs: [], cabin: defaultCabin(m), meal: c.service, got: s.t });
         s.nextId += 1;
         c.taken += 1;
         c.stats.bought += 1;
@@ -868,7 +941,7 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
       const u = state.market.find((x) => x.id === action.listing)!;
       const s = edit(state, ci, (c, s) => {
         c.cash -= u.price;
-        c.planes.push({ id: s.nextId, model: u.model, leased: false, rent: 0, deposit: 0, since: s.t - Math.round(u.age * 12), legs: [] });
+        c.planes.push({ id: s.nextId, model: u.model, leased: false, rent: 0, deposit: 0, since: s.t - Math.round(u.age * 12), legs: [], cabin: defaultCabin(MODEL[u.model]), meal: c.service, got: s.t });
         s.nextId += 1;
         c.taken += 1;
         c.stats.bought += 1;
@@ -932,6 +1005,29 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
         c.ads[action.region] = amount;
       });
     }
+    case 'setMedia': {
+      if (!REGIONS.includes(action.region) || !MEDIA_INFO[action.media] || yearNow(state) < MEDIA_INFO[action.media].from || mediaOf(c0, action.region) === action.media) return state;
+      return edit(state, ci, (c) => {
+        c.adMedia = { ...(c.adMedia ?? Object.fromEntries(REGIONS.map((r) => [r, 'tv']))), [action.region]: action.media } as Record<RegionId, AdMedia>;
+      });
+    }
+    case 'campaign': {
+      if (campaignBlocker(state, ci, action.kind, action.region)) return state;
+      const info = CAMPAIGN_INFO[action.kind];
+      const cost = campaignCost(state, action.kind);
+      const s = edit(state, ci, (c, s) => {
+        c.cash -= cost;
+        c.lastCampaign = s.t;
+        if (info.mod) {
+          c.mods.push({ id: s.nextId, kind: info.mod.kind, value: info.mod.value, until: s.t + info.mod.months, label: `${info.icon} ${info.name}`, seg: info.mod.seg, ...(info.region && action.region ? { region: action.region } : {}) });
+          s.nextId += 1;
+        }
+        if (info.awareness && action.region) c.awareness[action.region] = Math.min(1, c.awareness[action.region] + info.awareness);
+        if (info.rep) c.reputation = clampRep(c.reputation + info.rep);
+        pushEvent(s, { type: 'campaign', company: ci, kind: action.kind });
+      });
+      return addLog(s, seat, `${c0.name}: ${info.icon} ${info.name}${action.region && info.region ? ` (${REGION_INFO[action.region].name})` : ''} (−${fmtMoney(cost)})`);
+    }
     case 'setMaint': {
       const level = Math.round(action.level);
       if (level < 1 || level > 5 || level === c0.maint) return state;
@@ -994,10 +1090,37 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
     }
     case 'setService': {
       const level = Math.round(action.level);
-      if (level < 1 || level > 5 || level === c0.service) return state;
+      if (level < 1 || level > 5 || (level === c0.service && c0.planes.every((p) => p.meal === level))) return state;
       return edit(state, ci, (c) => {
         c.service = level;
+        for (const p of c.planes) p.meal = level;
       });
+    }
+    case 'setMeal': {
+      const level = Math.round(action.level);
+      const p0 = c0.planes.find((p) => p.id === action.plane);
+      if (!p0 || level < 1 || level > 5) return state;
+      const targets = action.all ? c0.planes.filter((p) => p.model === p0.model) : [p0];
+      if (targets.every((p) => p.meal === level)) return state;
+      const ids = new Set(targets.map((p) => p.id));
+      return edit(state, ci, (c) => {
+        for (const p of c.planes) if (ids.has(p.id)) p.meal = level;
+      });
+    }
+    case 'setCabin': {
+      if (cabinChangeBlocker(state, ci, action.plane, action.cabin, !!action.all)) return state;
+      const p0 = c0.planes.find((p) => p.id === action.plane)!;
+      const targets = cabinTargets(c0, p0, action.cabin, !!action.all);
+      const cost = targets.reduce((sum, p) => sum + refitCost(state, p, action.cabin), 0);
+      const ids = new Set(targets.map((p) => p.id));
+      const cabin = { first: action.cabin.first, business: action.cabin.business, pitch: action.cabin.pitch };
+      const s = edit(state, ci, (c, s) => {
+        c.cash -= cost;
+        for (const p of c.planes) if (ids.has(p.id)) p.cabin = { ...cabin };
+        pushEvent(s, { type: 'cabin', company: ci, plane: p0.id, cost });
+      });
+      const m = MODEL[p0.model];
+      return addLog(s, seat, `${c0.name}: ${m.name}${targets.length > 1 ? ` ${targets.length}대` : ''} 좌석 배치 바꿈${cost > 0 ? ` (−${fmtMoney(cost)})` : ''}`);
     }
     case 'borrow': {
       const amount = Math.round(action.amount);
@@ -1027,7 +1150,7 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
         c.businesses.push({ city: action.city, kind: action.kind, cost });
         pushEvent(s, { type: 'build', company: ci, city: action.city, kind: action.kind });
       });
-      return addLog(s, seat, `${c0.name}: ${CITY[action.city].name}에 ${action.kind === 'hotel' ? '호텔' : '여행사'} 열기 (−${fmtMoney(cost)})`);
+      return addLog(s, seat, `${c0.name}: ${CITY[action.city].name}에 ${withJosa(BUSINESS_INFO[action.kind].name, '을/를')} 열기 (−${fmtMoney(cost)})`);
     }
     case 'sellBusiness': {
       const b = c0.businesses.find((x) => x.city === action.city && x.kind === action.kind);
@@ -1037,7 +1160,7 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
         c.cash += refund;
         c.businesses = c.businesses.filter((x) => !(x.city === action.city && x.kind === action.kind));
       });
-      return addLog(s, seat, `${c0.name}: ${CITY[action.city].name} ${action.kind === 'hotel' ? '호텔' : '여행사'} 팔기 (+${fmtMoney(refund)})`);
+      return addLog(s, seat, `${c0.name}: ${CITY[action.city].name} ${BUSINESS_INFO[action.kind].name} 팔기 (+${fmtMoney(refund)})`);
     }
     case 'choose':
       return applyChoice(state, ci, action.option);
@@ -1303,14 +1426,27 @@ export function runMonth(state: AirlineState, rng: Rng = Math.random): AirlineSt
       }
       const lossStreak = st.profit < 0 ? (r.stats?.lossStreak ?? 0) + 1 : 0;
       const hist = [...(r.stats?.hist ?? []), [Math.round(st.lf * 1000) / 1000, Math.round(st.profit * 10) / 10] as [number, number]].slice(-12);
-      r.stats = { lf: st.lf, pax: Math.round(st.pax), revenue: st.revenue, profit: st.profit, lossStreak, share: st.share, xfer: st.xfer, xferRev: st.xferRev, onTime: st.onTime, cancel: st.cancel, hist };
+      r.stats = {
+        lf: st.lf,
+        pax: Math.round(st.pax),
+        revenue: st.revenue,
+        profit: st.profit,
+        lossStreak,
+        share: st.share,
+        xfer: st.xfer,
+        xferRev: st.xferRev,
+        onTime: st.onTime,
+        cancel: st.cancel,
+        hist,
+        ...(st.premLf !== undefined ? { premLf: st.premLf } : {}),
+      };
     }
     // 정시 운항률·평판·광고 (석 달에 걸쳐 천천히)
     if (rep.flights > 0) c.onTime = Math.round((c.onTime * 0.67 + rep.onTime * 0.33) * 1000) / 1000;
     c.reputation = Math.round((c.reputation + (reputationTarget(s, c) - c.reputation) * 0.12) * 10) / 10;
     const scale = adScale(q);
     for (const region of REGIONS) {
-      const effect = 1 - Math.exp(-(c.ads[region] * 3) / scale);
+      const effect = adTarget(c, region, scale);
       c.awareness[region] = Math.round((c.awareness[region] * 0.887 + effect * 0.113) * 1000) / 1000;
     }
     c.stats.pax += Math.round(rep.pax);
@@ -1606,6 +1742,32 @@ function startMonth(state: AirlineState, t: number, rng: Rng): AirlineState {
       city: e.city,
     });
   }
+  // 실제 역사 사건
+  if (historyOn(s)) {
+    for (const h of historyAt(t)) {
+      if (h.oil) s = { ...s, oil: Math.round(Math.max(0.5, Math.min(3, s.oil * h.oil)) * 100) / 100 };
+      for (const dm of h.demand ?? []) {
+        const until = t + dm.months;
+        const add: DistOmit<Effect, 'id'>[] = dm.regions
+          ? dm.regions.map((region) => ({ kind: dm.mult >= 1 ? 'boom' : 'slump', region, mult: dm.mult, until }) as DistOmit<Effect, 'id'>)
+          : [{ kind: 'world', mult: dm.mult, until }];
+        for (const e of add) s = { ...s, effects: [...s.effects, { ...e, id: s.nextId } as Effect], nextId: s.nextId + 1 };
+      }
+      if (h.aid && s.report) {
+        const rep = s.report;
+        s = {
+          ...s,
+          companies: s.companies.map((c, ci) => {
+            const r = rep.companies[ci];
+            if (c.out || !r) return c;
+            const costs = r.fuel + r.crew + r.airport + r.service + r.sales + r.lease + r.fleet + r.branch + r.ads + r.interest + r.staff + r.disrupt;
+            return { ...c, cash: c.cash + Math.round(costs * h.aid!) };
+          }),
+        };
+      }
+      s = addNews(s, { icon: h.icon, title: h.title, text: h.text, tone: h.tone });
+    }
+  }
   // 무작위 사건 (석 달에 한 번쯤)
   const activeCities = [...new Set(s.companies.flatMap((c) => c.routes.flatMap((r) => [r.a, r.b])))];
   const rolls = rng() < 0.16 ? (rng() < 0.15 ? 2 : 1) : 0;
@@ -1628,6 +1790,23 @@ function startMonth(state: AirlineState, t: number, rng: Rng): AirlineState {
     if (c.out) return;
     c.taken = 0;
     c.mods = c.mods.filter((m) => m.until > t);
+    // 나라 관계가 막힌 노선은 운항을 멈춘다
+    if (historyOn(s)) {
+      const blocked = c.routes.map((r) => ({ r, why: routePolitics(c.hub, r.a, r.b, yearOfM(t)) })).filter((x) => x.why);
+      if (blocked.length > 0) {
+        const ids = new Set(blocked.map((x) => x.r.id));
+        c.routes = c.routes.filter((r) => !ids.has(r.id));
+        for (const p of c.planes) p.legs = p.legs.filter((l) => !ids.has(l.route));
+        s = addNews(s, {
+          icon: '🚫',
+          title: `${c.name}: ${blocked.map((x) => `${CITY[x.r.a].name}–${CITY[x.r.b].name}`).join(', ')} 운항 중단`,
+          text: `${blocked[0].why!.why}. 비행기는 쉬는 상태가 됐어요.`,
+          tone: 'bad',
+          for: [ci],
+          company: ci,
+        });
+      }
+    }
     // 뽑은 사람들이 일을 시작한다
     for (const g of STAFF_GROUPS) {
       const st = c.staff[g];
@@ -1636,7 +1815,7 @@ function startMonth(state: AirlineState, t: number, rng: Rng): AirlineState {
     }
     const due = c.orders.filter((o) => o.due <= t);
     for (const o of due) {
-      c.planes.push({ id: s.nextId, model: o.model, leased: false, rent: 0, deposit: 0, since: t, legs: [] });
+      c.planes.push({ id: s.nextId, model: o.model, leased: false, rent: 0, deposit: 0, since: t, legs: [], cabin: defaultCabin(MODEL[o.model]), meal: c.service, got: t });
       s.nextId += 1;
       c.stats.bought += 1;
       c.acc.bought += 1;
@@ -1692,7 +1871,7 @@ function startMonth(state: AirlineState, t: number, rng: Rng): AirlineState {
 
 export function oilTarget(state: AirlineState): number {
   if (state.challenge?.id === 'oilstorm' && state.t >= mOf(1973, 10)) return 1.9;
-  return 1;
+  return historyOn(state) ? historicOil(yearOfM(state.t)) : 1;
 }
 
 /** 해가 바뀔 때 뉴스: 새 기종, 생산 끝, 공항이 커짐, 올해 행사 */
@@ -1700,6 +1879,7 @@ function announceYear(state: AirlineState): AirlineState {
   let s = state;
   const year = yearOf(s.q);
   const first = s.t === s.startT;
+  if (historyOn(s)) for (const n of politicalNews(year, s.startYear)) s = addNews(s, n);
   const fresh = MODELS.filter((m) => m.intro === year);
   if (fresh.length > 0) {
     s = addNews(s, {

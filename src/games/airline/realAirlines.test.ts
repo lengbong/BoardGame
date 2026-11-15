@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { MODELS } from './aircraft';
 import { CITIES, CITY } from './cities';
 import { IMAGE_CREDITS } from './imageCredits';
-import { ALL_CREDITS, aircraftPhoto, airlinePhoto, cityPhoto, photoCredit } from './images';
+import { ALL_CREDITS, airlinePhoto, cityPhoto, photoCredit } from './images';
 import { REAL_AIRLINES, REAL_AIRLINE, airlinesAt, type RealAirline } from './realAirlines';
 
 /** 쓸 수 있는 라이선스: 퍼블릭 도메인, CC0, CC BY, CC BY-SA (scripts/fetch-airline-images.py와 같음) */
@@ -112,9 +111,8 @@ describe('사진', () => {
     for (const key of Object.keys(IMAGE_CREDITS)) expect(keys, key).toContain(key);
   });
 
-  it('사진 이름은 기종·도시·항공사 id와 맞는다', () => {
+  it('사진 이름은 도시·항공사 id와 맞는다', () => {
     const known = new Set([
-      ...MODELS.map((m) => `aircraft/${m.id}`),
       ...CITIES.map((c) => `cities/${c.id}`),
       ...REAL_AIRLINES.map((a) => `airlines/${a.id}`),
     ]);
@@ -124,12 +122,11 @@ describe('사진', () => {
   it('사진 꺼내기 함수가 있는 사진은 주소를, 없는 것은 undefined를 준다', () => {
     for (const key of keys) {
       const [kind, id] = key.split('/');
-      const get = { aircraft: aircraftPhoto, cities: cityPhoto, airlines: airlinePhoto }[kind];
+      const get = { cities: cityPhoto, airlines: airlinePhoto }[kind];
       expect(get, key).toBeDefined();
       expect(typeof get!(id), key).toBe('string');
       expect(photoCredit(key)).toBe(IMAGE_CREDITS[key]);
     }
-    expect(aircraftPhoto('nope')).toBeUndefined();
     expect(cityPhoto('constructor')).toBeUndefined();
     expect(airlinePhoto('toString')).toBeUndefined();
     expect(photoCredit('constructor')).toBeUndefined();

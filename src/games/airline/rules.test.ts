@@ -1,9 +1,11 @@
 import { defaultTimes } from './timetable';
 import { describe, expect, it } from 'vitest';
+import { defaultCabin } from './cabin';
 import { seededRandom } from '../../lib/random';
 import { MODEL, availableModels, commonalityMult, launchDiscount, leadTime } from './aircraft';
 import { CHALLENGE } from './challenges';
 import { CITY, citySize, dist } from './cities';
+import { routePolitics } from './politics';
 import {
   MAX_ROUTES,
   START_MONEY,
@@ -19,6 +21,7 @@ import {
   depositFor,
   endQ,
   rankings,
+  maxRangeNow,
   routeBlocker,
   runMonth,
   runQuarter,
@@ -148,7 +151,7 @@ describe('지점과 노선', () => {
     expect(s.companies[0].branches).toEqual(['seoul']);
   });
 
-  it(`노선은 ${MAX_ROUTES}개까지`, () => {
+  it('노선 수에는 정해진 한도가 없다 (아주 큰 안전 한도만 있다)', () => {
     let s = twoHumans({ money: 'rich' });
     s.companies[0].cash = 1e7;
     const others = Object.keys(CITY).filter((id) => id !== 'seoul');
@@ -159,8 +162,14 @@ describe('지점과 노선', () => {
       if (next !== s) opened++;
       s = next;
     }
-    expect(s.companies[0].routes.length).toBe(MAX_ROUTES);
-    expect(opened).toBe(MAX_ROUTES);
+    // 예전 한도(32개)보다 훨씬 많이 열 수 있다: 비행기가 닿는 모든 도시
+    // (국교가 없어 막힌 도시는 뺀다)
+    const reachable = others.filter((city) => dist('seoul', city) >= 150 && dist('seoul', city) <= maxRangeNow(s, 0) && !routePolitics('seoul', 'seoul', city, yearOf(s.q)));
+    expect(opened).toBe(reachable.length);
+    expect(opened).toBeGreaterThan(32);
+    // 안전 한도에 닿으면 막는다
+    const full = { ...s, companies: s.companies.map((c, i) => (i === 0 ? { ...c, routes: Array.from({ length: MAX_ROUTES }, (_, k) => ({ ...c.routes[0], id: 10000 + k })) } : c)) };
+    expect(routeBlocker(full, 0, 'tokyo', 'osaka')).toContain(`${MAX_ROUTES}개`);
   });
 });
 
@@ -214,7 +223,7 @@ describe('비행기', () => {
     const s = twoHumans({ money: 'rich' });
     const crew = () => estimateRoute(s, 0, 'seoul', 'tokyo', [{ model: 'a320', freq: 10 }], 0).cost.crew;
     const before = crew();
-    for (let i = 0; i < 4; i++) s.companies[0].planes.push({ id: s.nextId++, model: 'a321', leased: false, rent: 0, deposit: 0, since: s.t, legs: [] });
+    for (let i = 0; i < 4; i++) s.companies[0].planes.push({ id: s.nextId++, model: 'a321', leased: false, rent: 0, deposit: 0, since: s.t, legs: [], cabin: defaultCabin(MODEL['a321']), meal: 3 });
     expect(MODEL.a321.family).toBe(MODEL.a320.family);
     expect(commonalityMult(4)).toBeLessThan(1);
     expect(crew()).toBeLessThan(before);
@@ -263,7 +272,7 @@ describe('비행기', () => {
 
   it('팔면 가치의 90%를 받고, 리스기를 돌려주면 위약금을 낸다', () => {
     let s = twoHumans();
-    s.companies[0].planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.t - 24, legs: [] });
+    s.companies[0].planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.t - 24, legs: [], cabin: defaultCabin(MODEL['a320']), meal: 3 });
     s = act(s, { type: 'lease', model: 'a320' });
     const [own, leased] = s.companies[0].planes;
     const cash = s.companies[0].cash;
@@ -318,7 +327,7 @@ describe('비행기', () => {
     expect(bestFreq(s, 0, small.id, tyo.id)).toBe(max);
     // 도쿄 슬롯을 거의 다 쓴 것처럼 꾸민다
     const cap = slotCapacity(s, 0, 'tokyo');
-    s.companies[0].planes.push({ id: 999, model: 'a320', leased: true, rent: 1, deposit: 0, since: s.t, legs: [{ route: tyo.id, freq: cap - 2 }] });
+    s.companies[0].planes.push({ id: 999, model: 'a320', leased: true, rent: 1, deposit: 0, since: s.t, legs: [{ route: tyo.id, freq: cap - 2 }], cabin: defaultCabin(MODEL['a320']), meal: 3 });
     s.nextId = 1000;
     expect(assignBlocker(s, 0, small.id, tyo.id, 3)).toContain('도쿄 슬롯이 모자라요');
     expect(bestFreq(s, 0, small.id, tyo.id)).toBe(2);
@@ -473,7 +482,7 @@ describe('승리 조건', () => {
       for (const city of [a, b]) if (!c.branches.includes(city)) c.branches.push(city);
       const rid = s.nextId++;
       c.routes.push({ id: rid, a, b, fare: 0, since: s.t, stats: null, times: defaultTimes(a, b, 2003) });
-      c.planes.push({ id: s.nextId++, model, leased: true, rent: 3, deposit: 0, since: s.t, legs: [{ route: rid, freq: 2 }] });
+      c.planes.push({ id: s.nextId++, model, leased: true, rent: 3, deposit: 0, since: s.t, legs: [{ route: rid, freq: 2 }], cabin: defaultCabin(MODEL[model]), meal: 3 });
     }
     s = runMonth(s, seededRandom(1));
     expect(s.phase).toBe('gameover');

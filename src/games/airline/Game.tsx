@@ -18,6 +18,7 @@ import { MapView, type Pulse, type Selection } from './MapView';
 import { Panel } from './Panel';
 import { NewsView, ReportView } from './ReportView';
 import { GameOver, QuarterReport } from './Results';
+import { RouteOpeningCard, type Opening } from './RouteOpening';
 import { RoutesView, type Planner } from './RoutesView';
 import { actor, applyAction, autoStopReason, idlePlanes, rankings } from './rules';
 import { companyValue, monthDemandMult, routeFreq } from './simulate';
@@ -83,6 +84,8 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   const [game, setGame] = useState<AirlineState>(initialState);
   const [tab, setTab] = useState<Tab>('map');
   const [selected, setSelected] = useState<Selection>(null);
+  /** 지도에서 이 회사 노선만 본다 (null이면 모두) */
+  const [focusCo, setFocusCo] = useState<number | null>(null);
   const [routeFocus, setRouteFocus] = useState<number | null>(null);
   const [planner, setPlanner] = useState<Planner | null>(null);
   const [report, setReport] = useState<Report | null>(null);
@@ -91,6 +94,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   const [auto, setAuto] = useState<Record<number, { mode: 'quarter' | 'event'; since: number; q: number }>>({});
   const [flying, setFlying] = useState(false);
   const [pulses, setPulses] = useState<Pulse[]>([]);
+  const [opening, setOpening] = useState<Opening | null>(null);
   const [banner, setBanner] = useState<{ id: number; text: string; color: string | null } | null>(null);
   const [notice, setNotice] = useState<{ id: number; text: string } | null>(null);
   const [zoomCmd, setZoomCmd] = useState<{ n: number; kind: 'in' | 'out' | 'reset' } | undefined>(undefined);
@@ -137,9 +141,14 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   }, [notice]);
   useEffect(() => {
     if (pulses.length === 0) return;
-    const t = window.setTimeout(() => setPulses([]), 2600);
+    const t = window.setTimeout(() => setPulses([]), 3000);
     return () => window.clearTimeout(t);
   }, [pulses]);
+  useEffect(() => {
+    if (!opening) return;
+    const t = window.setTimeout(() => setOpening(null), 3800);
+    return () => window.clearTimeout(t);
+  }, [opening]);
 
   /** 상태가 바뀔 때마다: 저장, 지도 반짝임, 소리, 분기 결산 */
   useLayoutEffect(() => {
@@ -149,7 +158,14 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
     prevGame.current = game;
     if (!prev || prev === game) return;
     const { pulses: p, summary } = diffPulses(prev, game);
-    if (p.length > 0 && delays.fx) setPulses(p);
+    if (p.length > 0 && delays.fx) {
+      setPulses(p);
+      // 사람 회사가 새 노선을 열면 축하 카드
+      const mine = p.filter((x) => x.kind === 'route' && game.companies[x.company]?.kind === 'human');
+      const last = mine.at(-1);
+      const route = last ? game.companies[last.company].routes.find((r) => pairKey(r.a, r.b) === last.key) : undefined;
+      if (last && route) setOpening({ id: last.id, company: last.company, a: route.a, b: route.b, more: mine.length - 1 });
+    }
     const prevActor = actor(prev);
     const monthEnd = game.events.some((e) => e.type === 'month');
     const quarterEnd = game.events.some((e) => e.type === 'quarter');
@@ -168,7 +184,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
         else if (e.type === 'sell') e.amount > 0 ? alSound.coins() : alSound.pay();
         else if (e.type === 'money') e.what === 'borrow' ? alSound.coins() : alSound.pay();
         else if (e.type === 'assign') alSound.takeoff();
-        else if (e.type === 'order') alSound.stamp();
+        else if (e.type === 'order' || e.type === 'cabin') alSound.stamp();
         else if (e.type === 'choice') alSound.bell();
         else if (e.type === 'alliance') e.ok ? alSound.chime() : alSound.nope();
       }
@@ -332,6 +348,12 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
     setSelected({ kind: 'city', id });
     setTab('map');
   };
+  const focusCompany = (ci: number | null) => {
+    setFocusCo(ci);
+    // 고른 회사가 아닌 노선을 보고 있었으면 지도에서 사라지니 정보 칸도 닫는다
+    if (ci !== null && selected?.kind === 'route' && selected.company !== ci) setSelected(null);
+  };
+  const canFocus = game.companies.length > 1;
 
   // 키보드
   useEffect(() => {
@@ -359,6 +381,8 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
         e.preventDefault();
         endTurn();
       } else if (e.key === 'Escape') {
+        // 고른 것이 없으면 지도의 회사 고르기를 푼다
+        if (!selected && !planner) setFocusCo(null);
         setSelected(null);
         setPlanner(null);
       } else if (tab === 'map' && (e.key === '+' || e.key === '=')) setZoomCmd((z) => ({ n: (z?.n ?? 0) + 1, kind: 'in' }));
@@ -433,7 +457,18 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   if (tab === 'map')
     content = (
       <div className="al-map-tab">
-        <MapView state={game} viewer={viewer} selected={selected} onSelect={setSelected} pulses={pulses} flying={flying} fx={delays.fx} zoomCmd={zoomCmd} />
+        <MapView
+          state={game}
+          viewer={viewer}
+          selected={selected}
+          onSelect={setSelected}
+          pulses={pulses}
+          flying={flying}
+          fx={delays.fx}
+          zoomCmd={zoomCmd}
+          focusCo={canFocus ? focusCo : null}
+          onFocusCo={canFocus ? focusCompany : undefined}
+        />
         <InfoPanel
           state={game}
           viewer={viewer}
@@ -528,6 +563,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
               ✈️ {mLabel(game.report?.t ?? game.t)} 운항 중… <span className="al-sim-bar" />
             </div>
           )}
+          {opening && <RouteOpeningCard key={opening.id} state={game} opening={opening} onClose={() => setOpening(null)} />}
           {toast && !report && !flying && <MonthToast key={toast.id} state={game} report={toast.report} viewer={viewer} onClose={() => setToast(null)} onDetail={() => {
             setToast(null);
             setTab('report');
@@ -559,6 +595,8 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
           if (game.phase === 'gameover' || window.confirm('지금 게임을 그만두고 새 게임을 할까요? (하던 게임은 저장되어 있어요)')) onChangeSetup();
         }}
         onExit={onExit}
+        focusCo={focusCo}
+        onFocusCo={tab === 'map' && canFocus ? focusCompany : undefined}
       />
 
       {choiceOpen && !report && !flying && me.choice && (

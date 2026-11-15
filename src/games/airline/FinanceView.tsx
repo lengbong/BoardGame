@@ -8,6 +8,12 @@ import { fmtMoney, signedMoney } from './format';
 import { GRADE_INFO, goalProgress } from './goals';
 import { ADS_MAX, allianceOutlook, borrowBlocker, campaignBlocker, campaignCost, proposeBlocker, repayBlocker } from './rules';
 import {
+  MAINT_COST,
+  MAINT_NAMES,
+  MAINT_RISK,
+  RESERVE_COST,
+  RESERVE_NAMES,
+  spareCover,
   businessValue,
   companyValue,
   computeQuarter,
@@ -15,7 +21,7 @@ import {
   planeValue,
   reputationTarget,
 } from './simulate';
-import { qLabel, yearOf } from './time';
+import { mLabel, qOfM, yearOf } from './time';
 import type { AdMedia, AirlineAction, AirlineState, CompanyReport, Mod, RegionId } from './types';
 import { ActButton, CoName, Meter, Stepper } from './ui';
 
@@ -30,11 +36,12 @@ const notMine = '내 차례에만 할 수 있어요';
 
 const INCOME: { key: keyof CompanyReport; name: string }[] = [
   { key: 'ticket', name: '운임 수입' },
-  { key: 'side', name: '호텔·여행사 수입' },
+  { key: 'side', name: '부대사업 수입' },
 ];
 const COSTS: { key: keyof CompanyReport; name: string }[] = [
   { key: 'fuel', name: '연료비' },
-  { key: 'crew', name: '승무원·정비비' },
+  { key: 'staff', name: '직원 임금·초과 근무' },
+  { key: 'crew', name: '운항 수당·정비 부품' },
   { key: 'airport', name: '공항 이용료·지상 조업' },
   { key: 'service', name: '기내 서비스' },
   { key: 'sales', name: '표 판매 수수료' },
@@ -43,13 +50,14 @@ const COSTS: { key: keyof CompanyReport; name: string }[] = [
   { key: 'branch', name: '지점 유지비' },
   { key: 'ads', name: '광고비' },
   { key: 'interest', name: '대출 이자' },
+  { key: 'disrupt', name: '지연·결항 보상' },
   { key: 'tax', name: '법인세 (이익의 20%)' },
 ];
 
 export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps) {
   const me = state.companies[viewer];
   const rep = state.report?.companies[viewer];
-  // 지금 정해 둔 대로 이번 분기를 날면 (사건·계절은 이번 분기 그대로)
+  // 지금 정해 둔 대로 이번 달을 날면 (운항 사건 없이, 사건·계절은 이번 달 그대로)
   const next = useMemo(() => (state.phase === 'manage' ? computeQuarter(state).reports[viewer] : null), [state, viewer]);
   const limit = creditLimit(state, viewer);
   const planesValue = me.planes.reduce((s, p) => s + planeValue(state, p), 0);
@@ -61,8 +69,8 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
   const adsTotal = REGIONS.reduce((s, r) => s + me.ads[r], 0);
   const year = yearOf(state.q);
   const [campaignRegion, setCampaignRegion] = useState<RegionId>(CITY[me.hub].region);
-  const campaignDone = me.lastCampaign === state.q;
-  const activeCampaigns = me.mods.filter((m) => m.until > state.q && CAMPAIGNS.some((k) => m.label === `${CAMPAIGN_INFO[k].icon} ${CAMPAIGN_INFO[k].name}`));
+  const campaignDone = me.lastCampaign !== undefined && qOfM(me.lastCampaign) === state.q;
+  const activeCampaigns = me.mods.filter((m) => m.until > state.t && CAMPAIGNS.some((k) => m.label === `${CAMPAIGN_INFO[k].icon} ${CAMPAIGN_INFO[k].name}`));
   const target = reputationTarget(state, me);
   const avgMeal = me.planes.length > 0 ? me.planes.reduce((s, p) => s + p.meal, 0) / me.planes.length : me.service;
   const mixed = me.planes.some((p) => p.meal !== me.service);
@@ -73,13 +81,13 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
   return (
     <div className="al-finance">
       <section className="al-card al-pnl">
-        <h4>분기 손익</h4>
+        <h4>달 손익</h4>
         <table className="al-table al-pnl-table">
           <thead>
             <tr>
               <th />
-              <th>지난 분기{rep ? '' : ' (아직 없음)'}</th>
-              {next && <th>이번 분기 어림</th>}
+              <th>지난달{rep ? '' : ' (아직 없음)'}</th>
+              {next && <th>이번 달 어림</th>}
             </tr>
           </thead>
           <tbody>
@@ -98,7 +106,7 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
               </tr>
             ))}
             <tr className="al-total">
-              <th>분기 이익</th>
+              <th>달 이익</th>
               <td className={rep && rep.profit < 0 ? 'al-neg' : 'al-pos'}>{rep ? signedMoney(rep.profit) : '—'}</td>
               {next && <td className={next.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(next.profit)}</td>}
             </tr>
@@ -111,7 +119,7 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
             )}
           </tbody>
         </table>
-        <p className="al-muted al-tip">‘이번 분기 어림’은 지금 정해 둔 노선·운임·광고 그대로, 라이벌도 지금 그대로일 때의 값이에요.</p>
+        <p className="al-muted al-tip">‘이번 달 어림’은 지금 정해 둔 노선·운임·광고 그대로, 라이벌도 지금 그대로이고 지연·결항이 없을 때의 값이에요.</p>
       </section>
 
       <section className="al-card al-balance">
@@ -140,7 +148,7 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
             )}
             {bizValue > 0 && (
               <tr>
-                <th>호텔·여행사 가치</th>
+                <th>부대사업 가치</th>
                 <td>{fmtMoney(bizValue)}</td>
               </tr>
             )}
@@ -221,7 +229,7 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
             })}
           </ul>
         )}
-        <p className="al-muted al-tip">같은 도시에 지점이 많고 겹치는 노선이 적을수록 제휴를 반겨요. 한 분기에 한 번 제안할 수 있어요.</p>
+        <p className="al-muted al-tip">같은 도시에 지점이 많고 겹치는 노선이 적을수록 제휴를 반겨요. 석 달에 한 번 제안할 수 있어요.</p>
         {mods.length > 0 && (
           <>
             <h4>지금 걸린 효과</h4>
@@ -230,7 +238,7 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
                 <li key={m.id}>
                   <span>{m.label}</span>
                   <small className="al-muted">
-                    {modText(m)} · {qLabel(m.until - 1)}까지
+                    {modText(m)} · {mLabel(m.until - 1)}까지
                   </small>
                 </li>
               ))}
@@ -281,7 +289,7 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
 
       <section className="al-card al-ads">
         <h4>
-          지역 광고 <small>분기마다 {fmtMoney(adsTotal)}</small>
+          지역 광고 <small>달마다 {fmtMoney(adsTotal)}</small>
         </h4>
         <ul>
           {REGIONS.map((r) => (
@@ -320,7 +328,7 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
           ))}
         </ul>
         <p className="al-muted al-tip">
-          광고를 하면 그 지역에 닿는 노선에서 손님이 우리 회사를 더 골라요. 효과는 몇 분기에 걸쳐 쌓이고, 멈추면 천천히 줄어요. 매체마다 닿는 손님이 달라요: 📰 신문은 사업 손님, 📖 여행 잡지는 관광 손님, 📻
+          광고를 하면 그 지역에 닿는 노선에서 손님이 우리 회사를 더 골라요. 효과는 몇 달에 걸쳐 쌓이고, 멈추면 천천히 줄어요. 매체마다 닿는 손님이 달라요: 📰 신문은 사업 손님, 📖 여행 잡지는 관광 손님, 📻
           라디오는 적은 돈에 효과가 크지만 많이 써도 덜 늘고, 💻 인터넷(1998년부터)은 같은 돈에 효과가 커요.
         </p>
         <h4 className="al-campaign-title">
@@ -355,8 +363,44 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
           })}
         </div>
         {activeCampaigns.length > 0 && (
-          <p className="al-muted al-tip">진행 중: {activeCampaigns.map((m) => `${m.label} (${qLabel(m.until - 1)}까지)`).join(', ')}</p>
+          <p className="al-muted al-tip">진행 중: {activeCampaigns.map((m) => `${m.label} (${mLabel(m.until - 1)}까지)`).join(', ')}</p>
         )}
+      </section>
+
+      <section className="al-card al-ops-card">
+        <h4>
+          🔧 운항 관리 <small>정시 운항률 {Math.round(me.onTime * 100)}% (최근 석 달)</small>
+        </h4>
+        <div className="al-service-row" role="radiogroup" aria-label="정비 수준">
+          {[1, 2, 3, 4, 5].map((lv) => (
+            <button
+              key={lv}
+              type="button"
+              role="radio"
+              aria-checked={me.maint === lv}
+              className={`al-svc${me.maint === lv ? ' al-on' : ''}`}
+              disabled={!canAct}
+              onClick={() => perform({ type: 'setMaint', level: lv })}
+              data-testid={`al-maint-${lv}`}
+            >
+              <b>{lv}</b>
+              <small>{MAINT_NAMES[lv]}</small>
+              <small className="al-muted">정비비 {MAINT_COST[lv] >= 1 ? '+' : ''}{Math.round((MAINT_COST[lv] - 1) * 100)}%</small>
+            </button>
+          ))}
+        </div>
+        <p className="al-muted al-tip">정비를 꼼꼼히 하면 승무원·정비비가 늘지만 지연·결항·기체 점검이 줄어요 (위험 {Math.round(MAINT_RISK[me.maint] * 100)}%). 비행기가 낡을수록 더 중요해요.</p>
+        <div className="al-loan-row">
+          <span>예비 승무원</span>
+          {[0, 1, 2].map((lv) => (
+            <button key={lv} type="button" className={`al-chip${me.crewReserve === lv ? ' al-on' : ''}`} disabled={!canAct} onClick={() => perform({ type: 'setCrewReserve', level: lv })} aria-pressed={me.crewReserve === lv}>
+              {RESERVE_NAMES[lv]} {lv > 0 ? `(승무원비 +${Math.round((RESERVE_COST[lv] - 1) * 100)}%)` : ''}
+            </button>
+          ))}
+        </div>
+        <p className="al-muted al-tip">
+          예비기: 지금 쉬는 비행기 {me.planes.filter((p) => p.legs.length === 0).length}대가 기체 점검·결항 때 대신 날아요 (메우는 정도 {Math.round(spareCover(me) * 100)}%).
+        </p>
       </section>
 
       <section className="al-card al-service">
@@ -434,6 +478,6 @@ function modText(m: Mod): string {
     case 'discount':
       return `${m.model ? `${MODEL[m.model]?.name ?? ''} ` : ''}주문 값 ${p(m.value)}`;
     case 'subsidy':
-      return `${m.city ? `${CITY[m.city].name} 노선을 날면 ` : ''}분기 ${fmtMoney(m.value)} 보조금`;
+      return `${m.city ? `${CITY[m.city].name} 노선을 날면 ` : ''}달 ${fmtMoney(m.value)} 보조금`;
   }
 }

@@ -122,7 +122,7 @@ export function CabinEditor({ state, viewer, plane, canAct, perform, onClose }: 
   const changed = !sameCabin(draft, plane.cabin);
   const targets = cabinTargets(me, plane, draft, all);
   const cost = targets.reduce((s, p) => s + refitCost(state, p, draft), 0);
-  const free = (plane.got ?? plane.since) === state.q;
+  const free = (plane.got ?? plane.since) === state.t;
   const blocker = !canAct ? notMine : changed || all ? cabinChangeBlocker(state, viewer, plane.id, draft, all) : '지금과 같은 배치예요';
   const outlook = useMemo(() => cabinOutlook(state, viewer, plane.id, draft, plane.meal), [state, viewer, plane.id, draft, plane.meal]);
   const seats = cabinSeats(m, draft);
@@ -188,7 +188,7 @@ export function CabinEditor({ state, viewer, plane, canAct, perform, onClose }: 
           <p className="al-cabin-outlook">
             {plane.legs.length > 0 ? (
               <>
-                지금 노선 이익 (분기) <b>{signedMoney(Math.round(outlook.now))}</b> → 이 배치면 <b className={outlook.next >= outlook.now ? 'al-good' : 'al-bad'}>{signedMoney(Math.round(outlook.next))}</b>
+                지금 노선 이익 (한 달) <b>{signedMoney(Math.round(outlook.now))}</b> → 이 배치면 <b className={outlook.next >= outlook.now ? 'al-good' : 'al-bad'}>{signedMoney(Math.round(outlook.next))}</b>
                 <small className="al-muted"> · 좌석 {outlook.seatsNow} → {outlook.seatsNext}</small>
               </>
             ) : (
@@ -209,7 +209,7 @@ export function CabinEditor({ state, viewer, plane, canAct, perform, onClose }: 
               배치 바꾸기 {cost > 0 ? `· ${fmtMoney(cost)}` : '· 무료'}
               {targets.length > 1 ? ` (${targets.length}대)` : ''}
             </ActButton>
-            <small className="al-muted">{free ? '받은 분기라 공짜로 바꿀 수 있어요.' : `받은 분기가 지나면 바꿀 때마다 새 값의 2%가 들어요.`}</small>
+            <small className="al-muted">{free ? '받은 달이라 공짜로 바꿀 수 있어요.' : `받은 달이 지나면 바꿀 때마다 새 값의 2%가 들어요.`}</small>
           </div>
         </>
       )}

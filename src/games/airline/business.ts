@@ -1,3 +1,4 @@
+import { leisureMonthMult } from './calendar';
 import type { BusinessKind, CityDef } from './types';
 
 /**
@@ -15,7 +16,7 @@ export interface BusinessInfo {
   /** 그 도시를 오가는 노선에서 사업·관광 손님이 우리를 고르는 배수 */
   biz: number;
   leisure: number;
-  /** 분기 수입 (억): 세운 값 × 비율 × 계절 + 우리 비행기로 온 관광 손님 × 몫 */
+  /** 수입 (억): 분기마다 세운 값 × 비율 × 계절 (달마다 그 1/3) + 우리 비행기로 온 관광 손님 × 몫 */
   rate: (city: CityDef) => number;
   perArrival: number;
   /** 계절 배수 [1분기, 2, 3, 4] (없으면 도시의 관광 성수기) */
@@ -125,10 +126,11 @@ export const BUSINESS_INFO: Record<BusinessKind, BusinessInfo> = {
   },
 };
 
-/** 계절 배수 (남반구는 여름·겨울이 반대) */
-export function businessSeason(kind: BusinessKind, city: CityDef, quarter: number, citySeason: readonly number[]): number {
+/** 달마다 계절 배수 (month0: 0=1월). 'city'는 그 도시의 관광 성수기, 남반구는 여름·겨울이 반대 */
+export function businessMonthSeason(kind: BusinessKind, city: CityDef, month0: number): number {
   const s = BUSINESS_INFO[kind].season;
   if (!s) return 1;
-  if (s === 'city') return citySeason[quarter];
+  if (s === 'city') return leisureMonthMult(city.id, month0);
+  const quarter = Math.floor(month0 / 3);
   return SOUTH.has(city.id) ? s[(quarter + 2) % 4] : s[quarter];
 }

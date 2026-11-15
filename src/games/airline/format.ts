@@ -1,6 +1,6 @@
-import { fmtMoney } from './rules';
+import { fmtFine, fmtMoney } from './rules';
 
-export { fmtMoney };
+export { fmtFine, fmtMoney };
 
 /** '+12억', '−5억' */
 export function signedMoney(v: number): string {
@@ -33,3 +33,4 @@ export function axisMoney(v: number): string {
   if (Math.abs(v) >= 10000) return `${Math.round(v / 1000) / 10}조`;
   return `${Math.round(v).toLocaleString('ko-KR')}`;
 }
+

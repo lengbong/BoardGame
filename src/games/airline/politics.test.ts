@@ -4,9 +4,10 @@ import { MODEL } from './aircraft';
 import { defaultCabin } from './cabin';
 import { HISTORY, historyAt, worldMult } from './events';
 import { makerPolitics, polity, relationBlock, routePolitics } from './politics';
-import { applyAction, branchBlocker, buyBlocker, createGame, routeBlocker, runQuarter } from './rules';
+import { applyAction, branchBlocker, buyBlocker, createGame, routeBlocker, runMonth } from './rules';
 import { pairDemand } from './simulate';
-import { qOf } from './time';
+import { mOf, qOfM } from './time';
+import { defaultTimes } from './timetable';
 import type { AirlineOptions, AirlineSetup, AirlineState } from './types';
 
 function game(hubs: [string, string], era: 1963 | 1983 | 2003, extra: Partial<AirlineOptions> = {}): AirlineState {
@@ -26,7 +27,7 @@ function game(hubs: [string, string], era: 1963 | 1983 | 2003, extra: Partial<Ai
   return s;
 }
 
-const at = (s: AirlineState, year: number, quarter = 1): AirlineState => ({ ...s, q: qOf(year, quarter) });
+const at = (s: AirlineState, year: number, month = 1): AirlineState => ({ ...s, t: mOf(year, month), q: qOfM(mOf(year, month)) });
 
 describe('나라 관계 (냉전·국교)', () => {
   it('도시의 나라는 해마다 바뀐다 (홍콩 반환·베트남 통일·소련 해체)', () => {
@@ -71,13 +72,13 @@ describe('나라 관계 (냉전·국교)', () => {
 
   it('관계가 막히는 해가 오면 그 노선은 운항을 멈춘다 (베트남 통일)', () => {
     let s = game(['newyork', 'london'], 1963);
-    s = at(s, 1975, 4);
+    s = at(s, 1975, 12);
     const c = s.companies[0];
     c.branches.push('hochiminh', 'tokyo');
-    c.routes.push({ id: 900, a: 'tokyo', b: 'hochiminh', fare: 0, since: s.q, stats: null });
-    c.planes.push({ id: 901, model: 'b707', leased: false, rent: 0, deposit: 0, since: s.q, legs: [{ route: 900, freq: 3 }], cabin: defaultCabin(MODEL.b707), meal: 3 });
+    c.routes.push({ id: 900, a: 'tokyo', b: 'hochiminh', fare: 0, since: s.t, stats: null, times: defaultTimes('tokyo', 'hochiminh', 1975) });
+    c.planes.push({ id: 901, model: 'b707', leased: false, rent: 0, deposit: 0, since: s.t, legs: [{ route: 900, freq: 3 }], cabin: defaultCabin(MODEL.b707), meal: 3 });
     s = { ...s, nextId: 1000 };
-    const t = runQuarter(s, seededRandom(3));
+    const t = runMonth(s, seededRandom(3));
     expect(t.companies[0].routes.some((r) => r.id === 900)).toBe(false);
     expect(t.companies[0].planes.find((p) => p.id === 901)!.legs).toEqual([]);
     expect(t.news.some((n) => n.title.includes('운항 중단'))).toBe(true);
@@ -87,28 +88,28 @@ describe('나라 관계 (냉전·국교)', () => {
 });
 
 describe('실제 역사 사건', () => {
-  it('사건표는 시간 순서이고 분기 값이 올바르다', () => {
-    for (let i = 1; i < HISTORY.length; i++) expect(qOf(HISTORY[i].year, HISTORY[i].quarter)).toBeGreaterThanOrEqual(qOf(HISTORY[i - 1].year, HISTORY[i - 1].quarter));
+  it('사건표는 시간 순서이고 달 값이 올바르다', () => {
+    for (let i = 1; i < HISTORY.length; i++) expect(mOf(HISTORY[i].year, HISTORY[i].month)).toBeGreaterThanOrEqual(mOf(HISTORY[i - 1].year, HISTORY[i - 1].month));
     for (const h of HISTORY) {
-      expect(h.quarter).toBeGreaterThanOrEqual(1);
-      expect(h.quarter).toBeLessThanOrEqual(4);
+      expect(h.month).toBeGreaterThanOrEqual(1);
+      expect(h.month).toBeLessThanOrEqual(12);
     }
-    expect(historyAt(qOf(2001, 3)).map((h) => h.title)).toContain('9·11 테러');
+    expect(historyAt(mOf(2001, 9)).map((h) => h.title)).toContain('9·11 테러');
   });
 
   it('9·11 테러가 일어나면 온 세계 손님이 줄고, 실제 역사를 끄면 그대로다', () => {
-    const base = at(game(['seoul', 'tokyo'], 2003), 2001, 2);
-    const before = pairDemand(base, 'london', 'newyork', qOf(2001, 3));
-    const on = runQuarter({ ...base, turnPos: 0 }, seededRandom(1));
+    const base = at(game(['seoul', 'tokyo'], 2003), 2001, 8);
+    const before = pairDemand(base, 'london', 'newyork', mOf(2001, 9));
+    const on = runMonth({ ...base, turnPos: 0 }, seededRandom(1));
     expect(worldMult(on.effects)).toBeLessThan(1);
     const after = pairDemand(on, 'london', 'newyork');
     expect(after.biz + after.leisure).toBeLessThan((before.biz + before.leisure) * 0.9);
-    const off = runQuarter({ ...base, options: { ...base.options, history: false }, turnPos: 0 }, seededRandom(1));
+    const off = runMonth({ ...base, options: { ...base.options, history: false }, turnPos: 0 }, seededRandom(1));
     expect(worldMult(off.effects)).toBe(1);
   });
 
   it('코로나19 때는 손님이 거의 사라지지만 지원금이 나온다', () => {
-    let s = at(game(['seoul', 'tokyo'], 2003), 2020, 1);
+    let s = at(game(['seoul', 'tokyo'], 2003), 2020, 2);
     s = applyAction(s, { type: 'openBranch', city: 'osaka' });
     s = applyAction(s, { type: 'openRoute', a: 'seoul', b: 'osaka' });
     s = applyAction(s, { type: 'lease', model: 'a320neo' });

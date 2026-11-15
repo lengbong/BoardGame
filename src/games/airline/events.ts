@@ -1,67 +1,67 @@
 import { CITIES, CITY, REGIONS, REGION_INFO, citySize } from './cities';
-import { quarterOf, yearOf } from './time';
+import { monthOf, yearOfM } from './time';
 import type { DistOmit, Effect, NewsItem, NewsTone, RegionId, Rng } from './types';
 
 /**
  * 실제로 열렸거나 열리기로 정해진 올림픽(여름·겨울)과 세계 엑스포 가운데, 이 게임의 도시에서 열리는 것.
- * quarters: 행사가 열린 분기 (대략).
+ * months: 행사가 열린 달 (대략, 1~12).
  */
 export interface FixedEvent {
   year: number;
-  quarters: number[];
+  months: number[];
   city: string;
   kind: 'olympic' | 'winter' | 'expo';
   title: string;
 }
 
 export const FIXED_EVENTS: readonly FixedEvent[] = [
-  { year: 1964, quarters: [4], city: 'tokyo', kind: 'olympic', title: '도쿄 올림픽' },
-  { year: 1967, quarters: [2, 3, 4], city: 'montreal', kind: 'expo', title: '몬트리올 엑스포' },
-  { year: 1968, quarters: [4], city: 'mexicocity', kind: 'olympic', title: '멕시코시티 올림픽' },
-  { year: 1970, quarters: [2, 3], city: 'osaka', kind: 'expo', title: '오사카 엑스포' },
-  { year: 1976, quarters: [3], city: 'montreal', kind: 'olympic', title: '몬트리올 올림픽' },
-  { year: 1984, quarters: [3], city: 'losangeles', kind: 'olympic', title: '로스앤젤레스 올림픽' },
-  { year: 1986, quarters: [2, 3, 4], city: 'vancouver', kind: 'expo', title: '밴쿠버 엑스포' },
-  { year: 1988, quarters: [3], city: 'seoul', kind: 'olympic', title: '서울 올림픽' },
-  { year: 1992, quarters: [3], city: 'barcelona', kind: 'olympic', title: '바르셀로나 올림픽' },
-  { year: 2000, quarters: [3], city: 'sydney', kind: 'olympic', title: '시드니 올림픽' },
-  { year: 2004, quarters: [3], city: 'athens', kind: 'olympic', title: '아테네 올림픽' },
-  { year: 2008, quarters: [3], city: 'beijing', kind: 'olympic', title: '베이징 올림픽' },
-  { year: 2010, quarters: [1], city: 'vancouver', kind: 'winter', title: '밴쿠버 겨울 올림픽' },
-  { year: 2010, quarters: [2, 3, 4], city: 'shanghai', kind: 'expo', title: '상하이 엑스포' },
-  { year: 2012, quarters: [3], city: 'london', kind: 'olympic', title: '런던 올림픽' },
-  { year: 2015, quarters: [2, 3, 4], city: 'milan', kind: 'expo', title: '밀라노 엑스포' },
-  { year: 2016, quarters: [3], city: 'rio', kind: 'olympic', title: '리우데자네이루 올림픽' },
-  { year: 2024, quarters: [3], city: 'paris', kind: 'olympic', title: '파리 올림픽' },
-  { year: 2025, quarters: [2, 3, 4], city: 'osaka', kind: 'expo', title: '오사카 엑스포' },
-  { year: 2028, quarters: [3], city: 'losangeles', kind: 'olympic', title: '로스앤젤레스 올림픽' },
+  { year: 1964, months: [10], city: 'tokyo', kind: 'olympic', title: '도쿄 올림픽' },
+  { year: 1967, months: [4, 5, 6, 7, 8, 9, 10], city: 'montreal', kind: 'expo', title: '몬트리올 엑스포' },
+  { year: 1968, months: [10], city: 'mexicocity', kind: 'olympic', title: '멕시코시티 올림픽' },
+  { year: 1970, months: [3, 4, 5, 6, 7, 8, 9], city: 'osaka', kind: 'expo', title: '오사카 엑스포' },
+  { year: 1976, months: [7, 8], city: 'montreal', kind: 'olympic', title: '몬트리올 올림픽' },
+  { year: 1984, months: [7, 8], city: 'losangeles', kind: 'olympic', title: '로스앤젤레스 올림픽' },
+  { year: 1986, months: [5, 6, 7, 8, 9, 10], city: 'vancouver', kind: 'expo', title: '밴쿠버 엑스포' },
+  { year: 1988, months: [9, 10], city: 'seoul', kind: 'olympic', title: '서울 올림픽' },
+  { year: 1992, months: [7, 8], city: 'barcelona', kind: 'olympic', title: '바르셀로나 올림픽' },
+  { year: 2000, months: [9, 10], city: 'sydney', kind: 'olympic', title: '시드니 올림픽' },
+  { year: 2004, months: [8], city: 'athens', kind: 'olympic', title: '아테네 올림픽' },
+  { year: 2008, months: [8], city: 'beijing', kind: 'olympic', title: '베이징 올림픽' },
+  { year: 2010, months: [2, 3], city: 'vancouver', kind: 'winter', title: '밴쿠버 겨울 올림픽' },
+  { year: 2010, months: [5, 6, 7, 8, 9, 10], city: 'shanghai', kind: 'expo', title: '상하이 엑스포' },
+  { year: 2012, months: [7, 8], city: 'london', kind: 'olympic', title: '런던 올림픽' },
+  { year: 2015, months: [5, 6, 7, 8, 9, 10], city: 'milan', kind: 'expo', title: '밀라노 엑스포' },
+  { year: 2016, months: [8, 9], city: 'rio', kind: 'olympic', title: '리우데자네이루 올림픽' },
+  { year: 2024, months: [7, 8], city: 'paris', kind: 'olympic', title: '파리 올림픽' },
+  { year: 2025, months: [4, 5, 6, 7, 8, 9, 10], city: 'osaka', kind: 'expo', title: '오사카 엑스포' },
+  { year: 2028, months: [7, 8], city: 'losangeles', kind: 'olympic', title: '로스앤젤레스 올림픽' },
 ];
 
 export const FIXED_ICON: Record<FixedEvent['kind'], string> = { olympic: '🏅', winter: '⛷️', expo: '🎡' };
 
-/** 올림픽·엑스포 때문에 늘어나는 손님 배수 (그 도시를 오가는 모든 노선) */
-export function fixedEventMult(city: string, q: number): number {
-  const year = yearOf(q);
-  const quarter = quarterOf(q);
+/** 올림픽·엑스포 때문에 늘어나는 손님 배수 (그 도시를 오가는 모든 노선, t: 그 달) */
+export function fixedEventMult(city: string, t: number): number {
+  const year = yearOfM(t);
+  const month = monthOf(t);
   let m = 1;
   for (const e of FIXED_EVENTS) {
     if (e.city !== city || e.year !== year) continue;
-    if (e.quarters.includes(quarter)) m *= e.kind === 'expo' ? 1.35 : e.kind === 'winter' ? 1.4 : 1.7;
-    else m *= 1.12;
+    if (e.months.includes(month)) m *= e.kind === 'expo' ? 1.35 : e.kind === 'winter' ? 1.5 : 1.8;
+    else m *= 1.08;
   }
   return m;
 }
 
-/** 이 분기에 열리는 행사 */
-export function fixedEventsAt(q: number): FixedEvent[] {
-  const year = yearOf(q);
-  const quarter = quarterOf(q);
-  return FIXED_EVENTS.filter((e) => e.year === year && e.quarters[0] === quarter);
+/** 이 달에 막 시작하는 행사 */
+export function fixedEventsAt(t: number): FixedEvent[] {
+  const year = yearOfM(t);
+  const month = monthOf(t);
+  return FIXED_EVENTS.filter((e) => e.year === year && e.months[0] === month);
 }
 
 /** 사건 하나가 바꾸는 것 (simulate.ts가 상태에 넣는다) */
 export interface EventOutcome {
-  news: Omit<NewsItem, 'id' | 'q'>;
+  news: Omit<NewsItem, 'id' | 't'>;
   effect?: DistOmit<Effect, 'id'>;
   /** 유가에 곱하기 */
   oil?: number;
@@ -72,7 +72,8 @@ export interface EventOutcome {
 }
 
 interface EventContext {
-  q: number;
+  /** 지금 달 */
+  t: number;
   oil: number;
   rate: number;
   slotBoost: Record<string, number>;
@@ -112,7 +113,7 @@ const fmtOil = (v: number) => v.toFixed(2);
 
 /** 무작위 사건 하나 (일어날지는 부르는 쪽이 정한다) */
 export function rollRandomEvent(ctx: EventContext, rng: Rng): EventOutcome | null {
-  const year = yearOf(ctx.q);
+  const year = yearOfM(ctx.t);
   const kinds = (Object.keys(EVENT_WEIGHTS) as EventKind[]).filter((k) => {
     if (k === 'oilUp') return ctx.oil < 2.4;
     if (k === 'oilDown') return ctx.oil > 0.7;
@@ -125,7 +126,7 @@ export function rollRandomEvent(ctx: EventContext, rng: Rng): EventOutcome | nul
   if (!kind) return null;
   // 도시 사건은 지금 노선이 있는 도시를 조금 더 자주 고른다
   const cityWeight = (id: string, base: number) => base * (ctx.activeCities.includes(id) ? 2.5 : 1);
-  const until = ctx.q + 4;
+  const until = ctx.t + 12;
   switch (kind) {
     case 'oilUp': {
       const mult = 1.3 + rng() * 0.25;
@@ -174,14 +175,14 @@ export function rollRandomEvent(ctx: EventContext, rng: Rng): EventOutcome | nul
       );
       if (!city) return null;
       return {
-        effect: { kind: 'fair', city: city.id, mult: 1.4, until: ctx.q + 1 },
-        news: { icon: '🏢', title: `${city.name} 국제 박람회`, text: `이번 분기에 ${city.name}에서 큰 박람회가 열려서 사업 손님이 1.4배로 늘어요.`, tone: 'good', city: city.id },
+        effect: { kind: 'fair', city: city.id, mult: 1.4, until: ctx.t + 2 },
+        news: { icon: '🏢', title: `${city.name} 국제 박람회`, text: `이번 달과 다음 달에 ${city.name}에서 큰 박람회가 열려서 사업 손님이 1.4배로 늘어요.`, tone: 'good', city: city.id },
       };
     }
     case 'sale':
       return {
-        effect: { kind: 'sale', mult: 0.85, until: ctx.q + 2 },
-        news: { icon: '🛩️', title: '항공 박람회 특가', text: '항공 박람회가 열려서 이번 분기와 다음 분기에 새 비행기 값과 리스료가 15% 싸요.', tone: 'good' },
+        effect: { kind: 'sale', mult: 0.85, until: ctx.t + 6 },
+        news: { icon: '🛩️', title: '항공 박람회 특가', text: '항공 박람회가 열려서 앞으로 여섯 달 동안 새 비행기 값과 리스료가 15% 싸요.', tone: 'good' },
       };
     case 'airport': {
       const city = pickWeighted(
@@ -236,58 +237,59 @@ export function worldMult(effects: readonly Effect[]): number {
 // ------------------------------------------------------------------ 실제 역사 사건
 
 /**
- * 실제로 일어난 큰 사건 (설정에서 '실제 역사'를 켜면 그 분기에 일어난다).
- * demand: 손님 배수 (regions가 없으면 온 세계), quarters 동안.
- * aid: 정부 지원금 (지난 분기 비용의 몇 배를 회사마다 받는다).
+ * 실제로 일어난 큰 사건 (설정에서 '실제 역사'를 켜면 그 달에 일어난다).
+ * demand: 손님 배수 (regions가 없으면 온 세계), months 달 동안.
+ * aid: 정부 지원금 (지난달 비용의 몇 배를 회사마다 받는다).
  */
 export interface HistoryEvent {
   year: number;
-  quarter: number;
+  /** 1~12 */
+  month: number;
   icon: string;
   title: string;
   text: string;
   tone: NewsTone;
-  demand?: { regions?: RegionId[]; mult: number; quarters: number }[];
+  demand?: { regions?: RegionId[]; mult: number; months: number }[];
   oil?: number;
   aid?: number;
 }
 
 export const HISTORY: readonly HistoryEvent[] = [
-  { year: 1967, quarter: 2, icon: '⚔️', title: '6일 전쟁', text: '중동에서 전쟁이 일어나 수에즈 운하가 막혔어요. 중동을 오가는 손님이 줄어요.', tone: 'bad', demand: [{ regions: ['southmid', 'africa'], mult: 0.85, quarters: 3 }] },
-  { year: 1973, quarter: 4, icon: '⛽', title: '1차 석유 파동', text: '중동 전쟁으로 산유국들이 석유 수출을 줄여 기름값이 크게 뛰었어요. 연료를 많이 먹는 비행기는 큰 손해를 봐요.', tone: 'bad', oil: 1.7, demand: [{ mult: 0.93, quarters: 4 }] },
-  { year: 1978, quarter: 4, icon: '🗽', title: '미국 항공 자유화', text: '미국이 항공 규제를 풀어 누구나 노선과 운임을 정할 수 있게 됐어요. 값이 내려 아메리카 손님이 늘어요.', tone: 'good', demand: [{ regions: ['americas'], mult: 1.12, quarters: 8 }] },
-  { year: 1979, quarter: 2, icon: '⛽', title: '2차 석유 파동', text: '이란 혁명으로 기름값이 다시 크게 올랐어요.', tone: 'bad', oil: 1.45, demand: [{ mult: 0.95, quarters: 4 }] },
-  { year: 1986, quarter: 1, icon: '🛢️', title: '기름값 폭락', text: '산유국들이 석유를 많이 풀어 기름값이 절반 가까이 떨어졌어요. 연료비가 크게 줄어요.', tone: 'good', oil: 0.6 },
-  { year: 1989, quarter: 4, icon: '🧱', title: '베를린 장벽 붕괴', text: '동서 유럽을 가르던 장벽이 무너졌어요. 유럽을 오가는 손님이 늘어요.', tone: 'good', demand: [{ regions: ['europe'], mult: 1.1, quarters: 8 }] },
-  { year: 1990, quarter: 3, icon: '⚔️', title: '걸프 전쟁', text: '이라크가 쿠웨이트를 침공했어요. 기름값이 뛰고 중동과 세계 여행 손님이 줄어요.', tone: 'bad', oil: 1.55, demand: [{ regions: ['southmid'], mult: 0.65, quarters: 3 }, { mult: 0.92, quarters: 3 }] },
-  { year: 1991, quarter: 4, icon: '🕊️', title: '소련 해체', text: '소련이 여러 나라로 나뉘며 냉전이 끝났어요. 막혔던 하늘길이 하나둘 열리고, 이제 누구나 러시아 비행기를 살 수 있어요.', tone: 'info' },
-  { year: 1997, quarter: 3, icon: '📉', title: '아시아 외환 위기', text: '아시아 여러 나라의 돈값이 크게 떨어졌어요. 동아시아·동남아 손님이 줄어요.', tone: 'bad', demand: [{ regions: ['eastasia', 'seaoc'], mult: 0.84, quarters: 5 }] },
-  { year: 2001, quarter: 3, icon: '🏢', title: '9·11 테러', text: '미국에서 비행기를 이용한 테러가 일어났어요. 비행기를 타려는 사람이 크게 줄고 보안이 엄해져요.', tone: 'bad', demand: [{ mult: 0.8, quarters: 2 }, { regions: ['americas'], mult: 0.85, quarters: 4 }] },
-  { year: 2003, quarter: 2, icon: '😷', title: '사스 유행', text: '새 호흡기 전염병이 돌아 아시아 여행 손님이 크게 줄었어요.', tone: 'bad', demand: [{ regions: ['eastasia'], mult: 0.65, quarters: 1 }, { regions: ['seaoc'], mult: 0.82, quarters: 1 }] },
-  { year: 2008, quarter: 4, icon: '🏦', title: '세계 금융 위기', text: '큰 은행들이 무너지며 세계 경제가 움츠러들었어요. 손님, 특히 사업 손님이 줄어요.', tone: 'bad', oil: 0.65, demand: [{ mult: 0.88, quarters: 4 }] },
-  { year: 2010, quarter: 2, icon: '🌋', title: '아이슬란드 화산 폭발', text: '화산재가 유럽 하늘을 덮어 며칠 동안 비행기가 뜨지 못했어요.', tone: 'bad', demand: [{ regions: ['europe'], mult: 0.82, quarters: 1 }] },
+  { year: 1967, month: 6, icon: '⚔️', title: '6일 전쟁', text: '중동에서 전쟁이 일어나 수에즈 운하가 막혔어요. 중동을 오가는 손님이 줄어요.', tone: 'bad', demand: [{ regions: ['southmid', 'africa'], mult: 0.85, months: 9 }] },
+  { year: 1973, month: 10, icon: '⛽', title: '1차 석유 파동', text: '중동 전쟁으로 산유국들이 석유 수출을 줄여 기름값이 크게 뛰었어요. 연료를 많이 먹는 비행기는 큰 손해를 봐요.', tone: 'bad', oil: 1.7, demand: [{ mult: 0.93, months: 12 }] },
+  { year: 1978, month: 10, icon: '🗽', title: '미국 항공 자유화', text: '미국이 항공 규제를 풀어 누구나 노선과 운임을 정할 수 있게 됐어요. 값이 내려 아메리카 손님이 늘어요.', tone: 'good', demand: [{ regions: ['americas'], mult: 1.12, months: 24 }] },
+  { year: 1979, month: 4, icon: '⛽', title: '2차 석유 파동', text: '이란 혁명으로 기름값이 다시 크게 올랐어요.', tone: 'bad', oil: 1.45, demand: [{ mult: 0.95, months: 12 }] },
+  { year: 1986, month: 2, icon: '🛢️', title: '기름값 폭락', text: '산유국들이 석유를 많이 풀어 기름값이 절반 가까이 떨어졌어요. 연료비가 크게 줄어요.', tone: 'good', oil: 0.6 },
+  { year: 1989, month: 11, icon: '🧱', title: '베를린 장벽 붕괴', text: '동서 유럽을 가르던 장벽이 무너졌어요. 유럽을 오가는 손님이 늘어요.', tone: 'good', demand: [{ regions: ['europe'], mult: 1.1, months: 24 }] },
+  { year: 1990, month: 8, icon: '⚔️', title: '걸프 전쟁', text: '이라크가 쿠웨이트를 침공했어요. 기름값이 뛰고 중동과 세계 여행 손님이 줄어요.', tone: 'bad', oil: 1.55, demand: [{ regions: ['southmid'], mult: 0.65, months: 8 }, { mult: 0.92, months: 8 }] },
+  { year: 1991, month: 12, icon: '🕊️', title: '소련 해체', text: '소련이 여러 나라로 나뉘며 냉전이 끝났어요. 막혔던 하늘길이 하나둘 열리고, 이제 누구나 러시아 비행기를 살 수 있어요.', tone: 'info' },
+  { year: 1997, month: 7, icon: '📉', title: '아시아 외환 위기', text: '아시아 여러 나라의 돈값이 크게 떨어졌어요. 동아시아·동남아 손님이 줄어요.', tone: 'bad', demand: [{ regions: ['eastasia', 'seaoc'], mult: 0.84, months: 15 }] },
+  { year: 2001, month: 9, icon: '🏢', title: '9·11 테러', text: '미국에서 비행기를 이용한 테러가 일어났어요. 비행기를 타려는 사람이 크게 줄고 보안이 엄해져요.', tone: 'bad', demand: [{ mult: 0.8, months: 5 }, { regions: ['americas'], mult: 0.85, months: 12 }] },
+  { year: 2003, month: 4, icon: '😷', title: '사스 유행', text: '새 호흡기 전염병이 돌아 아시아 여행 손님이 크게 줄었어요.', tone: 'bad', demand: [{ regions: ['eastasia'], mult: 0.65, months: 3 }, { regions: ['seaoc'], mult: 0.82, months: 3 }] },
+  { year: 2008, month: 10, icon: '🏦', title: '세계 금융 위기', text: '큰 은행들이 무너지며 세계 경제가 움츠러들었어요. 손님, 특히 사업 손님이 줄어요.', tone: 'bad', oil: 0.65, demand: [{ mult: 0.88, months: 12 }] },
+  { year: 2010, month: 4, icon: '🌋', title: '아이슬란드 화산 폭발', text: '화산재가 유럽 하늘을 덮어 며칠 동안 비행기가 뜨지 못했어요.', tone: 'bad', demand: [{ regions: ['europe'], mult: 0.7, months: 1 }] },
   {
     year: 2020,
-    quarter: 2,
+    month: 3,
     icon: '🦠',
     title: '코로나19 대유행',
     text: '전염병이 온 세계로 퍼져 나라마다 국경을 닫았어요. 손님이 거의 사라져요. 나라마다 항공사에 지원금을 줬어요. 비행기를 쉬게 하고 돈을 아끼세요.',
     tone: 'big',
     oil: 0.55,
-    aid: 0.9,
-    demand: [{ mult: 0.2, quarters: 1 }],
+    aid: 2.5,
+    demand: [{ mult: 0.2, months: 3 }],
   },
-  { year: 2020, quarter: 3, icon: '😷', title: '코로나19: 국경이 조금씩 열려요', text: '아직 손님이 예전의 절반에도 못 미쳐요. 화물·가까운 나라 노선부터 조금씩 돌아와요.', tone: 'bad', aid: 0.4, demand: [{ mult: 0.42, quarters: 4 }] },
-  { year: 2021, quarter: 3, icon: '💉', title: '백신 접종이 늘어요', text: '백신을 맞은 사람이 많아져 여행이 다시 늘기 시작했어요.', tone: 'info', demand: [{ mult: 0.7, quarters: 4 }] },
-  { year: 2022, quarter: 1, icon: '⚔️', title: '우크라이나 전쟁', text: '러시아가 우크라이나를 침공했어요. 기름값이 뛰고, 서방과 러시아 사이 하늘길이 닫혀요.', tone: 'bad', oil: 1.35 },
-  { year: 2022, quarter: 3, icon: '🧳', title: '여행이 돌아와요', text: '나라마다 국경을 열어 여행 손님이 거의 예전만큼 돌아왔어요. 밀렸던 여행 수요로 관광 손님이 북적여요.', tone: 'good', demand: [{ mult: 0.92, quarters: 3 }] },
+  { year: 2020, month: 6, icon: '😷', title: '코로나19: 국경이 조금씩 열려요', text: '아직 손님이 예전의 절반에도 못 미쳐요. 가까운 나라 노선부터 조금씩 돌아와요.', tone: 'bad', aid: 1.2, demand: [{ mult: 0.42, months: 12 }] },
+  { year: 2021, month: 6, icon: '💉', title: '백신 접종이 늘어요', text: '백신을 맞은 사람이 많아져 여행이 다시 늘기 시작했어요.', tone: 'info', demand: [{ mult: 0.7, months: 12 }] },
+  { year: 2022, month: 2, icon: '⚔️', title: '우크라이나 전쟁', text: '러시아가 우크라이나를 침공했어요. 기름값이 뛰고, 서방과 러시아 사이 하늘길이 닫혀요.', tone: 'bad', oil: 1.35 },
+  { year: 2022, month: 7, icon: '🧳', title: '여행이 돌아와요', text: '나라마다 국경을 열어 여행 손님이 거의 예전만큼 돌아왔어요. 밀렸던 여행 수요로 관광 손님이 북적여요.', tone: 'good', demand: [{ mult: 0.92, months: 9 }] },
 ];
 
-/** 이 분기에 일어나는 실제 역사 사건 */
-export function historyAt(q: number): HistoryEvent[] {
-  const year = yearOf(q);
-  const quarter = quarterOf(q);
-  return HISTORY.filter((e) => e.year === year && e.quarter === quarter);
+/** 이 달에 일어나는 실제 역사 사건 */
+export function historyAt(t: number): HistoryEvent[] {
+  const year = yearOfM(t);
+  const month = monthOf(t);
+  return HISTORY.filter((e) => e.year === year && e.month === month);
 }
 
 /** 실제 역사의 기름값 기준 (유가는 이 값 쪽으로 천천히 돌아간다) */

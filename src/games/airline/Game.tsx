@@ -20,22 +20,26 @@ import { NewsView, ReportView } from './ReportView';
 import { GameOver, QuarterReport } from './Results';
 import { RouteOpeningCard, type Opening } from './RouteOpening';
 import { RoutesView, type Planner } from './RoutesView';
-import { actor, applyAction, idlePlanes, rankings } from './rules';
-import { companyValue, routeFreq } from './simulate';
+import { actor, applyAction, autoStopReason, idlePlanes, rankings } from './rules';
+import { companyValue, monthDemandMult, routeFreq } from './simulate';
 import { AIRLINE_SONG } from './song';
 import { alSound } from './sounds';
 import { AIRLINE_DELAYS, clearSavedAirlineGame, saveAirlineGame } from './storage';
-import { QUARTER_NAMES, qLabel, quarterOf } from './time';
+import { mLabel, monthOf, qLabel } from './time';
+import { MonthToast } from './MonthToast';
+import { StaffView } from './StaffView';
+import { staffCap, staffNeed } from './staff';
 import type { AirlineAction, AirlineSetup, AirlineState, QuarterReport as Report } from './types';
 import { IataBadge, Kbd } from './ui';
 
-type Tab = 'map' | 'fleet' | 'routes' | 'finance' | 'report' | 'news';
+type Tab = 'map' | 'fleet' | 'routes' | 'finance' | 'staff' | 'report' | 'news';
 
 const TABS: { id: Tab; icon: string; label: string }[] = [
   { id: 'map', icon: '🗺️', label: '지도' },
   { id: 'fleet', icon: '🛩️', label: '비행기' },
   { id: 'routes', icon: '🧭', label: '노선' },
   { id: 'finance', icon: '💰', label: '재무' },
+  { id: 'staff', icon: '👥', label: '인사' },
   { id: 'report', icon: '📈', label: '보고서' },
   { id: 'news', icon: '📰', label: '뉴스' },
 ];
@@ -83,6 +87,9 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   const [routeFocus, setRouteFocus] = useState<number | null>(null);
   const [planner, setPlanner] = useState<Planner | null>(null);
   const [report, setReport] = useState<Report | null>(null);
+  const [toast, setToast] = useState<{ id: number; report: Report } | null>(null);
+  /** 사람 회사마다 자동 진행 (quarter: 분기 끝까지, event: 결정할 일이 생길 때까지) */
+  const [auto, setAuto] = useState<Record<number, { mode: 'quarter' | 'event'; since: number; q: number }>>({});
   const [flying, setFlying] = useState(false);
   const [pulses, setPulses] = useState<Pulse[]>([]);
   const [opening, setOpening] = useState<Opening | null>(null);
@@ -158,9 +165,10 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
       if (last && route) setOpening({ id: last.id, company: last.company, a: route.a, b: route.b, more: mine.length - 1 });
     }
     const prevActor = actor(prev);
+    const monthEnd = game.events.some((e) => e.type === 'month');
     const quarterEnd = game.events.some((e) => e.type === 'quarter');
     // 컴퓨터가 한 일 요약
-    if (prevActor >= 0 && prev.companies[prevActor].kind !== 'human' && summary.has(prevActor) && !quarterEnd) {
+    if (prevActor >= 0 && prev.companies[prevActor].kind !== 'human' && summary.has(prevActor) && !monthEnd) {
       const c = game.companies[prevActor];
       setBanner({ id: fxSeq++, text: `${c.name}: ${summary.get(prevActor)!.join(' · ')}`, color: coColors(c).main });
       if (summary.get(prevActor)!.some((s) => s.startsWith('새 노선'))) alSound.chime();
@@ -185,22 +193,35 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
         setBanner({ id: fxSeq++, text: `🛑 ${game.companies[e.company].name} 운항 중단`, color: '#a52a2f' });
       }
     }
-    if (quarterEnd) {
+    if (monthEnd) {
       setFlying(true);
-      const humanLeft = game.companies.some((c) => c.kind === 'human');
+      const humanLeft = game.companies.some((c) => c.kind === 'human' && !c.out);
       const rep = game.report;
+      const qRep = quarterEnd ? game.qReport : null;
+      const yearEnd = !!qRep && !!qRep.companies[viewer]?.review;
+      // 자동 진행 중(결정할 일이 생길 때까지)에는 분기 결산 창 대신 알림만 (해가 끝나면 창을 연다)
+      const quietQuarter = !!auto[viewer] && auto[viewer].mode === 'event' && !yearEnd;
       later(() => {
         setFlying(false);
-        if (!rep) return;
-        const mine = rep.companies[viewer];
-        if (humanLeft && game.phase !== 'gameover') {
-          alSound.report((mine?.profit ?? 0) >= 0);
-          setReport(rep);
-        } else if (game.phase === 'gameover') {
+        if (game.phase === 'gameover') {
           alSound.win();
-        } else {
+          return;
+        }
+        if (qRep && humanLeft && !quietQuarter) {
+          alSound.report((qRep.companies[viewer]?.profit ?? 0) >= 0);
+          setToast(null);
+          setReport(qRep);
+          if (yearEnd) setAuto((a) => (a[viewer] ? Object.fromEntries(Object.entries(a).filter(([k]) => Number(k) !== viewer)) : a));
+          return;
+        }
+        if (rep && humanLeft) {
+          alSound.coins();
+          setToast({ id: fxSeq++, report: rep });
+          return;
+        }
+        if (qRep) {
           const lead = rankings(game)[0];
-          setBanner({ id: fxSeq++, text: `📊 ${qLabel(rep.q)} 결산 — 1등 ${game.companies[lead].name} ${fmtMoney(companyValue(game, lead))}`, color: null });
+          setBanner({ id: fxSeq++, text: `📊 ${qLabel(qRep.q)} 결산 — 1등 ${game.companies[lead].name} ${fmtMoney(companyValue(game, lead))}`, color: null });
         }
       }, delays.sim);
       return;
@@ -213,7 +234,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
         setBanner({ id: fxSeq++, text: `${c.name} 차례예요! ✈️`, color: coColors(c).main });
       }
     }
-  }, [game, setup, delays, later, viewer]);
+  }, [game, setup, delays, later, viewer, auto]);
 
   // 컴퓨터 차례: 생각하고 → 경영하고 → 잠깐 보여 준 뒤 차례를 마친다
   useEffect(() => {
@@ -222,7 +243,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
     if (ci < 0) return;
     const c = game.companies[ci];
     if (c.kind === 'human') return;
-    const key = `${game.q}-${game.turnPos}`;
+    const key = `${game.t}-${game.turnPos}`;
     if (managedKey.current !== key) {
       const t = window.setTimeout(() => {
         managedKey.current = key;
@@ -231,9 +252,43 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
       }, delays.think);
       return () => window.clearTimeout(t);
     }
-    const t = window.setTimeout(() => setGame((g) => (actor(g) === ci && `${g.q}-${g.turnPos}` === key ? applyAction(g, { type: 'endTurn' }) : g)), delays.turn + delays.step);
+    const t = window.setTimeout(() => setGame((g) => (actor(g) === ci && `${g.t}-${g.turnPos}` === key ? applyAction(g, { type: 'endTurn' }) : g)), delays.turn + delays.step);
     return () => window.clearTimeout(t);
   }, [game, locked, delays]);
+
+  // 자동 진행: 내 차례에 멈출 까닭이 없으면 잠깐 뒤에 이번 달을 마친다
+  const myAuto = auto[viewer];
+  useEffect(() => {
+    if (!myAuto || !canAct || choiceOpen) return;
+    const stopAuto = (why: string) => {
+      setAuto((a) => Object.fromEntries(Object.entries(a).filter(([k]) => Number(k) !== viewer)));
+      setNotice({ id: fxSeq++, text: `⏸ 자동 진행 멈춤: ${why}` });
+      alSound.select();
+    };
+    if (myAuto.mode === 'quarter' && game.q !== myAuto.q) {
+      stopAuto('분기가 끝났어요');
+      return;
+    }
+    const why = autoStopReason(game, viewer, myAuto.since);
+    if (why) {
+      stopAuto(why);
+      return;
+    }
+    const t = window.setTimeout(() => setGame((g) => (actor(g) === viewer ? applyAction(g, { type: 'endTurn' }) : g)), Math.max(120, delays.turn));
+    return () => window.clearTimeout(t);
+  }, [myAuto, canAct, choiceOpen, game, viewer, delays.turn]);
+
+  const startAuto = (mode: 'quarter' | 'event') => {
+    if (!canAct) return;
+    const why = autoStopReason(game, viewer, game.nextId);
+    if (why) {
+      setNotice({ id: fxSeq++, text: `먼저 살펴볼 일이 있어요: ${why}` });
+      alSound.nope();
+      return;
+    }
+    setAuto((a) => ({ ...a, [viewer]: { mode, since: game.nextId, q: game.q } }));
+  };
+  const stopAuto = () => setAuto((a) => Object.fromEntries(Object.entries(a).filter(([k]) => Number(k) !== viewer)));
 
   // ------------------------------------------------------------ 사람의 행동
   const say = useCallback((text: string) => setNotice({ id: fxSeq++, text }), []);
@@ -309,7 +364,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
       if (typing) return;
       // 탭 단추에 초점이 있을 때는 Enter로 분기를 마쳐도 된다 (이미 고른 탭을 또 누를 일은 없으니까)
       const onButton = (t?.tagName === 'BUTTON' && t.getAttribute('role') !== 'tab') || t?.getAttribute('role') === 'button';
-      const idx = ['1', '2', '3', '4', '5', '6'].indexOf(e.key);
+      const idx = ['1', '2', '3', '4', '5', '6', '7'].indexOf(e.key);
       if (idx >= 0) {
         setTab(TABS[idx].id);
         return;
@@ -331,11 +386,14 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   // ------------------------------------------------------------ 안내
   let hint: ReactNode;
   const idle = idlePlanes(me).length;
+  const myCap = me.out ? 1 : staffCap(staffNeed(game, me), me);
+  const staffWarn = !me.out && (myCap < 1 || me.morale < 30);
   const empty = me.routes.filter((r) => routeFreq(me, r.id) === 0).length;
   if (game.phase === 'gameover') hint = game.result?.reason ?? '게임이 끝났어요.';
-  else if (flying) hint = '✈️ 석 달 동안 비행기들이 날고 있어요…';
+  else if (flying) hint = `✈️ ${mLabel(game.report?.t ?? game.t)} 한 달 동안 비행기들이 날고 있어요…`;
   else if (report) hint = '분기 결산을 보고 있어요. Enter로 넘겨요.';
   else if (!actorCo || actorCo.kind !== 'human') hint = `${withJosa(actorCo?.name ?? '', '이/가')} 경영하고 있어요…`;
+  else if (myAuto) hint = myAuto.mode === 'quarter' ? '⏩ 분기 끝까지 맡겨 두었어요. 일이 생기면 멈춰요.' : '⏩ 결정할 일이 생길 때까지 자동으로 넘기고 있어요.';
   else if (notice) hint = <span className="al-notice">{notice.text}</span>;
   else if (me.crisis > 0) hint = '⚠ 돈이 모자라요! 손해 보는 노선을 닫고 쉬는 비행기를 팔거나 대출을 받아요. 이번에도 모자라면 운항을 멈춰야 해요.';
   else if (me.choice)
@@ -353,16 +411,34 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
         지도 아래 <b>🧑‍💼 경영 비서</b>가 권하는 첫 노선을 ‘노선 열기’로 열거나, 지도에서 도시를 눌러 직접 시작해 보세요.
       </>
     );
+  else if (myCap < 1)
+    hint = (
+      <>
+        👥 일손이 모자라 이번 달 운항의 {Math.round(myCap * 100)}%만 떠요.{' '}
+        <button type="button" className="al-link" onClick={() => setTab('staff')}>
+          인사 화면(5)
+        </button>
+        에서 사람을 뽑아요.
+      </>
+    );
+  else if (me.morale < 30) hint = `🪧 조직 만족도가 ${Math.round(me.morale)}이에요. 파업이 날 수 있어요 — 인사 화면(5)에서 임금을 살펴봐요.`;
   else if (idle > 0) hint = `쉬는 비행기 ${idle}대가 있어요. 노선 화면(3)에서 넣어 주세요.`;
   else if (empty > 0) hint = `비행기 없는 노선이 ${empty}개 있어요. 노선 화면에서 비행기를 넣어요.`;
   else
     hint = (
       <>
-        할 일을 다 했으면 이번 분기를 마쳐요. <Kbd>Enter</Kbd>
+        할 일을 다 했으면 이번 달을 마쳐요. <Kbd>Enter</Kbd>
       </>
     );
 
   const myColor = coColors(me);
+  // 이번 달 손님 분위기 (우리 노선, 없으면 본사에서 큰 도시로)
+  const moodText = (() => {
+    const m0 = monthOf(game.t) - 1;
+    const pairs = me.routes.length ? me.routes.map((r) => [r.a, r.b] as const) : [[me.hub, me.hub === 'london' ? 'paris' : 'london'] as const];
+    const v = pairs.reduce((sum, [a, b]) => sum + monthDemandMult(a, b, m0), 0) / pairs.length;
+    return v >= 1.1 ? '손님 많은 달 ▲' : v <= 0.92 ? '손님 적은 달 ▼' : '손님 보통';
+  })();
   const value = companyValue(game, viewer);
   const rank = rankings(game).indexOf(viewer) + 1;
   const lastProfit = game.report?.companies[viewer]?.profit;
@@ -383,6 +459,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
           onSelect={setSelected}
           selected={selected}
           onOpenChoice={() => setChoiceOpen(true)}
+          onAuto={() => startAuto('event')}
         />
       </div>
     );
@@ -403,6 +480,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
       />
     );
   else if (tab === 'finance') content = <FinanceView state={game} viewer={viewer} canAct={canAct} perform={perform} />;
+  else if (tab === 'staff') content = <StaffView state={game} viewer={viewer} canAct={canAct} perform={perform} />;
   else if (tab === 'report') content = <ReportView state={game} viewer={viewer} />;
   else content = <NewsView state={game} onCity={showCity} viewer={viewer} />;
 
@@ -411,8 +489,8 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
       <div className="al-main">
         <header className="al-topbar">
           <div className="al-date" title="지금 분기">
-            <b>{qLabel(game.q)}</b>
-            <small>{QUARTER_NAMES[quarterOf(game.q) - 1]}</small>
+            <b data-testid="al-date">{mLabel(game.t)}</b>
+            <small title="이번 달 우리 노선 손님이 한 해 평균과 견주어 얼마나 많은지">{moodText}</small>
           </div>
           <div className="al-me" style={{ '--al-co': myColor.main } as CSSProperties}>
             <CompanyBadge color={myColor.main} shape={SEAT_SHAPES[me.seat]} size={22} />
@@ -431,7 +509,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
             </span>
             {lastProfit !== undefined && (
               <span className="al-me-cash">
-                <small>지난 분기</small>
+                <small>지난달</small>
                 <b className={lastProfit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(lastProfit)}</b>
               </span>
             )}
@@ -451,6 +529,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
                 <span aria-hidden="true">{t.icon}</span>
                 <span className="al-tab-label">{t.label}</span>
                 {t.id === 'fleet' && idle > 0 && <span className="al-tab-badge">{idle}</span>}
+                {t.id === 'staff' && staffWarn && <span className="al-tab-badge" title="일손이 모자라거나 조직 만족도가 아주 낮아요">!</span>}
                 <kbd className="al-tab-kbd">{i + 1}</kbd>
               </button>
             ))}
@@ -460,10 +539,14 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
           <div className="al-content">{content}</div>
           {flying && delays.fx && (
             <div className="al-sim" role="status" style={{ '--al-sim': `${delays.sim}ms` } as CSSProperties}>
-              ✈️ {qLabel(game.report?.q ?? game.q)} 운항 중… <span className="al-sim-bar" />
+              ✈️ {mLabel(game.report?.t ?? game.t)} 운항 중… <span className="al-sim-bar" />
             </div>
           )}
           {opening && <RouteOpeningCard key={opening.id} state={game} opening={opening} onClose={() => setOpening(null)} />}
+          {toast && !report && !flying && <MonthToast key={toast.id} state={game} report={toast.report} viewer={viewer} onClose={() => setToast(null)} onDetail={() => {
+            setToast(null);
+            setTab('report');
+          }} />}
           {banner && (
             <div className="al-banner" key={banner.id} style={{ '--al-pc': banner.color ?? 'var(--accent)' } as CSSProperties} role="status">
               {banner.text}
@@ -482,6 +565,9 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
         canEnd={canAct}
         busy={flying ? '✈️ 운항 중…' : !canAct && game.phase === 'manage' && actorCo?.kind !== 'human' ? `${actorCo?.name} 경영 중…` : null}
         onEndTurn={endTurn}
+        auto={myAuto?.mode ?? null}
+        onAuto={startAuto}
+        onStopAuto={stopAuto}
         settings={settings}
         onSettings={onSettings}
         onNewGame={() => {

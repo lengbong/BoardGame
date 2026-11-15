@@ -3,6 +3,7 @@ import { defaultCabin } from './cabin';
 import { seededRandom } from '../../lib/random';
 import { MODEL } from './aircraft';
 import { aiManage, aiTurn, planTurn } from './ai';
+import { advise } from './advisor';
 import { CHALLENGES } from './challenges';
 import { AIRPORT_INFO, CITY, airportClass, dist } from './cities';
 import { MAX_ROUTES, actor, applyAction, createGame } from './rules';
@@ -51,7 +52,7 @@ function playOut(kinds: SeatKind[], seed: number, options: Partial<AirlineOption
   let s = createGame(setup(kinds, options), rng);
   let turns = 0;
   let worst = 0;
-  while (s.phase !== 'gameover' && turns < 1000) {
+  while (s.phase !== 'gameover' && turns < 4000) {
     const t0 = performance.now();
     s = aiTurn(s, rng);
     worst = Math.max(worst, performance.now() - t0);
@@ -99,7 +100,7 @@ describe('컴퓨터 항공사', () => {
     let s = createGame(setup(['ai-normal', 'human'], {}, [null, 'london']), seededRandom(7));
     s = aiManage(s, 0, 'ai-normal', seededRandom(7));
     const c = s.companies[0];
-    c.planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.q, legs: [], cabin: defaultCabin(MODEL['a320']), meal: 3 });
+    c.planes.push({ id: s.nextId++, model: 'a320', leased: false, rent: 0, deposit: 0, since: s.t, legs: [], cabin: defaultCabin(MODEL['a320']), meal: 3 });
     c.cash = -30;
     c.crisis = 1;
     c.ads.eastasia = 50;
@@ -134,9 +135,11 @@ describe('컴퓨터끼리 끝까지', () => {
       expect(v).toBeLessThan(500000);
     }
     expect(s.history.length).toBe(81);
+    expect(s.months.length).toBe(241);
     // 한 차례가 화면을 멈출 만큼 오래 걸리지 않는다 (함께 돌리는 테스트 때문에 튀는 것을 넉넉히 봐준다)
     expect(worst).toBeLessThan(600);
-  });
+    // 한 달씩 240달을 끝까지 두므로 오래 걸린다
+  }, 60000);
 
   it('2003년부터 20년: 보통 회사가 크게 자라지만 터무니없지는 않다', () => {
     for (const seed of [31, 32]) {
@@ -152,7 +155,7 @@ describe('컴퓨터끼리 끝까지', () => {
       expect(worst).toBeLessThan(600);
       for (const h of s.history) for (const x of h.value) expect(Number.isFinite(x)).toBe(true);
     }
-  });
+  }, 60000);
 
   it('목표 먼저 이루기에서는 보통 회사가 여러 지역으로 넓혀 결국 목표를 이룬다', () => {
     const { s } = playOut(['ai-normal', 'ai-easy'], 41, { mode: 'goal', goalValue: 10000, goalRegions: 6 });
@@ -172,7 +175,37 @@ describe('컴퓨터끼리 끝까지', () => {
       games++;
     }
     expect(normal / games).toBeGreaterThanOrEqual(0.75);
-  });
+  }, 60000);
+
+  it('경영 비서만 따르는 사람은 보통 컴퓨터와 비슷하게 겨룬다 (같은 크기 본사, 자리 바꿔 두 판)', () => {
+    let bot = 0;
+    let ai = 0;
+    for (const swap of [false, true]) {
+      const rng = seededRandom(swap ? 202 : 101);
+      const kinds: SeatKind[] = swap ? ['ai-normal', 'human'] : ['human', 'ai-normal'];
+      let s = createGame(setup(kinds, { years: 10 }, swap ? ['paris', 'newyork'] : ['newyork', 'paris']), rng);
+      const H = swap ? 1 : 0;
+      let guard = 0;
+      while (s.phase !== 'gameover' && guard++ < 400) {
+        const ci = s.order[s.turnPos];
+        if (ci === H) {
+          if (s.companies[ci].choice) s = applyAction(s, { type: 'choose', option: 0 }, rng);
+          for (let k = 0; k < 4; k++) {
+            const tip = advise(s, ci).find((x) => x.apply);
+            const next = tip?.apply?.(s);
+            if (!next || next === s) break;
+            s = next;
+          }
+          s = applyAction(s, { type: 'endTurn' }, rng);
+        } else s = aiTurn(s, rng);
+      }
+      expect(s.phase).toBe('gameover');
+      bot += companyValue(s, H);
+      ai += companyValue(s, 1 - H);
+    }
+    expect(bot / ai).toBeGreaterThan(0.6);
+    expect(bot / ai).toBeLessThan(1.6);
+  }, 30000);
 
   it('도전 과제마다 컴퓨터가 도전해도 멈추지 않는다', () => {
     for (const def of CHALLENGES) {

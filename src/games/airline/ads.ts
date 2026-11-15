@@ -4,7 +4,7 @@ import type { AdMedia, CampaignKind, Company, ModKind, RegionId } from './types'
  * 광고 매체와 캠페인 (에어 매니지먼트처럼 매체를 골라 광고하고, 짧은 캠페인을 벌인다).
  *
  * 매체: 지역마다 하나. 같은 돈으로 알려지는 정도(power)와, 어떤 손님에게 잘 닿는지(biz·leisure)가 다르다.
- * 캠페인: 한 분기에 하나. 돈을 내면 정해진 동안 손님이 늘거나 회사가 크게 알려진다.
+ * 캠페인: 한 분기(석 달)에 하나. 돈을 내면 정해진 달 동안 손님이 늘거나 회사가 크게 알려진다.
  */
 export interface MediaInfo {
   name: string;
@@ -36,10 +36,10 @@ export function mediaOf(c: Company, region: RegionId): AdMedia {
   return c.adMedia?.[region] ?? 'tv';
 }
 
-/** 광고비가 쌓아 주는 알려진 정도의 목표 (0~1) */
+/** 광고비가 쌓아 주는 알려진 정도의 목표 (0~1). 광고비는 달마다, scale은 분기 기준이라 세 배로 견준다 */
 export function adTarget(c: Company, region: RegionId, scale: number): number {
   const m = MEDIA_INFO[mediaOf(c, region)];
-  return Math.min(m.cap, 1 - Math.exp((-c.ads[region] * m.power) / scale));
+  return Math.min(m.cap, 1 - Math.exp((-c.ads[region] * 3 * m.power) / scale));
 }
 
 export interface CampaignInfo {
@@ -51,7 +51,7 @@ export interface CampaignInfo {
   /** 지역을 골라야 하는지 */
   region: boolean;
   /** 손님 배수 효과 */
-  mod?: { kind: Extract<ModKind, 'demand'>; seg?: 'biz' | 'leisure'; value: number; quarters: number };
+  mod?: { kind: Extract<ModKind, 'demand'>; seg?: 'biz' | 'leisure'; value: number; months: number };
   /** 그 지역에 알려진 정도 더하기 */
   awareness?: number;
   /** 평판 더하기 */
@@ -62,8 +62,8 @@ export interface CampaignInfo {
 export const CAMPAIGNS: readonly CampaignKind[] = ['sale', 'miles', 'lucky', 'star'];
 
 export const CAMPAIGN_INFO: Record<CampaignKind, CampaignInfo> = {
-  sale: { name: '할인 대잔치', icon: '🏷️', desc: '고른 지역에 닿는 노선의 관광 손님이 이번 분기에 25% 늘어요', costK: 1.4, region: true, mod: { kind: 'demand', seg: 'leisure', value: 1.25, quarters: 1 }, from: 1950 },
-  miles: { name: '마일리지 두 배', icon: '💳', desc: '모든 노선의 사업 손님이 두 분기 동안 10% 늘어요', costK: 2.6, region: false, mod: { kind: 'demand', seg: 'biz', value: 1.1, quarters: 2 }, from: 1981 },
-  lucky: { name: '경품 행사', icon: '🎁', desc: '모든 노선의 관광 손님이 두 분기 동안 8% 늘어요', costK: 1.8, region: false, mod: { kind: 'demand', seg: 'leisure', value: 1.08, quarters: 2 }, from: 1950 },
+  sale: { name: '할인 대잔치', icon: '🏷️', desc: '고른 지역에 닿는 노선의 관광 손님이 석 달 동안 25% 늘어요', costK: 1.4, region: true, mod: { kind: 'demand', seg: 'leisure', value: 1.25, months: 3 }, from: 1950 },
+  miles: { name: '마일리지 두 배', icon: '💳', desc: '모든 노선의 사업 손님이 여섯 달 동안 10% 늘어요', costK: 2.6, region: false, mod: { kind: 'demand', seg: 'biz', value: 1.1, months: 6 }, from: 1981 },
+  lucky: { name: '경품 행사', icon: '🎁', desc: '모든 노선의 관광 손님이 여섯 달 동안 8% 늘어요', costK: 1.8, region: false, mod: { kind: 'demand', seg: 'leisure', value: 1.08, months: 6 }, from: 1950 },
   star: { name: '스타 광고 모델', icon: '🌟', desc: '고른 지역에 회사가 크게 알려지고(+20%p) 평판이 조금 올라요', costK: 3, region: true, awareness: 0.2, rep: 2, from: 1950 },
 };

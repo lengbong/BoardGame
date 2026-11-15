@@ -94,13 +94,18 @@ describe('광고 매체·캠페인', () => {
     expect(s.companies[0].cash).toBeCloseTo(cash - campaignCost(s, 'star'), 6);
     expect(campaignBlocker(s, 0, 'lucky')).toContain('한 분기에 하나');
     expect(applyAction(s, { type: 'campaign', kind: 'lucky' })).toBe(s);
-    // 다음 분기에는 다시 할 수 있다
-    s = applyAction(applyAction(s, { type: 'endTurn' }), { type: 'endTurn' });
-    s = { ...s, turnPos: s.order.indexOf(0) };
+    // 같은 분기의 다음 달에도 못 하고, 다음 분기에는 다시 할 수 있다
+    const nextMonth = (t: AirlineState) => {
+      const u = applyAction(applyAction(t, { type: 'endTurn' }), { type: 'endTurn' });
+      return { ...u, turnPos: u.order.indexOf(0) };
+    };
+    s = nextMonth(s);
+    expect(campaignBlocker(s, 0, 'lucky')).toContain('한 분기에 하나');
+    while (s.t % 3 !== 0) s = nextMonth(s);
     s = applyAction(s, { type: 'campaign', kind: 'miles' });
     const mod = s.companies[0].mods.find((m) => m.label.includes('마일리지'));
     expect(mod?.kind).toBe('demand');
     expect(mod?.seg).toBe('biz');
-    expect(mod!.until).toBe(s.q + 2);
+    expect(mod!.until).toBe(s.t + 6);
   });
 });

@@ -16,6 +16,7 @@ export function freshAcc(state: AirlineState, ci: number, year: number, lastPax:
     revenue: 0,
     profit: 0,
     profitQ: 0,
+    qProfit: 0,
     quarters: 0,
     bought: 0,
     startValue: Math.round(companyValue(state, ci)),
@@ -25,8 +26,8 @@ export function freshAcc(state: AirlineState, ci: number, year: number, lastPax:
   };
 }
 
-/** 분기 결과를 올해 숫자에 더한다 */
-export function addQuarter(acc: YearAcc, rep: CompanyReport): YearAcc {
+/** 달 결과를 올해 숫자에 더한다 */
+export function addMonth(acc: YearAcc, rep: CompanyReport): YearAcc {
   return {
     ...acc,
     pax: acc.pax + rep.pax,
@@ -34,9 +35,13 @@ export function addQuarter(acc: YearAcc, rep: CompanyReport): YearAcc {
     xfer: acc.xfer + rep.xferPax,
     revenue: acc.revenue + rep.ticket + rep.side,
     profit: acc.profit + rep.profit,
-    profitQ: acc.profitQ + (rep.profit > 0 ? 1 : 0),
-    quarters: acc.quarters + 1,
+    qProfit: acc.qProfit + rep.profit,
   };
+}
+
+/** 분기가 끝나면: 그 분기가 흑자였는지 센다 */
+export function closeQuarter(acc: YearAcc): YearAcc {
+  return { ...acc, profitQ: acc.profitQ + (acc.qProfit > 0 ? 1 : 0), quarters: acc.quarters + 1, qProfit: 0 };
 }
 
 function rewardFor(state: AirlineState, ci: number): { cash: number; rep: number } {
@@ -107,7 +112,7 @@ export function goalProgress(state: AirlineState, ci: number, g: YearGoal): numb
     case 'lf':
       return a.seats > 0 ? Math.min(1, a.pax / a.seats / g.target) : 0;
     case 'profit4':
-      return a.profitQ / 4;
+      return Math.min(1, a.profitQ / 4);
     case 'region':
       return part(regionsServed(c).size, a.startRegions, g.target);
     case 'routes':

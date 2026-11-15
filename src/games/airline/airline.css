@@ -3338,16 +3338,18 @@
   filter: drop-shadow(0 4px 3px rgba(20, 40, 60, 0.25));
   animation: al-opening-fly 2s cubic-bezier(0.4, 0, 0.3, 1) 0.15s both;
 }
+/* 기종 그림은 코가 왼쪽을 본다(PlaneImage.tsx): 왼쪽 도시에서 오른쪽 도시로 날아가니 좌우를 뒤집고(scaleX(−1)),
+   떠날 때는 코를 들고 닿을 때는 조금 숙인다 */
 @keyframes al-opening-fly {
   0% {
-    transform: translate(-30px, 70px) scale(0.55) rotate(6deg);
+    transform: translate(-30px, 70px) scale(0.55) rotate(-14deg) scaleX(-1);
     opacity: 0;
   }
   15% {
     opacity: 1;
   }
   100% {
-    transform: translate(240px, -6px) scale(0.95) rotate(-4deg);
+    transform: translate(240px, -6px) scale(0.95) rotate(2deg) scaleX(-1);
   }
 }
 .al-confetti {
@@ -3400,7 +3402,7 @@
     stroke-dashoffset: 0;
   }
   .al-opening-plane {
-    transform: translate(120px, 20px) scale(0.8);
+    transform: translate(120px, 20px) scale(0.8) scaleX(-1);
   }
   .al-confetti {
     display: none;

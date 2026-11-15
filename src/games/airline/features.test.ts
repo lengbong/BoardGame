@@ -289,6 +289,65 @@ describe('경영 비서', () => {
   });
 });
 
+describe('경영 비서: 쉬는 비행기', () => {
+  /** 0번 회사가 서울–부산·서울–제주에 리스한 F27을 띄우고, 쉬는 내 F27 한 대와 이번 달 전세기로 나가는 내 737-200 한 대가 있다 */
+  function fleet(): { s: AirlineState; own: number; chartered: number } {
+    let s = createGame(setup(['human', 'human'], { era: 1983 }, ['seoul', 'tokyo']), seededRandom(1));
+    s = act(s, { type: 'openBranch', city: 'busan' }, { type: 'openBranch', city: 'jeju' });
+    s = act(s, { type: 'openRoute', a: 'seoul', b: 'busan' }, { type: 'openRoute', a: 'seoul', b: 'jeju' });
+    for (const r of s.companies[0].routes) {
+      s = act(s, { type: 'lease', model: 'f27' });
+      s = act(s, { type: 'assign', plane: s.companies[0].planes.at(-1)!.id, route: r.id, freq: 7 });
+    }
+    s = act(s, { type: 'lease', model: 'f27' });
+    s = act(s, { type: 'assign', plane: s.companies[0].planes.at(-1)!.id, route: s.companies[0].routes[0].id, freq: 7 });
+    const base = s.companies[0].planes[0];
+    const chartered = s.nextId++;
+    const own = s.nextId++;
+    s.companies[0].planes.push(
+      { ...base, id: chartered, model: 'b737-200', leased: false, rent: 0, deposit: 0, legs: [], cabin: defaultCabin(MODEL['b737-200']) },
+      { ...base, id: own, leased: false, rent: 0, deposit: 0, legs: [] },
+    );
+    s.charters = [{ id: s.nextId++, a: 'seoul', b: 'osaka', pax: 1800, pay: 30, title: '수학여행 단체', icon: '🎒', listed: s.t, expires: s.t + 2, by: 0, t: s.t, plane: chartered }];
+    s.companies[0].cash = 5000;
+    return { s, own, chartered };
+  }
+
+  it('같은 계열 리스기가 날고 있으면 쉬는 내 비행기를 팔거나 같은 기종을 주문하라 하지 않고, 리스기와 바꾸라고 한다', () => {
+    const { s, own } = fleet();
+    const tips = advise(s, 0, 20);
+    const keys = tips.map((a) => a.key);
+    expect(keys).not.toContain(`idle-sell-${own}`);
+    expect(keys).not.toContain('order-f27');
+    const swap = tips.find((a) => a.key === `swap-${own}`);
+    expect(swap?.title).toBe('새 F27 프렌드십으로 리스기 바꾸기');
+    const before = s.companies[0].planes.filter((p) => p.leased).length;
+    const res = applyAdvice(swap!, s);
+    expect(res.why).toBeNull();
+    const c = res.state.companies[0];
+    expect(c.planes.filter((p) => p.leased)).toHaveLength(before - 1);
+    expect(c.planes.find((p) => p.id === own)!.legs).toHaveLength(1);
+    expect(isValidState(res.state)).toBe(true);
+  });
+
+  it('같은 계열 리스기가 없으면 쉬는 내 비행기는 팔라고 하고, 그 기종 주문은 여전히 권하지 않는다', () => {
+    const { s, own } = fleet();
+    // 리스기를 모두 다른 계열로 바꿔 둔다
+    s.companies[0].planes = s.companies[0].planes.map((p) => (p.leased ? { ...p, model: 'dc9', cabin: defaultCabin(MODEL.dc9) } : p));
+    const keys = advise(s, 0, 20).map((a) => a.key);
+    expect(keys.some((k) => k.startsWith('swap-'))).toBe(false);
+    expect(keys).toContain(`idle-sell-${own}`);
+    expect(keys).not.toContain('order-f27');
+  });
+
+  it('이번 달 전세기로 나가는 비행기는 쉬는 비행기로 보지 않는다 (팔기·바꾸기·새 노선에 쓰기를 권하지 않는다)', () => {
+    const { s, chartered } = fleet();
+    const tips = advise(s, 0, 20);
+    expect(tips.some((a) => a.key === `idle-${chartered}` || a.key === `idle-sell-${chartered}` || a.key === `swap-${chartered}`)).toBe(false);
+    expect(tips.some((a) => a.detail.includes('남는 시간이 있는 737-200'))).toBe(false);
+  });
+});
+
 describe('경영 비서: 안 되는 까닭', () => {
   it('리스를 한 달 한도까지 받았으면 첫 노선을 열 수 없고, 왜 안 되는지 알려 준다', () => {
     const s0 = createGame(setup(['human', 'ai-normal'], {}, ['seoul']), seededRandom(4));

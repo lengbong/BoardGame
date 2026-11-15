@@ -10,7 +10,8 @@ import { CRISIS_MONTHS, MAX_ROUTES, applyAction, assignBlocker, bestFreq, buyBlo
 import { FUEL_TON, TANK_LEVELS, tankBlocker, tankCap, tankOf, tankSpace, tonPrice } from './fuel';
 import { condOf, inCheck, restoredCond } from './condition';
 import { companyCheckCost, facilityBlocker, facilityCost } from './facilities';
-import { charterBlocker, charterProfit, openCharters } from './charters';
+import { charterBlocker, charterPlaneIds, charterProfit, openCharters } from './charters';
+import { withJosa } from '../../lib/korean';
 import {
   MAINT_COST,
   MAINT_NAMES,
@@ -28,7 +29,7 @@ import {
   slotsUsed,
 } from './simulate';
 import { monthOf, yearOf } from './time';
-import type { AirlineState, CharterOffer, Company } from './types';
+import type { AirlineState, CharterOffer, Company, Plane } from './types';
 
 /**
  * 경영 비서: 지난달 숫자를 보고 할 만한 일을 3~5개 골라 준다.
@@ -108,8 +109,12 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     }
   }
 
-  // 2. 쉬는 비행기
-  for (const p of idlePlanes(c).slice(0, 2)) {
+  // 2. 쉬는 비행기 (이번 달 전세기로 나가는 비행기는 쉬는 게 아니라 팔거나 노선에 넣을 수 없다)
+  const chartered = charterPlaneIds(state, ci);
+  const idle = idlePlanes(c).filter((p) => !chartered.has(p.id));
+  // 쉬는 내 비행기가 노선을 넘겨받을 수 있는 리스기가 있으면, 팔지 말고 리스기를 돌려주는 게 낫다
+  const swaps = swapPairs(state, ci, idle);
+  for (const p of idle.slice(0, 2)) {
     const pl = planner(state, ci);
     const best = pl.bestExistingLeg(p.id, false);
     const m = MODEL[p.model];
@@ -124,7 +129,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
         apply: (s) => afterAct(s, ci, { type: 'assign', plane: p.id, route: best.route, freq: best.freq }),
         weight: 500 + best.gain,
       });
-    } else {
+    } else if (!swaps.some((x) => x.own === p.id)) {
       out.push({
         key: `idle-sell-${p.id}`,
         icon: '😴',
@@ -281,7 +286,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     const price = orderPrice(state, m, c);
     const lead = leadTime(m, yearOf(state.q));
     const waiting = c.orders.length;
-    if (lead <= 12 && waiting < 2 + Math.floor(c.planes.length / 8) && c.cash - price > costs * 2 + 150 && !buyBlocker(state, ci, m.id, false)) {
+    if (!idleOwnOf(c, m.id) && lead <= 12 && waiting < 2 + Math.floor(c.planes.length / 8) && c.cash - price > costs * 2 + 150 && !buyBlocker(state, ci, m.id, false)) {
       out.push({
         key: `orderfull-${m.id}`,
         icon: '🛒',
@@ -339,9 +344,11 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
       });
     } else if (!full && cand && cand.profit > 3 && c.cash - cand.capital > reserve) {
       // 시간이 많이 남는 내 비행기가 있으면 그 비행기로, 같은 기종 중고가 있고 돈이 넉넉하면 중고로, 아니면 리스로
+      // (이번 달 전세기로 나가는 비행기는 노선에 넣을 수 없다)
       const d = dist(cand.a, cand.b);
       const year = yearOf(state.q);
       const own = c.planes
+        .filter((p) => !chartered.has(p.id))
         .map((p) => ({ p, m: MODEL[p.model], spare: WEEK_HOURS - planeHours(c, p) }))
         .filter((x) => x.m.range >= d && airportClass(CITY[cand.a], year) >= x.m.runway && airportClass(CITY[cand.b], year) >= x.m.runway && x.spare >= 2 * (d / x.m.speed + 0.75) * Math.min(cand.freq, 5))
         .sort((x, y) => y.spare - x.spare)[0];
@@ -496,6 +503,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   }
 
   // 6¾. 돈이 넉넉하면 많이 리스한 기종을 주문해 두기 (도착하면 리스기를 돌려줘 리스료를 아낀다)
+  //      같은 계열의 쉬는 내 비행기가 있으면 주문보다 그 비행기로 리스기를 바꾸는 게 먼저다
   {
     const leased = c.planes.filter((p) => p.leased);
     const rep2 = state.report?.companies[ci];
@@ -503,11 +511,12 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     if (leased.length >= 2 && c.orders.length < 3) {
       const count = new Map<string, number>();
       for (const p of leased) count.set(p.model, (count.get(p.model) ?? 0) + 1);
-      const [model] = [...count.entries()].sort((x, y) => y[1] - x[1])[0];
-      const m = MODEL[model];
-      const price = orderPrice(state, m, c);
-      const lead = leadTime(m, yearOf(state.q));
-      if (lead <= 9 && c.cash - price > costs * 3 + 200 && !buyBlocker(state, ci, model, false)) {
+      const top = [...count.entries()].filter(([model]) => !idleOwnOf(c, model)).sort((x, y) => y[1] - x[1])[0];
+      const model = top?.[0];
+      const m = model ? MODEL[model] : undefined;
+      const price = m ? orderPrice(state, m, c) : 0;
+      const lead = m ? leadTime(m, yearOf(state.q)) : 99;
+      if (model && m && lead <= 9 && c.cash - price > costs * 3 + 200 && !buyBlocker(state, ci, model, false)) {
         out.push({
           key: `order-${model}`,
           icon: '🛒',
@@ -519,30 +528,34 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
         });
       }
     }
-    // 주문한 비행기가 와서 쉬고 있으면 같은 계열 리스기 노선을 넘겨받게
-    const idleOwn = idlePlanes(c).find((p) => !p.leased);
-    if (idleOwn) {
-      const lease = c.planes.find((x) => x.leased && x.legs.length > 0 && MODEL[x.model].family === MODEL[idleOwn.model].family);
-      if (lease) {
-        out.push({
-          key: `swap-${idleOwn.id}`,
-          icon: '🔁',
-          title: `새 ${MODEL[idleOwn.model].name}로 리스기 바꾸기`,
-          detail: `쉬는 내 비행기가 리스기 ${MODEL[lease.model].name}의 노선을 넘겨받고, 리스기는 돌려줘요 (리스료 달 ${fmtMoney(lease.rent)} 아낌).`,
-          label: '바꾸기',
-          apply: (s2) => {
-            const pl = planner(s2, ci);
-            const legs = planeById(pl.c, lease.id)?.legs.map((l) => ({ ...l })) ?? [];
-            if (!pl.act({ type: 'sell', plane: lease.id })) return s2;
-            for (const l of legs) {
-              const f = Math.min(l.freq, bestFreq(pl.s, ci, idleOwn.id, l.route));
-              if (f >= 1) pl.act({ type: 'assign', plane: idleOwn.id, route: l.route, freq: f });
-            }
-            return pl.s;
-          },
-          weight: 520,
-        });
-      }
+    // 쉬는 내 비행기(주문해서 막 온 비행기 포함)가 리스기 노선을 넘겨받고, 리스기는 돌려준다
+    if (swaps.length > 0) {
+      const own = planeById(c, swaps[0].own)!;
+      const lease = planeById(c, swaps[0].lease)!;
+      const n = swaps.length;
+      const rent = swaps.reduce((sum, x) => sum + (planeById(c, x.lease)?.rent ?? 0), 0);
+      const fresh = state.t - (own.got ?? own.since) <= 1;
+      out.push({
+        key: `swap-${own.id}`,
+        icon: '🔁',
+        title:
+          n === 1
+            ? `${fresh ? '새' : '쉬는'} ${withJosa(MODEL[own.model].name, '으로/로')} 리스기 바꾸기`
+            : `쉬는 내 비행기 ${n}대로 리스기 ${n}대 바꾸기`,
+        detail:
+          n === 1
+            ? `쉬는 내 ${withJosa(MODEL[own.model].name, '이/가')} 리스기 ${MODEL[lease.model].name}의 노선을 넘겨받고, 리스기는 돌려줘요. 리스료를 달 ${fmtMoney(rent)} 아껴요 (돌려줄 때 위약금 한 달 치). 쉬게 두거나 파는 것보다 나아요.`
+            : `쉬는 내 비행기 ${n}대가 같은 계열 리스기의 노선을 넘겨받고, 리스기는 돌려줘요. 리스료를 달 ${fmtMoney(rent)} 아껴요 (돌려줄 때 위약금 한 달 치). 쉬게 두거나 파는 것보다 나아요.`,
+        gain: rent,
+        label: '바꾸기',
+        apply: (s2) => {
+          let next = s2;
+          for (const x of swaps) next = swapLease(next, ci, x.own, x.lease) ?? next;
+          if (next === s2 && !blocked) note('리스기의 노선을 다 넘겨받을 수 없어요');
+          return next;
+        },
+        weight: 520 + rent,
+      });
     }
   }
 
@@ -730,6 +743,61 @@ function afterAct(s: AirlineState, ci: number, action: Parameters<Planner['act']
   const pl = planner(s, ci);
   pl.act(action);
   return pl.s;
+}
+
+/** 이 기종과 같은 계열의 쉬는 내 비행기가 있는지 (전세기로 나간 비행기도: 다음 달엔 쉰다) */
+function idleOwnOf(c: Company, model: string): boolean {
+  const fam = MODEL[model]?.family;
+  return idlePlanes(c).some((p) => !p.leased && MODEL[p.model].family === fam);
+}
+
+/**
+ * 쉬는 내 비행기가 노선을 넘겨받을 리스기 짝들.
+ * 같은 계열이고 좌석이 비슷한 리스기 가운데 실제로 노선을 거의 그대로(좌석×횟수 85% 넘게) 넘겨받을 수 있는 것만 고른다.
+ */
+function swapPairs(state: AirlineState, ci: number, idle: Plane[]): { own: number; lease: number }[] {
+  const c = state.companies[ci];
+  const out: { own: number; lease: number }[] = [];
+  const taken = new Set<number>();
+  // 큰 사건 뒤에는 쉬는 비행기가 수십 대일 수 있어, 앞의 몇 대만 따져 본다 (나머지는 바꾼 뒤 다음에)
+  let budget = 6;
+  for (const own of idle) {
+    if (out.length >= 3 || budget <= 0) break;
+    if (own.leased || inCheck(own, state.t)) continue;
+    budget--;
+    const om = MODEL[own.model];
+    const cands = c.planes
+      .filter((x) => x.leased && !taken.has(x.id) && x.legs.length > 0 && MODEL[x.model].family === om.family && om.seats >= MODEL[x.model].seats * 0.85)
+      // 같은 기종 먼저, 그다음 리스료가 비싼 것
+      .sort((x, y) => Number(y.model === own.model) - Number(x.model === own.model) || y.rent - x.rent)
+      .slice(0, 4);
+    for (const lease of cands) {
+      if (swapLease(state, ci, own.id, lease.id)) {
+        out.push({ own: own.id, lease: lease.id });
+        taken.add(lease.id);
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/** 쉬는 내 비행기가 리스기 노선을 넘겨받고 리스기를 돌려준다. 노선을 거의 그대로 넘겨받지 못하면 null */
+function swapLease(s: AirlineState, ci: number, ownId: number, leaseId: number): AirlineState | null {
+  const pl = planner(s, ci);
+  const own = planeById(pl.c, ownId);
+  const lease = planeById(pl.c, leaseId);
+  if (!own || !lease || !lease.leased || own.legs.length > 0 || lease.legs.length === 0) return null;
+  const legs = lease.legs.map((l) => ({ ...l }));
+  const before = legs.reduce((sum, l) => sum + l.freq, 0) * MODEL[lease.model].seats;
+  if (!pl.act({ type: 'sell', plane: leaseId })) return null;
+  let after = 0;
+  for (const l of legs) {
+    const f = Math.min(l.freq, bestFreq(pl.s, ci, ownId, l.route));
+    if (f < 1 || !pl.act({ type: 'assign', plane: ownId, route: l.route, freq: f })) return null;
+    after += f * MODEL[own.model].seats;
+  }
+  return after >= before * 0.85 ? pl.s : null;
 }
 
 /** 이 노선에 리스로 한 대 보탤 때 가장 좋은 기종 */

@@ -23,6 +23,8 @@ import { MEAL_NAMES } from './cabin';
 import { mLabel, mShort, yearOf } from './time';
 import type { AirlineAction, AirlineState, ModelDef } from './types';
 import { CabinEditor, cabinSeatText } from './CabinEditor';
+import { CharterBoard } from './CharterBoard';
+import { openCharters } from './charters';
 import { CheckButton, CondBar, PlaneCondition } from './ConditionArt';
 import { checkAtOf, fleetCond, inCheck } from './condition';
 import { DaySchedule } from './DaySchedule';
@@ -50,7 +52,7 @@ const notMine = '내 차례에만 할 수 있어요';
 const fuelPerSeat = (m: ModelDef) => (m.burn / m.seats) * 10000;
 const BEST_FUEL = Math.min(...MODELS.map(fuelPerSeat));
 
-type Tab = 'hangar' | 'shop' | 'used' | 'day';
+type Tab = 'hangar' | 'shop' | 'used' | 'day' | 'charter';
 
 export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRoutes }: FleetViewProps) {
   const me = state.companies[viewer];
@@ -110,6 +112,9 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
         <button type="button" role="tab" aria-selected={tab === 'day'} className={`al-subtab${tab === 'day' ? ' al-on' : ''}`} onClick={() => setTab('day')} data-testid="al-day-tab">
           <FleetIcon kind="clock" size={16} /> 하루 운항표
         </button>
+        <button type="button" role="tab" aria-selected={tab === 'charter'} className={`al-subtab${tab === 'charter' ? ' al-on' : ''}`} onClick={() => setTab('charter')} data-testid="al-charter-tab">
+          <FleetIcon kind="doc" size={16} /> 전세기 의뢰 {openCharters(state).length}
+        </button>
         <span className="al-subtab-note al-fl-deliv" title="리스·중고 비행기는 한 달에 이만큼까지 바로 받을 수 있어요">
           이번 달 바로 받기 (리스·중고)
           <span className="al-fl-deliv-pips" aria-hidden="true">
@@ -122,6 +127,8 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
           </b>
         </span>
       </div>
+
+      {tab === 'charter' && <CharterBoard state={state} viewer={viewer} canAct={canAct} perform={perform} />}
 
       {tab === 'day' && (
         <section className="al-card al-day-card">

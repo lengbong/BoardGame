@@ -10,6 +10,7 @@ import { CRISIS_MONTHS, MAX_ROUTES, applyAction, bestFreq, buyBlocker, checkBloc
 import { FUEL_TON, TANK_LEVELS, tankBlocker, tankCap, tankOf, tankSpace, tonPrice } from './fuel';
 import { condOf, inCheck, restoredCond } from './condition';
 import { companyCheckCost, facilityBlocker, facilityCost } from './facilities';
+import { charterBlocker, charterProfit, openCharters } from './charters';
 import {
   MAINT_COST,
   MAINT_NAMES,
@@ -27,7 +28,7 @@ import {
   slotsUsed,
 } from './simulate';
 import { monthOf, yearOf } from './time';
-import type { AirlineState, Company } from './types';
+import type { AirlineState, CharterOffer, Company } from './types';
 
 /**
  * 경영 비서: 지난달 숫자를 보고 할 만한 일을 3~5개 골라 준다.
@@ -570,6 +571,32 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
       apply: (s) => afterAct(s, ci, { type: 'setAds', region, amount }),
       weight: 70,
     });
+  }
+
+  // 7-9. 전세기: 쉬는 비행기로 남는 의뢰가 있으면
+  {
+    let best: { offer: CharterOffer; plane: number; profit: number } | null = null;
+    for (const o of openCharters(state)) {
+      for (const p of c.planes) {
+        if (p.legs.length > 0 || charterBlocker(state, ci, o.id, p.id)) continue;
+        const profit = charterProfit(state, ci, o, p);
+        if (profit > 1 && (!best || profit > best.profit)) best = { offer: o, plane: p.id, profit };
+      }
+    }
+    if (best) {
+      const o = best.offer;
+      const plane = best.plane;
+      out.push({
+        key: `charter-${o.id}`,
+        icon: o.icon,
+        title: `전세기: ${o.title} ${cityName(o.a)}⇄${cityName(o.b)} ${o.pax}명`,
+        detail: `쉬는 ${MODEL[c.planes.find((p) => p.id === plane)!.model].name}로 이번 달 다녀오면 보수 ${fmtMoney(o.pay)}에 이익 약 ${fmtMoney(best.profit)}이에요. 그달은 예비기가 하나 줄어요.`,
+        gain: best.profit,
+        label: '맡기',
+        apply: (s2) => afterAct(s2, ci, { type: 'charter', offer: o.id, plane }),
+        weight: 150 + best.profit * 2,
+      });
+    }
   }
 
   // 8-0. 기체 상태: 아주 닳은 비행기는 점검 시점과 상관없이 점검을 권한다

@@ -1292,11 +1292,11 @@ export function groundingChance(state: Pick<AirlineState, 't'>, c: Company, p: P
 
 /**
  * 이번 달 C점검으로 쉬는 비행기: 쉬는 비행기(예비기)가 있으면 대신 날고, 없으면 그 비행기가 나는 노선의 횟수가 준다.
- * lost: 노선마다 못 뜨는 주간 왕복 수, spares: 점검을 메우고 남은 예비기 수
+ * lost: 노선마다 못 뜨는 주간 왕복 수, spares: 점검을 메우고 남은 예비기 수. busy: 이번 달 전세기로 나가 예비기가 못 되는 비행기
  */
-export function checkDowntime(c: Company, t: number): { lost: Map<number, number>; planes: number; spares: number } {
+export function checkDowntime(c: Company, t: number, busy?: ReadonlySet<number>): { lost: Map<number, number>; planes: number; spares: number } {
   const lost = new Map<number, number>();
-  let spares = c.planes.filter((p) => p.legs.length === 0 && !inCheck(p, t)).length;
+  let spares = c.planes.filter((p) => p.legs.length === 0 && !inCheck(p, t) && !busy?.has(p.id)).length;
   let planes = 0;
   for (const p of c.planes) {
     if (!inCheck(p, t)) continue;
@@ -1419,7 +1419,7 @@ function rollOps(
   const closures: QuarterOutcome['closures'] = [];
   const strikes = state.companies.map(() => false);
   // C점검은 미리 정해 둔 일이라 어림할 때도 셈한다
-  const checks = state.companies.map((c) => checkDowntime(c, state.t));
+  const checks = state.companies.map((c, ci) => checkDowntime(c, state.t, charterBusy(state, ci)));
   if (!rng) return { byRoute, closures, strikes, checks };
   const m0 = monthOf(state.t) - 1;
   // 날씨가 아주 나쁜 도시는 하루 이틀 공항이 닫힌다 (노선이 닿은 도시만)
@@ -1687,6 +1687,20 @@ export function computeMonth(state: AirlineState, rng?: Rng): QuarterOutcome {
       if (m.kind !== 'subsidy' || !active(m, state.t) || !m.city) continue;
       if (c.routes.some((r) => (r.a === m.city || r.b === m.city) && routeFreq(c, r.id) > 0)) rep.side += m.value;
     }
+    // 전세기: 보수는 부대 수입, 비용은 연료·운항 수당·공항에
+    for (const o of state.charters ?? []) {
+      if (o.by !== ci || o.t !== state.t || o.plane === undefined) continue;
+      const p = c.planes.find((x) => x.id === o.plane);
+      if (!p) continue;
+      const m = MODEL[p.model];
+      const cost = charterCost(state, ci, m, planeAge(state, p), o.a, o.b, Math.ceil(o.pax / m.seats), o.pax);
+      rep.side += o.pay;
+      rep.fuel += cost.fuel;
+      rep.crew += cost.crew;
+      rep.airport += cost.airport;
+      rep.charters = (rep.charters ?? 0) + 1;
+      rep.charterRev = (rep.charterRev ?? 0) + o.pay;
+    }
     // 연료: 탱크에 사 둔 연료를 (산 값으로) 먼저 쓰고, 모자라면 그달 값(헤지했으면 고정 값)으로 산다
     const oilNow = ctxs[ci].oil;
     if (rep.fuel > 0 && oilNow > 0) {
@@ -1709,6 +1723,36 @@ export function computeMonth(state: AirlineState, rng?: Rng): QuarterOutcome {
   }
   ops.sort((x, y) => y.cancelled * 3 + y.late + y.diverted * 4 + y.grounded * 6 - (x.cancelled * 3 + x.late + x.diverted * 4 + x.grounded * 6));
   return { reports, routes: routeReports, routeStats, xfers: xfers.slice(0, 60), ops: ops.slice(0, 80), closures };
+}
+
+/** 이번 달 이 회사가 전세기로 보낸 비행기 */
+function charterBusy(state: Pick<AirlineState, 'charters' | 't'>, ci: number): Set<number> {
+  const out = new Set<number>();
+  for (const o of state.charters ?? []) if (o.by === ci && o.t === state.t && o.plane !== undefined) out.add(o.plane);
+  return out;
+}
+
+/**
+ * 전세기 한 건의 비용 (억): 연료·승무원(운항 수당·정비)·공항. 손님을 데려갔다 데려오는 왕복을 trips번.
+ * 노선 비용(routeCost)과 같은 셈법이다.
+ */
+export function charterCost(
+  state: Pick<AirlineState, 'oil' | 't' | 'companies'>,
+  ci: number,
+  model: ModelDef,
+  age: number,
+  a: string,
+  b: string,
+  trips: number,
+  pax: number,
+): { fuel: number; crew: number; airport: number; total: number } {
+  const c = state.companies[ci];
+  const ctx = costCtx(state, c);
+  const d = dist(a, b);
+  const fuel = (trips * 2 * d * model.burn * (1 + 0.006 * age) * FUEL_PRICE * ctx.oil * ctx.fuelMult) / 10000;
+  const crew = (trips * 2 * (legHours(model, d) * CREW_MULT + CYCLE_HOURS) * model.hourCost * (1 + 0.025 * age) * ctx.crewMult * (1 - STAFF_SHARE)) / 10000;
+  const airport = (trips * (FEE_INFO[CITY[a].fee].perLanding + FEE_INFO[CITY[b].fee].perLanding) * (model.seats / 150) ** 0.7 + pax * 2 * HANDLING) / 10000;
+  return { fuel, crew, airport, total: fuel + crew + airport };
 }
 
 /** 예전 이름: 분기 대신 이번 달 (테스트·화면 어림) */
@@ -1772,6 +1816,8 @@ export function emptyReport(): CompanyReport {
     tankSaved: 0,
     checks: 0,
     checkCost: 0,
+    charters: 0,
+    charterRev: 0,
   };
 }
 
@@ -1793,6 +1839,8 @@ export function sumReports(list: readonly CompanyReport[]): CompanyReport {
     out.tankSaved = (out.tankSaved ?? 0) + (r.tankSaved ?? 0);
     out.checks = (out.checks ?? 0) + (r.checks ?? 0);
     out.checkCost = (out.checkCost ?? 0) + (r.checkCost ?? 0);
+    out.charters = (out.charters ?? 0) + (r.charters ?? 0);
+    out.charterRev = (out.charterRev ?? 0) + (r.charterRev ?? 0);
     out.bankrupt = out.bankrupt || r.bankrupt;
     out.strike = out.strike || r.strike;
   }

@@ -7,6 +7,8 @@ import { CITY, REGIONS, REGION_INFO } from './cities';
 import { fmtMoney, signedMoney } from './format';
 import { FuelCard } from './FuelCard';
 import { CheckPolicy } from './ConditionArt';
+import { FacilityCard } from './FacilityCard';
+import { facilitiesWorth } from './facilities';
 import { tankWorth } from './fuel';
 import { GRADE_INFO, goalProgress } from './goals';
 import { ADS_MAX, allianceOutlook, borrowBlocker, campaignBlocker, campaignCost, proposeBlocker, repayBlocker } from './rules';
@@ -52,7 +54,7 @@ const COSTS: { key: keyof CompanyReport; name: string; icon: FinIconKind }[] = [
   { key: 'sales', name: '표 판매 수수료', icon: 'tag' },
   { key: 'lease', name: '리스료·보험', icon: 'doc' },
   { key: 'fleet', name: '쉬는 비행기', icon: 'parked' },
-  { key: 'branch', name: '지점 유지비', icon: 'building' },
+  { key: 'branch', name: '지점·시설 유지비', icon: 'building' },
   { key: 'ads', name: '광고비', icon: 'megaphone' },
   { key: 'interest', name: '대출 이자', icon: 'bank' },
   { key: 'disrupt', name: '지연·결항 보상', icon: 'delay' },
@@ -81,7 +83,7 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
   const limit = creditLimit(state, viewer);
   const planesValue = me.planes.reduce((s, p) => s + planeValue(state, p), 0);
   const bizValue = me.businesses.reduce((s, b) => s + businessValue(b), 0);
-  const fuelValue = me.fuel ? tankWorth(me) : 0;
+  const fuelValue = (me.fuel ? tankWorth(me) : 0) + facilitiesWorth(me);
   const value = companyValue(state, viewer);
   const left = Math.max(0, limit - me.debt);
   const block = (b: string | null) => (canAct ? b : notMine);
@@ -253,8 +255,8 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
             </li>
           )}
           {fuelValue > 0 && (
-            <li title="사 둔 연료(산 값)와 탱크(지은 값의 60%)">
-              <i className="al-sw al-cat-5" /> 연료·탱크 <b>{fmtMoney(fuelValue)}</b>
+            <li title="사 둔 연료(산 값)와 탱크·공항 시설(지은 값의 60%)">
+              <i className="al-sw al-cat-5" /> 연료·탱크·시설 <b>{fmtMoney(fuelValue)}</b>
             </li>
           )}
           <li>
@@ -579,6 +581,8 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
       </section>
 
       <FuelCard state={state} viewer={viewer} canAct={canAct} perform={perform} next={next} />
+
+      <FacilityCard state={state} viewer={viewer} canAct={canAct} perform={perform} />
 
       <section className="al-card al-service">
         <h4 className="al-fin-title">

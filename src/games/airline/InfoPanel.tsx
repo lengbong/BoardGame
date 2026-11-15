@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { MODEL } from './aircraft';
 import { advise } from './advisor';
 import { BUSINESS_INFO, BUSINESS_KINDS } from './business';
+import { FacilityRow } from './FacilityCard';
 import { LandmarkIcon } from './Art';
 import { SEASON_NAMES, WEATHER_INFO, leisureMonthMult, weather } from './calendar';
 import { AIRPORT_INFO, CITIES, CITY, FEE_INFO, REGION_INFO, airportClass, citySize, dist, pairKey } from './cities';
@@ -258,6 +259,7 @@ function CityPanel({ state, viewer, canAct, perform, onPlanRoute, onSelect, city
                   );
                 })}
               </div>
+              <FacilityRow state={state} viewer={viewer} city={city} canAct={canAct} perform={perform} />
               {me.hub !== city && (
                 <ActButton small blocker={block(closeBranchBlocker(state, viewer, city))} onClick={() => perform({ type: 'closeBranch', city })}>
                   지점 닫기

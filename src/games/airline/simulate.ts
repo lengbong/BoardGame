@@ -16,8 +16,9 @@ import { BUSINESS_INFO, businessMonthSeason } from './business';
 import { bizMonthMult, leisureMonthMult, weather } from './calendar';
 import { AIRPORT_INFO, CITY, FEE_INFO, REGIONS, airportClass, citySize, dist, pairIndex, pairKey } from './cities';
 import { effectMults, fixedEventMult, priceMult, worldMult } from './events';
-import { checkCost, condOf, condRisk, fleetCond, inCheck } from './condition';
+import { condOf, condRisk, fleetCond, inCheck } from './condition';
 import { FUEL_TON, burnFuel, tankWorth } from './fuel';
+import { LOUNGE_XFER, TERMINAL_XFER_HOURS, companyCheckCost, facilitiesUpkeep, facilitiesWorth, hasFacility, loungeBiz, loungeRep, terminalSlots } from './facilities';
 import { STAFF_SHARE, overtime, payroll, staffCap, staffNeed, strikeChance } from './staff';
 import { bandCaps, bandCounts, bandUsed, defaultTimes, legalTimes, timeFit } from './timetable';
 import { monthOf, quarterOf, yearOf } from './time';
@@ -237,6 +238,7 @@ export function companyValue(state: Pick<AirlineState, 'q' | 't' | 'companies'>,
   for (const o of c.orders) v += o.price;
   for (const b of c.businesses) v += businessValue(b);
   if (c.fuel) v += tankWorth(c);
+  if (c.facilities) v += facilitiesWorth(c);
   return v;
 }
 
@@ -332,7 +334,7 @@ export function slotCapacity(state: Pick<AirlineState, 'q' | 't' | 'slotBoost' |
   const cls = airportClass(CITY[city], yearOf(state.q));
   const hub = c.hub === city ? 2 : 1;
   const bought = modMult(c, 'slot', state.t, (m) => m.city === city);
-  return Math.round(AIRPORT_INFO[cls].slots * hub * (1 + (state.slotBoost[city] ?? 0)) * bought);
+  return Math.round(AIRPORT_INFO[cls].slots * hub * (1 + (state.slotBoost[city] ?? 0)) * bought * terminalSlots(c, city));
 }
 
 /** 이 회사가 이 공항에서 지금 쓰는 주간 운항 횟수 (except: 이 비행기의 이 노선 몫은 빼고) */
@@ -565,7 +567,8 @@ function attraction(state: AirlineState, a: string, b: string, offer: Offer, bes
   const speed = bestHours > 0 ? bestHours / hours : 1;
   const hub = c.hub === a || c.hub === b ? 1.08 : 1;
   let leisureBonus = 1;
-  let bizBonus = 1;
+  // 라운지가 있는 도시를 오가면 사업 손님이 우리를 더 고른다
+  let bizBonus = loungeBiz(c, a) * loungeBiz(c, b);
   for (const biz of c.businesses) {
     if (biz.city !== a && biz.city !== b) continue;
     leisureBonus *= BUSINESS_INFO[biz.kind].leisure;
@@ -1125,10 +1128,13 @@ function assignTransfers(state: AirlineState, runs: RouteRun[], unserved: Map<nu
       const c2 = state.companies[cn.r2.ci];
       const q1 = quality(c1, cn.r1.route.a, cn.r1.route.b);
       const q2 = quality(c2, cn.r2.route.a, cn.r2.route.b);
-      const tf = Math.min(1, tDirect / (cn.r1.hours + cn.r2.hours + XFER_HOURS));
+      // 갈아타는 공항에 우리 전용 터미널이 있으면 갈아타는 시간이 짧고, 라운지가 있으면 사업 손님이 더 고른다
+      const terminal = hasFacility(c1, cn.via, 'terminal') || hasFacility(c2, cn.via, 'terminal');
+      const lounge = hasFacility(c1, cn.via, 'lounge') || hasFacility(c2, cn.via, 'lounge') ? LOUNGE_XFER : 1;
+      const tf = Math.min(1, tDirect / (cn.r1.hours + cn.r2.hours + (terminal ? TERMINAL_XFER_HOURS : XFER_HOURS)));
       const fare = (1 + (cn.r1.route.fare + cn.r2.route.fare) / 200) * XFER_FARE;
       return {
-        biz: f ** 0.6 * ((q1.biz + q2.biz) / 2) * tf ** 2 * fare ** -0.8 * 0.75,
+        biz: f ** 0.6 * ((q1.biz + q2.biz) / 2) * tf ** 2 * fare ** -0.8 * 0.75 * lounge,
         leisure: f ** 0.5 * ((q1.leisure + q2.leisure) / 2) * tf * fare ** -1.8 * 0.85,
         fare,
       };
@@ -1237,11 +1243,13 @@ export function opsRates(state: Pick<AirlineState, 't' | 'q' | 'slotBoost' | 'co
   const year = yearOf(state.q);
   const mine = bandCounts(legalTimes(r, year), freq);
   const freqOf = (id: number) => routeFreq(c, id);
-  let cong = Math.max(slotsUsed(c, r.a) / Math.max(1, slotCapacity(state, ci, r.a)), slotsUsed(c, r.b) / Math.max(1, slotCapacity(state, ci, r.b))) * 0.8;
+  // 우리 전용 터미널이 있는 공항은 덜 붐빈다
+  const ease = (city: string) => (hasFacility(c, city, 'terminal') ? 0.85 : 1);
+  let cong = Math.max((slotsUsed(c, r.a) / Math.max(1, slotCapacity(state, ci, r.a))) * ease(r.a), (slotsUsed(c, r.b) / Math.max(1, slotCapacity(state, ci, r.b))) * ease(r.b)) * 0.8;
   for (const city of [r.a, r.b]) {
     const cap = bandCaps(state, ci, city, slotCapacity(state, ci, city));
     const used = bandUsed(c, city, freqOf);
-    for (let i = 0; i < 4; i++) if (mine[i] > 0) cong = Math.max(cong, used[i] / Math.max(1, cap[i]));
+    for (let i = 0; i < 4; i++) if (mine[i] > 0) cong = Math.max(cong, (used[i] / Math.max(1, cap[i])) * ease(city));
   }
   // 일손: 초과 근무가 많거나 만족도가 낮으면 늦고 결항한다
   const need = staffNeed(state, c);
@@ -1524,12 +1532,13 @@ export function computeMonth(state: AirlineState, rng?: Rng): QuarterOutcome {
     // C점검 값 ('운항 수당·정비 부품'에 넣는다)
     if (checks[ci].planes > 0) {
       let cost = 0;
-      for (const p of c.planes) if (inCheck(p, state.t)) cost += checkCost(p);
+      for (const p of c.planes) if (inCheck(p, state.t)) cost += companyCheckCost(c, p);
       rep.crew += cost;
       rep.checks = checks[ci].planes;
       rep.checkCost = cost;
     }
     for (const city of c.branches) rep.branch += branchUpkeep(city, state.q);
+    if (c.facilities) rep.branch += facilitiesUpkeep(c, state.q);
     for (const r of REGIONS) rep.ads += c.ads[r];
     const limit = creditLimit(state, ci);
     const premium = c.debt > limit * 0.8 ? 2 : 0;
@@ -1686,7 +1695,7 @@ export function reputationTarget(state: Pick<AirlineState, 't'>, c: Company): nu
   const onTimeAdj = Math.max(-12, Math.min(6, (c.onTime - 0.85) * 80));
   // 기체 상태: 낡고 닳은 실내는 손님 눈에 띈다
   const condAdj = Math.max(-5, Math.min(3, (fleetCond(c) - 70) / 6));
-  return Math.max(0, Math.min(100, 25 + 9 * meal + ageAdj + (comfort - 3) * 4 + onTimeAdj + condAdj));
+  return Math.max(0, Math.min(100, 25 + 9 * meal + ageAdj + (comfort - 3) * 4 + onTimeAdj + condAdj + loungeRep(c)));
 }
 
 /** 광고가 알려진 정도로 바뀌는 크기 (억/분기 기준. 달 광고비는 세 배로 견준다) */

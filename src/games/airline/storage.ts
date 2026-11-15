@@ -7,6 +7,7 @@ import { BUSINESS_KINDS } from './business';
 import { cabinBlocker, defaultCabin } from './cabin';
 import { CHALLENGE } from './challenges';
 import { MAX_TANK } from './fuel';
+import { FACILITY_KINDS } from './facilities';
 import { CITY, REGIONS } from './cities';
 import { REAL_AIRLINE } from './realAirlines';
 import { STAFF_GROUPS, emptyStaff, staffNeed } from './staff';
@@ -132,6 +133,8 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
   if (k.airline !== undefined && k.airline !== null && typeof k.airline !== 'string') return false;
   if (k.color !== undefined && k.color !== null && !(typeof k.color === 'string' && /^#[0-9a-f]{6}$/i.test(k.color))) return false;
   if (k.checkAt !== undefined && !(isNum(k.checkAt) && k.checkAt >= 20 && k.checkAt <= 90)) return false;
+  // 공항 시설 (예전 저장에는 없다)
+  if (k.facilities !== undefined && !(Array.isArray(k.facilities) && k.facilities.every((f) => isObj(f) && isCity(f.city) && FACILITY_KINDS.includes(f.kind) && isNum(f.cost)))) return false;
   // 연료 탱크 (예전 저장에는 없다)
   if (k.fuel !== undefined && !(isObj(k.fuel) && isInt(k.fuel.level) && k.fuel.level >= 0 && k.fuel.level <= MAX_TANK && isNum(k.fuel.stock) && k.fuel.stock >= 0 && isNum(k.fuel.avg) && k.fuel.avg >= 0 && (k.fuel.auto === null || isNum(k.fuel.auto)))) return false;
   if (!isObj(k.ads) || !isObj(k.awareness) || !REGIONS.every((r) => isNum(k.ads[r]) && isNum(k.awareness[r]))) return false;

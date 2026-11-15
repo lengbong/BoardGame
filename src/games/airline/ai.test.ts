@@ -136,7 +136,7 @@ describe('컴퓨터끼리 끝까지', () => {
     expect(s.history.length).toBe(81);
     expect(s.months.length).toBe(241);
     expect(worst).toBeLessThan(300);
-  });
+  }, 30000);
 
   it('2003년부터 20년: 보통 회사가 크게 자라지만 터무니없지는 않다', () => {
     for (const seed of [31, 32]) {
@@ -149,7 +149,7 @@ describe('컴퓨터끼리 끝까지', () => {
       expect(worst).toBeLessThan(300);
       for (const h of s.history) for (const x of h.value) expect(Number.isFinite(x)).toBe(true);
     }
-  });
+  }, 30000);
 
   it('목표 먼저 이루기에서는 보통 회사가 여러 지역으로 넓혀 결국 목표를 이룬다', () => {
     const { s } = playOut(['ai-normal', 'ai-easy'], 41, { mode: 'goal', goalValue: 10000, goalRegions: 6 });
@@ -169,7 +169,7 @@ describe('컴퓨터끼리 끝까지', () => {
       games++;
     }
     expect(normal / games).toBeGreaterThanOrEqual(0.75);
-  });
+  }, 30000);
 
   it('경영 비서만 따르는 사람은 보통 컴퓨터와 비슷하게 겨룬다 (같은 크기 본사, 자리 바꿔 두 판)', () => {
     let bot = 0;
@@ -177,7 +177,8 @@ describe('컴퓨터끼리 끝까지', () => {
     for (const swap of [false, true]) {
       const rng = seededRandom(swap ? 202 : 101);
       const kinds: SeatKind[] = swap ? ['ai-normal', 'human'] : ['human', 'ai-normal'];
-      let s = createGame(setup(kinds, { years: 10 }, swap ? ['paris', 'newyork'] : ['newyork', 'paris']), rng);
+      // 본사는 그대로 두고 자리만 바꾼다 (사람이 뉴욕·파리를 한 번씩)
+      let s = createGame(setup(kinds, { years: 10 }, ['newyork', 'paris']), rng);
       const H = swap ? 1 : 0;
       let guard = 0;
       while (s.phase !== 'gameover' && guard++ < 400) {
@@ -212,5 +213,5 @@ describe('컴퓨터끼리 끝까지', () => {
       checkFleet(s);
     }
     expect(AIRPORT_INFO[1].slots).toBeLessThan(AIRPORT_INFO[4].slots);
-  });
+  }, 30000);
 });

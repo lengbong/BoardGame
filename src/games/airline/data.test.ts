@@ -60,8 +60,16 @@ describe('기종', () => {
     expect(new Set(MODELS.map((m) => m.id)).size).toBe(MODELS.length);
     for (const m of MODELS) {
       expect(m.intro).toBeLessThanOrEqual(m.end);
-      expect(m.seats).toBeGreaterThanOrEqual(40);
-      expect(m.seats).toBeLessThanOrEqual(600);
+      if (m.cargo > 0) {
+        // 화물기: 좌석 없이 짐 18~140톤, 바탕 여객기가 있다
+        expect(m.seats).toBe(0);
+        expect(m.cargo).toBeGreaterThanOrEqual(15);
+        expect(m.cargo).toBeLessThanOrEqual(140);
+        expect(MODELS.some((x) => x.id === m.base && x.cargo === 0)).toBe(true);
+      } else {
+        expect(m.seats).toBeGreaterThanOrEqual(40);
+        expect(m.seats).toBeLessThanOrEqual(600);
+      }
       expect(m.range).toBeGreaterThanOrEqual(1400);
       expect(m.range).toBeLessThanOrEqual(17000);
       expect(m.speed).toBeGreaterThan(400);

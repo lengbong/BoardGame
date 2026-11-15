@@ -1,4 +1,5 @@
 import { defaultTimes } from './timetable';
+import { presetCabin } from './cabin';
 import { describe, expect, it } from 'vitest';
 import { seededRandom } from '../../lib/random';
 import { MODEL } from './aircraft';
@@ -41,7 +42,7 @@ function base(era: 1963 | 1983 | 2003 = 2003): AirlineState {
   return createGame(setup, seededRandom(1));
 }
 
-const offer = (company: number, model: string, freq: number, fare = 0, age = 0): Offer => ({ company, fare, planes: [{ model: MODEL[model], freq, age }] });
+const offer = (company: number, model: string, freq: number, fare = 0, age = 0): Offer => ({ company, fare, planes: [{ model: MODEL[model], freq, age, cabin: presetCabin(MODEL[model], 'two', 2003), cargo: 0 }] });
 const total = (d: { biz: number; leisure: number }) => d.biz + d.leisure;
 
 describe('손님 수요', () => {
@@ -112,7 +113,9 @@ describe('손님 나누기', () => {
     const s = base();
     const alone = splitMarket(s, 'london', 'newyork', [offer(1, 'b777-200', 2)])[0];
     const [tiny, big] = splitMarket(s, 'london', 'newyork', [offer(0, 'f27', 1), offer(1, 'b777-200', 2)]);
-    expect(tiny.biz + tiny.leisure).toBeCloseTo(tiny.seats, 6);
+    // (윗등급 자리는 조금 빌 수 있다)
+    expect(tiny.biz + tiny.leisure).toBeGreaterThan(tiny.seats * 0.85);
+    expect(tiny.biz + tiny.leisure).toBeLessThanOrEqual(tiny.seats + 1e-6);
     // 작은 비행기가 있어도 큰 비행기 손님은 혼자일 때보다 크게 줄지 않는다
     expect(big.biz + big.leisure).toBeGreaterThan((alone.biz + alone.leisure) * 0.85);
   });

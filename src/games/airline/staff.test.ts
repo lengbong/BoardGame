@@ -17,7 +17,7 @@ import {
   staffTotal,
   strikeChance,
 } from './staff';
-import { fillMissing } from './storage';
+import { fillMissing, migrateV3 } from './storage';
 import { bandCaps, bandCounts, curfew, defaultTimes, legalTimes, timeFit } from './timetable';
 import { mOf } from './time';
 import type { AirlineOptions, AirlineSetup, AirlineState, SeatKind } from './types';
@@ -288,14 +288,21 @@ describe('저장과 컴퓨터', () => {
   it('직원·시간표가 없는 3판 저장(1단계)은 채워서 읽는다', () => {
     const s = fleet(['tokyo']);
     const raw = JSON.parse(JSON.stringify(s));
+    raw.version = 3;
     for (const c of raw.companies) {
+      delete c.model;
+      delete c.modelNext;
+      for (const p of c.planes) delete p.cabin;
       delete c.staff;
       delete c.morale;
       delete c.academy;
       delete c.shock;
       for (const r of c.routes) delete r.times;
     }
-    const filled = fillMissing(raw) as AirlineState;
+    const filled = migrateV3(fillMissing(raw)) as AirlineState;
+    expect(filled.version).toBe(4);
+    expect(filled.companies[0].model).toBe('full');
+    expect(filled.companies[0].planes[0].cabin).toBeTruthy();
     const c = filled.companies[0];
     expect(c.routes[0].times).toHaveLength(4);
     expect(c.morale).toBe(65);

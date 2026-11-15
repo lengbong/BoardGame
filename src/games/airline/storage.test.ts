@@ -125,7 +125,8 @@ describe('저장과 이어하기', () => {
     const saved = parseSaved({ setup, state: v2, savedAt: 5 });
     expect(saved).not.toBeNull();
     const s3 = saved!.state;
-    expect(s3.version).toBe(3);
+    expect(s3.version).toBe(4);
+    expect(s3.companies.every((c) => c.model === 'full' && c.modelNext === null && c.planes.every((p) => !!p.cabin))).toBe(true);
     expect(s3.t).toBe(v2.q * 3);
     expect(s3.q).toBe(v2.q);
     expect(s3.startT).toBe(v2.startQ * 3);

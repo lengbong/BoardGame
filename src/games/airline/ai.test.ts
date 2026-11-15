@@ -111,6 +111,22 @@ describe('컴퓨터 항공사', () => {
     expect(Object.values(after.ads).every((v) => v === 0)).toBe(true);
   });
 
+  it('손님이 적은 지역의 본사(1963년 싱가포르)도 첫 몇 해 안에 노선을 열어 자란다', () => {
+    // 1960년대 싱가포르는 중간 공항이라 F27·카라벨만 뜨고, 가까운 도시들도 작아서 노선마다 이익이 아주 적다.
+    // 예전에는 문턱(달 이익 5/3)을 못 넘어 10년 가까이 노선이 0~1개였다.
+    for (const seed of [3, 5]) {
+      const rng = seededRandom(seed);
+      let s = createGame(setup(['ai-normal', 'ai-normal', 'ai-normal', 'ai-normal'], { era: 1963 }, ['seoul', 'london', 'newyork', 'singapore']), rng);
+      expect(s.companies[3].hub).toBe('singapore');
+      while (s.phase !== 'gameover' && yearOf(s.q) <= 1966) s = aiTurn(s, rng);
+      const c = s.companies[3];
+      expect(c.routes.length, `seed ${seed}`).toBeGreaterThanOrEqual(3);
+      expect(c.planes.filter((p) => p.legs.length > 0).length).toBeGreaterThanOrEqual(3);
+      expect(c.cash).toBeGreaterThan(0);
+      checkFleet(s);
+    }
+  });
+
   it('쉬움은 운임을 조심스럽게(±15% 안에서) 정하고 먼 노선은 피한다', () => {
     const { s } = playOut(['ai-easy', 'ai-easy'], 11, { years: 10 });
     for (const c of s.companies) {

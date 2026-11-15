@@ -39,6 +39,8 @@ import {
   estimateRoute,
   fixedShare,
   legFreq,
+  legHours,
+  MAX_FREQ,
   maxFreq,
   newLeaseFixed,
   orderPrice,
@@ -61,8 +63,14 @@ export type AiLevel = 'ai-easy' | 'ai-normal';
 /** 어림(달 값)을 예전 분기 기준 문턱과 견줄 때 곱하는 수 */
 const Q = 3;
 
-/** 노선이 이보다 적으면 갓 시작한 회사로 보고 새 노선을 너그럽게 연다 */
-const STARTUP_ROUTES = 4;
+/**
+ * 비행기가 이보다 적으면 갓 시작한 회사로 보고 새 노선을 너그럽게 연다.
+ * (노선 수로 재면 비행기 한 대가 도는 작은 노선 몇 개만으로 끝나 버려서 비행기 수로 잰다)
+ */
+const STARTUP_PLANES = 4;
+
+/** 그 뒤 새 노선은 이 회사 노선이 보통 버는 달 이익의 이만큼은 벌어야 연다 (많아야 원래 문턱) */
+const OPEN_SHARE = 0.15;
 
 /**
  * 컴퓨터 항공사. 한 분기 경영을 행동 목록으로 정한다 (끝에 endTurn은 넣지 않는다).
@@ -95,6 +103,15 @@ export interface Candidate {
   capital: number;
   needBranch: string[];
   score: number;
+  /** 새로 들이지 않고 이미 나는 이 비행기의 남는 시간으로 띄운다 (없으면 새로 리스·중고) */
+  plane?: number;
+}
+
+/** 남는 비행시간이 있는 비행기 (주간 남는 시간, 나이) */
+interface SparePlane {
+  id: number;
+  left: number;
+  age: number;
 }
 
 export class Planner {
@@ -102,6 +119,11 @@ export class Planner {
   actions: AirlineAction[] = [];
   readonly normal: boolean;
   private opened = 0;
+  /**
+   * 새 노선 후보를 이미 나는 비행기의 남는 비행시간으로도 따져 볼지.
+   * 보통 컴퓨터가 직접 경영할 때(run)만 켠다. 사람에게 보여 주는 추천 노선은 새 비행기를 들이는 기준 그대로.
+   */
+  private fillSpare = false;
 
   constructor(
     state: AirlineState,
@@ -173,6 +195,7 @@ export class Planner {
 
   run(): void {
     if (this.c.out) return;
+    this.fillSpare = this.normal;
     this.decide();
     this.emergency();
     this.manageStaff();
@@ -191,6 +214,7 @@ export class Planner {
       this.manageLoans(true);
       this.expand(this.maxNewRoutes() - this.openedThisQuarter());
       this.addCapacity();
+      this.addSharedPlane();
       this.renewFleet();
       this.orderAhead();
       this.setAds();
@@ -216,7 +240,11 @@ export class Planner {
     const c = this.c;
     const need = staffNeed(this.s, c);
     const flying = Math.max(1, c.planes.filter((p) => p.legs.length > 0).length);
-    const growth = this.normal ? Math.max(1, this.maxNewRoutes()) : 0.5;
+    // 분기마다 늘 비행기 수: 첫해는 성향대로, 그 뒤로는 지난 한 해 실제로 들인 만큼만 (그보다 많이는 아니게).
+    // 늘지 않는 작은 회사가 오지 않을 비행기 몫 사람을 계속 쌓아 두고 임금만 내지 않게.
+    const assumed = this.normal ? Math.max(1, this.maxNewRoutes()) : 0.5;
+    const recent = c.planes.filter((p) => p.since >= this.s.t - 12).length / 4;
+    const growth = this.s.t - this.s.startT >= 12 ? Math.min(assumed, Math.max(0.25, recent)) : assumed;
     for (const g of STAFF_GROUPS) {
       const st = c.staff[g];
       const supply = st.have + staffPipe(c, g);
@@ -229,10 +257,11 @@ export class Planner {
         const n = Math.min(400, target - supply);
         const fast = st.have < need[g];
         if (n >= 1 && !hireBlocker(this.s, this.ci, g, n, fast) && c.cash - hireCost(this.s, c, g, n, fast) > 20) this.act({ type: 'hire', group: g, n, fast });
-      } else if (this.normal && this.planning && c.planes.length >= 3 && this.s.t - this.s.startT >= 12 && st.have > target * 1.4 + 12 && st.pipe.length === 0) {
-        // 사람이 아주 많이 남을 때만 (시작한 첫해·비행기가 거의 없을 때는 내보내지 않는다)
-        const n = Math.floor(st.have - target * 1.15);
-        if (n >= 5 && !fireBlocker(this.s, this.ci, g, n)) this.act({ type: 'fire', group: g, n });
+      } else if (this.normal && this.planning && c.planes.length >= 1 && this.s.t - this.s.startT >= 12 && st.have > target * 1.3 + 4 && st.pipe.length === 0) {
+        // 사람이 많이 남을 때만 (시작한 첫해·비행기가 없을 때는 내보내지 않는다).
+        // 남은 사람들이 크게 서운하지 않게 한 번에 그 직군의 15%까지만 조금씩.
+        const n = Math.min(Math.floor(st.have - target * 1.15), Math.ceil(st.have * 0.15));
+        if (n >= 3 && !fireBlocker(this.s, this.ci, g, n)) this.act({ type: 'fire', group: g, n });
       }
     }
     if (!this.normal) return;
@@ -618,14 +647,15 @@ export class Planner {
     const hubBonus = this.normal && (a === this.c.hub || b === this.c.hub) ? 1.06 : 1;
     // 1단계: 기종마다 알맞은 횟수 하나로 어림한다
     const first: { m: ModelDef; max: number; fit: number; score: number }[] = [];
-    const tryOne = (m: ModelDef, freq: number) => {
-      const e = estimateRoute(this.s, this.ci, a, b, [{ model: m.id, freq, fixed: newLeaseFixed(this.s, m) }], 0);
+    /** spare: 이미 나는 비행기로 띄우면 리스료·보증금이 새로 들지 않는다 */
+    const tryOne = (m: ModelDef, freq: number, spare?: SparePlane) => {
+      const e = estimateRoute(this.s, this.ci, a, b, [{ model: m.id, freq, age: spare?.age ?? 0, fixed: spare ? 0 : newLeaseFixed(this.s, m) }], 0);
       const profit = e.profit * hubBonus - upkeep;
-      const capital = branchMoney + depositFor(this.s, this.ci, m.id);
+      const capital = branchMoney + (spare ? 0 : depositFor(this.s, this.ci, m.id));
       let score = profit * (0.7 + 0.3 * Math.min(1, e.lf / 0.8));
       if (newRegion) score += Math.max(30 / Q, e.revenue * 0.25);
       if (!this.normal) score = profit;
-      if (!best || score > best.score) best = { a, b, model: m, freq, fare: 0, profit, capital, needBranch, score };
+      if (!best || score > best.score) best = { a, b, model: m, freq, fare: 0, profit, capital, needBranch, score, plane: spare?.id };
       return score;
     };
     for (const m of models) {
@@ -642,7 +672,36 @@ export class Planner {
       const freqs = this.normal ? [x.max, Math.max(1, Math.round((x.max + x.fit) / 2))] : [x.max];
       for (const f of new Set(freqs)) if (f !== x.fit) tryOne(x.m, f);
     }
+    // 3단계: 이미 나는 비행기의 남는 비행시간으로. 손님이 적어 주 몇 번이면 되는 노선은
+    // 비행기 한 대를 새로 리스하면 리스료를 못 벌지만, 한 대로 여러 노선을 돌면 이익이 난다.
+    if (this.fillSpare) {
+      for (const m of models) {
+        const spare = this.sparePlanes().get(m.id);
+        if (!spare || !this.fits(m, a, b)) continue;
+        const max = Math.min(MAX_FREQ, slotLimit, Math.floor(spare.left / (2 * legHours(m, d)) + 1e-9));
+        if (max < 1) continue;
+        const fit = Math.max(1, Math.min(max, Math.round(reach / m.seats)));
+        for (const f of new Set([fit, max])) tryOne(m, f, spare);
+      }
+    }
     return best;
+  }
+
+  /** 기종마다 남는 비행시간이 가장 많은 (노선을 나는) 비행기. 같은 상태면 다시 세지 않는다 */
+  private spareMemo: { state: AirlineState; byModel: Map<string, SparePlane> } | null = null;
+
+  private sparePlanes(): Map<string, SparePlane> {
+    if (!this.spareMemo || this.spareMemo.state !== this.s) {
+      const byModel = new Map<string, SparePlane>();
+      for (const p of this.c.planes) {
+        if (p.legs.length === 0) continue;
+        const left = WEEK_HOURS - planeHours(this.c, p);
+        const cur = byModel.get(p.model);
+        if (!cur || left > cur.left) byModel.set(p.model, { id: p.id, left, age: planeAge(this.s, p) });
+      }
+      this.spareMemo = { state: this.s, byModel };
+    }
+    return this.spareMemo.byModel;
   }
 
   /** 후보대로 지점·노선을 열고 비행기를 들여 띄운다 (plane이 있으면 그 비행기로) */
@@ -659,7 +718,8 @@ export class Planner {
     for (const city of cand.needBranch) this.act({ type: 'openBranch', city });
     if (!this.act({ type: 'openRoute', a: cand.a, b: cand.b })) return undo();
     const route = routeOnPair(this.c, cand.a, cand.b)!;
-    let planeId = plane;
+    // 후보가 이미 나는 비행기의 남는 시간으로 어림한 것이면 그 비행기로 (스스로 고를 때만)
+    let planeId = plane ?? (how === 'auto' ? cand.plane : undefined);
     if (planeId === undefined) {
       // 같은 기종 중고가 싸게 나와 있고 돈이 넉넉하면 중고로, 아니면 리스로
       const used = this.s.market.find((u) => u.model === cand.model.id && u.age <= 14);
@@ -685,14 +745,30 @@ export class Planner {
 
   /**
    * 이 후보를 열려면 넘어야 하는 달 이익 어림 (새 지점 유지비까지 뺀 값).
-   * 노선이 몇 개 없는 갓 시작한 회사는 본사 유지비와 미리 뽑아 둔 직원 임금을 어차피 내고 있으니,
-   * 노선 자체가 비행 비용과 리스료를 벌면(새 지점 유지비는 아직 못 벌어도) 연다.
-   * 손님이 적은 지역(1960년대 동남아처럼)에서도 첫해부터 노선망을 짜기 시작하고,
-   * 손님이 해마다 늘고 갈아타는 손님이 붙으면서 지점 유지비도 벌게 된다.
+   * - 비행기가 몇 대 없는 갓 시작한 회사는 본사 유지비와 직원 임금을 어차피 내고 있으니,
+   *   노선 자체가 비행 비용과 리스료를 벌면(새 지점 유지비는 아직 못 벌어도) 연다.
+   *   손님이 적은 지역(1960년대 동남아처럼)에서도 첫해부터 노선망을 짜기 시작하고,
+   *   외딴 본사(요하네스버그·뭄바이처럼)도 큰 도시에 지점을 내 거기서 노선을 늘릴 길이 생긴다.
+   * - 그 뒤 문턱은 회사 크기에 맞춘다: 이 회사 노선이 보통 버는 이익의 일부, 많아야 원래 문턱(달 5/3).
+   *   노선마다 많이 버는 큰 회사는 그대로이고, 노선 하나가 달 2~3쯤 버는 작은 회사는
+   *   그만한 크기의 노선도 열어서 노선망과 갈아타는 손님을 키운다 (예전에는 노선 4개에서 15년 멈췄다).
    */
   private minOpenProfit(cand: Candidate): number {
-    if (this.c.routes.length >= STARTUP_ROUTES) return 5 / Q;
-    return -cand.needBranch.reduce((sum, city) => sum + branchUpkeep(city, this.s.q), 0);
+    if (this.c.planes.length < STARTUP_PLANES) return -cand.needBranch.reduce((sum, city) => sum + branchUpkeep(city, this.s.q), 0);
+    return this.minGain(5 / Q);
+  }
+
+  /** 회사 크기에 맞춘 문턱: 원래 문턱(base)과 이 회사 노선이 보통 버는 달 이익의 일부 가운데 작은 쪽 */
+  private minGain(base: number): number {
+    return Math.min(base, OPEN_SHARE * this.typicalRouteProfit());
+  }
+
+  /** 이 회사 노선 하나가 보통 버는 달 이익 (지난달 노선 이익의 가운데 값, 손해는 0으로). 아직 실적이 없으면 무한대 */
+  private typicalRouteProfit(): number {
+    const profits = this.c.routes.filter((r) => r.stats).map((r) => Math.max(0, r.stats!.profit));
+    if (profits.length === 0) return Infinity;
+    profits.sort((x, y) => x - y);
+    return profits[Math.floor(profits.length / 2)];
   }
 
   private expand(max: number): void {
@@ -754,6 +830,52 @@ export class Planner {
       const f = Math.min(best.freq, bestFreq(this.s, this.ci, pid, route.id));
       if (f >= 1) this.act({ type: 'assign', plane: pid, route: route.id, freq: f });
       added++;
+    }
+  }
+
+  /**
+   * 꽉 찬 노선 여러 개에 비행기 한 대를 나눠 띄운다.
+   * 손님이 적은 노선은 하나만으로는 새 비행기 리스료를 못 벌어 addCapacity가 보태지 않지만,
+   * 한 대가 꽉 찬 노선 몇 개를 주 몇 번씩 돌면 번다. 실제로 리스해 이익이 가장 많이 느는 노선부터
+   * 횟수를 나눠 주고, 늘어난 이익 합이 리스료보다 넉넉히 크지 않으면 되돌린다.
+   */
+  private addSharedPlane(): void {
+    const full = this.c.routes
+      .filter((r) => r.stats && r.stats.lf > 0.9 && r.stats.profit > 0)
+      .sort((x, y) => y.stats!.profit - x.stats!.profit)
+      .slice(0, 8);
+    if (full.length < 2) return;
+    // 꽉 찬 노선을 지금 나는 기종 (많이 쓰는 것부터 둘)
+    const count = new Map<string, number>();
+    for (const r of full) for (const p of this.c.planes) if (legFreq(p, r.id) > 0) count.set(p.model, (count.get(p.model) ?? 0) + 1);
+    const models = [...count.entries()].sort((x, y) => y[1] - x[1]).slice(0, 2).map(([id]) => MODEL[id]);
+    for (const m of models) {
+      if (depositFor(this.s, this.ci, m.id) > this.c.cash - this.reserve() - 30) continue;
+      const before = this.s;
+      const beforeActions = this.actions.length;
+      if (!this.act({ type: 'lease', model: m.id })) continue;
+      const plane = this.c.planes[this.c.planes.length - 1];
+      let gain = 0;
+      for (let legs = 0; legs < 4; legs++) {
+        let best: { route: number; freq: number; gain: number } | null = null;
+        for (const r0 of full) {
+          const r = routeById(this.c, r0.id);
+          if (!r || legFreq(planeById(this.c, plane.id)!, r.id) > 0) continue;
+          const max = bestFreq(this.s, this.ci, plane.id, r.id);
+          if (max < 1) continue;
+          const now = this.estimate(r.id);
+          for (const f of new Set([1, 2, Math.max(1, Math.round(max / 2)), max])) {
+            if (f > max) continue;
+            const after = estimateExisting(this.s, this.ci, r, { planes: this.draftOf(r.id, null, 0, { model: m.id, freq: f, age: 0, fixed: 0 }) }).profit;
+            if (after - now > 0.05 && (!best || after - now > best.gain)) best = { route: r.id, freq: f, gain: after - now };
+          }
+        }
+        if (!best || !this.act({ type: 'assign', plane: plane.id, route: best.route, freq: best.freq })) break;
+        gain += best.gain;
+      }
+      if (gain - planeFixed(plane) > this.minGain(8 / Q)) return;
+      this.s = before;
+      this.actions.length = beforeActions;
     }
   }
 

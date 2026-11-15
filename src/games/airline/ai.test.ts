@@ -112,20 +112,41 @@ describe('컴퓨터 항공사', () => {
     expect(Object.values(after.ads).every((v) => v === 0)).toBe(true);
   });
 
-  it('손님이 적은 지역의 본사(1963년 싱가포르)도 첫 몇 해 안에 노선을 열어 자란다', () => {
+  it('손님이 적은 지역의 본사(1963년 싱가포르)도 첫 몇 해 안에 노선을 열고, 1970년대에도 계속 자란다', () => {
     // 1960년대 싱가포르는 중간 공항이라 F27·카라벨만 뜨고, 가까운 도시들도 작아서 노선마다 이익이 아주 적다.
-    // 예전에는 문턱(달 이익 5/3)을 못 넘어 10년 가까이 노선이 0~1개였다.
+    // 예전에는 문턱(달 이익 5/3)을 못 넘어 10년 가까이 노선이 0~1개였고,
+    // 갓 시작한 회사 규칙만 있을 때는 노선 4개에서 1980년까지 멈췄다.
     for (const seed of [3, 5]) {
       const rng = seededRandom(seed);
       let s = createGame(setup(['ai-normal', 'ai-normal', 'ai-normal', 'ai-normal'], { era: 1963 }, ['seoul', 'london', 'newyork', 'singapore']), rng);
       expect(s.companies[3].hub).toBe('singapore');
       while (s.phase !== 'gameover' && yearOf(s.q) <= 1966) s = aiTurn(s, rng);
-      const c = s.companies[3];
-      expect(c.routes.length, `seed ${seed}`).toBeGreaterThanOrEqual(3);
-      expect(c.planes.filter((p) => p.legs.length > 0).length).toBeGreaterThanOrEqual(3);
+      let c = s.companies[3];
+      expect(c.routes.length, `seed ${seed} 1966`).toBeGreaterThanOrEqual(3);
+      // 노선마다 실제로 띄우는 비행기가 있다 (작은 노선 여러 개를 비행기 한 대가 나눠 돌 수도 있다)
+      for (const r of c.routes) expect(c.planes.some((p) => p.legs.some((l) => l.route === r.id && l.freq > 0))).toBe(true);
       expect(c.cash).toBeGreaterThan(0);
       checkFleet(s);
+      const value1966 = companyValue(s, 3);
+      while (s.phase !== 'gameover' && yearOf(s.q) <= 1975) s = aiTurn(s, rng);
+      c = s.companies[3];
+      expect(c.routes.length, `seed ${seed} 1975`).toBeGreaterThanOrEqual(12);
+      expect(companyValue(s, 3)).toBeGreaterThan(value1966);
+      checkFleet(s);
     }
+    // 네 회사가 13년씩 두 판을 한 달씩 두므로 오래 걸린다
+  }, 60000);
+
+  it('외딴 본사(1963년 요하네스버그)도 1970년대에 노선을 늘려 자랄 수 있다', () => {
+    // 가까운 도시는 케이프타운뿐이고 장거리는 오래 손해라, 예전에는 거의 모든 판에서 20년 내내 노선 1개였다.
+    const rng = seededRandom(5);
+    let s = createGame(setup(['ai-normal', 'ai-normal', 'ai-normal', 'ai-normal'], { era: 1963 }, ['seoul', 'london', 'newyork', 'johannesburg']), rng);
+    expect(s.companies[3].hub).toBe('johannesburg');
+    while (s.phase !== 'gameover' && yearOf(s.q) <= 1973) s = aiTurn(s, rng);
+    const c = s.companies[3];
+    expect(c.routes.length).toBeGreaterThanOrEqual(10);
+    expect(c.cash).toBeGreaterThan(0);
+    checkFleet(s);
   });
 
   it('쉬움은 운임을 조심스럽게(±15% 안에서) 정하고 먼 노선은 피한다', () => {

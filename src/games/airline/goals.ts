@@ -1,5 +1,5 @@
 import { MAX_ROUTES } from './limits';
-import { companyValue, regionsServed } from './simulate';
+import { companyValue, regionsServed, revenueOf } from './simulate';
 import type { AirlineState, Company, CompanyReport, Grade, Review, Rng, YearAcc, YearGoal } from './types';
 
 /**
@@ -33,7 +33,7 @@ export function addMonth(acc: YearAcc, rep: CompanyReport): YearAcc {
     pax: acc.pax + rep.pax,
     seats: acc.seats + rep.seats,
     xfer: acc.xfer + rep.xferPax,
-    revenue: acc.revenue + rep.ticket + rep.side,
+    revenue: acc.revenue + revenueOf(rep),
     profit: acc.profit + rep.profit,
     qProfit: acc.qProfit + rep.profit,
   };
@@ -55,7 +55,7 @@ export function newGoals(state: AirlineState, ci: number, rng: Rng): YearGoal[] 
   const reward = rewardFor(state, ci);
   const regions = regionsServed(c).size;
   const pool: Omit<YearGoal, 'done'>[] = [];
-  pool.push({ kind: 'lf', target: 0.88, text: '올해 탑승률 88% 넘기기', reward });
+  if (c.model !== 'cargo') pool.push({ kind: 'lf', target: 0.88, text: '올해 탑승률 88% 넘기기', reward });
   pool.push({ kind: 'profit4', target: 4, text: '올해 네 분기 모두 흑자', reward: { cash: reward.cash, rep: 4 } });
   if (regions < 6) pool.push({ kind: 'region', target: regions + 1, text: '새 지역에 취항하기', reward });
   if (c.routes.length <= MAX_ROUTES - 2) pool.push({ kind: 'routes', target: c.routes.length + 2, text: '노선 2개 늘리기', reward });
@@ -65,7 +65,7 @@ export function newGoals(state: AirlineState, ci: number, rng: Rng): YearGoal[] 
   }
   pool.push({ kind: 'value', target: Math.round(companyValue(state, ci) * 1.1), text: '회사 가치 10% 키우기', reward: { cash: reward.cash, rep: 4 } });
   pool.push({ kind: 'fleet', target: 2, text: '새 비행기 2대 들이기', reward });
-  if (c.routes.filter((r) => r.a === c.hub || r.b === c.hub).length >= 3) pool.push({ kind: 'xfer', target: 2000, text: '갈아타는 손님 2천 명 태우기', reward });
+  if (c.model === 'full' && c.routes.filter((r) => r.a === c.hub || r.b === c.hub).length >= 3) pool.push({ kind: 'xfer', target: 2000, text: '갈아타는 손님 2천 명 태우기', reward });
   const out: YearGoal[] = [];
   const bag = [...pool];
   const count = 3;
@@ -135,7 +135,12 @@ export function gradeYear(state: AirlineState, ci: number, goals: YearGoal[]): R
   const margin = a.revenue > 0 ? a.profit / a.revenue : a.profit >= 0 ? 0 : -1;
   const value = companyValue(state, ci);
   const growth = a.startValue > 0 ? value / a.startValue - 1 : value > a.startValue ? 0.1 : -0.1;
-  const lf = a.seats > 0 ? a.pax / a.seats : 0;
+  // 화물 전문 회사는 화물칸이 찬 정도로
+  const months = state.ledger.filter((l) => Math.floor(l.t / 12) === a.year).map((l) => l.companies[ci]).filter(Boolean);
+  const cargoT = months.reduce((x, r) => x + (r.cargoT ?? 0), 0);
+  const cargoCap = months.reduce((x, r) => x + (r.cargoCap ?? 0), 0);
+  const cargoLf = c.model === 'cargo' && cargoCap > 0 ? cargoT / cargoCap : null;
+  const lf = cargoLf ?? (a.seats > 0 ? a.pax / a.seats : 0);
   const met = goals.filter((g) => g.done).length;
   let score = 0;
   score += margin > 0.28 ? 3 : margin > 0.18 ? 2 : margin > 0.06 ? 1 : 0;
@@ -150,10 +155,11 @@ export function gradeYear(state: AirlineState, ci: number, goals: YearGoal[]): R
   else if (margin < 0.05) bad.push(`이익률이 ${Math.round(margin * 100)}%로 낮아요 — 비용이 큰 노선을 살펴보세요`);
   if (growth > 0.15) good.push(`회사 가치가 ${Math.round(growth * 100)}% 자랐어요`);
   else if (growth < 0) bad.push('회사 가치가 줄었어요');
-  if (lf > 0.92) good.push(`탑승률 ${Math.round(lf * 100)}%로 좌석을 알차게 채웠어요`);
-  else if (a.seats > 0 && lf < 0.75) bad.push(`탑승률이 ${Math.round(lf * 100)}%예요 — 빈 좌석이 많아요`);
+  const what = cargoLf !== null ? '화물칸' : '좌석';
+  if (lf > 0.92) good.push(`${cargoLf !== null ? '화물칸' : '탑승률'} ${Math.round(lf * 100)}%로 ${what}을 알차게 채웠어요`);
+  else if ((a.seats > 0 || cargoLf !== null) && lf < 0.75) bad.push(`${cargoLf !== null ? '화물칸이' : '탑승률이'} ${Math.round(lf * 100)}%예요 — 빈 ${what}이 많아요`);
   if (a.xfer > 5000) good.push(`갈아타는 손님 ${Math.round(a.xfer / 1000)}천 명이 우리 허브를 지나갔어요`);
-  if (a.seats === 0) bad.push('아직 띄운 비행기가 없어요');
+  if (a.seats === 0 && cargoLf === null) bad.push('아직 띄운 비행기가 없어요');
   const text = [good[0], bad[0] ?? good[1]].filter(Boolean).join('. ') + (good.length + bad.length ? '.' : '조용한 한 해였어요.');
   return { year: a.year, grade, text, met, total: goals.length };
 }

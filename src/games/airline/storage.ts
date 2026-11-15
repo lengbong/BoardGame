@@ -2,6 +2,7 @@ import { loadJson, removeKey, saveJson } from '../../lib/storage';
 import { SEAT_KIND_OPTIONS } from '../common/players';
 import type { Speed } from '../common/speed';
 import { MODEL } from './aircraft';
+import { newCabin } from './cabin';
 import { CHALLENGE } from './challenges';
 import { CITY, REGIONS } from './cities';
 import { REAL_AIRLINE } from './realAirlines';
@@ -9,7 +10,7 @@ import { STAFF_GROUPS, emptyStaff, staffNeed } from './staff';
 import { defaultTimes } from './timetable';
 import { DEFAULT_OPTIONS, GOAL_VALUES } from './rules';
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { AirlineOptions, AirlineSetup, AirlineState, Choice, Company, GoalKind, ModKind, YearAcc } from './types';
+import type { AirlineOptions, AirlineSetup, AirlineState, BizModel, Choice, Company, GoalKind, ModKind, YearAcc } from './types';
 
 const SAVE_KEY = 'family-boardgame.airline.save.v1';
 const SETUP_KEY = 'family-boardgame.airline.setup.v1';
@@ -55,6 +56,11 @@ export function parseOptions(v: unknown): AirlineOptions {
   };
 }
 
+function parseModels(v: unknown): (BizModel | null)[] {
+  if (!Array.isArray(v)) return [null, null, null, null];
+  return [0, 1, 2, 3].map((i) => (['full', 'lcc', 'cargo'].includes(v[i]) ? (v[i] as BizModel) : null));
+}
+
 function parseAirlines(v: unknown): (string | null)[] {
   const list = Array.isArray(v) ? v : [];
   return [0, 1, 2, 3].map((i) => (typeof list[i] === 'string' && REAL_AIRLINE[list[i]] ? (list[i] as string) : null));
@@ -94,7 +100,8 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
   if (!Array.isArray(k.routes)) return false;
   const routeIds = new Set<number>();
   for (const r of k.routes) {
-    if (!isObj(r) || !isInt(r.id) || r.id >= nextId || !isCity(r.a) || !isCity(r.b) || r.a === r.b || !isInt(r.fare) || r.fare < -30 || r.fare > 30 || !isInt(r.since)) return false;
+    if (!isObj(r) || !isInt(r.id) || r.id >= nextId || !isCity(r.a) || !isCity(r.b) || r.a === r.b || !isInt(r.fare) || r.fare < -50 || r.fare > 30 || !isInt(r.since)) return false;
+    for (const key of ['fareC', 'fareF', 'fareK'] as const) if (r[key] !== undefined && !(isInt(r[key]) && r[key]! >= -30 && r[key]! <= 30)) return false;
     if (!Array.isArray(r.times) || r.times.length !== 4 || !r.times.every((x) => isNum(x) && x >= 0)) return false;
     if (r.stats !== null && !(isObj(r.stats) && isNum(r.stats.lf) && isNum(r.stats.profit) && isInt(r.stats.lossStreak) && isNum(r.stats.onTime) && isNum(r.stats.cancel) && Array.isArray(r.stats.hist))) return false;
     routeIds.add(r.id);
@@ -104,6 +111,8 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
     if (!isObj(p) || !isInt(p.id) || p.id >= nextId || typeof p.model !== 'string' || !MODEL[p.model] || typeof p.leased !== 'boolean') return false;
     if (!isNum(p.rent) || !isNum(p.deposit) || !isInt(p.since) || !Array.isArray(p.legs)) return false;
     if (!p.legs.every((l) => isObj(l) && isInt(l.route) && routeIds.has(l.route) && isInt(l.freq) && l.freq >= 1 && l.freq <= 28)) return false;
+    if (p.cabin !== undefined && !(isObj(p.cabin) && isInt(p.cabin.f) && isInt(p.cabin.c) && isInt(p.cabin.y) && p.cabin.f >= 0 && p.cabin.c >= 0 && p.cabin.y >= 0)) return false;
+    if (p.refit !== undefined && !isInt(p.refit)) return false;
   }
   if (!Array.isArray(k.orders) || !k.orders.every((o) => isObj(o) && isInt(o.id) && o.id < nextId && typeof o.model === 'string' && !!MODEL[o.model] && isInt(o.due) && isNum(o.price))) return false;
   if (!Array.isArray(k.mods) || !k.mods.every((m) => isObj(m) && isInt(m.id) && MOD_KINDS.includes(m.kind) && isNum(m.value) && isInt(m.until) && typeof m.label === 'string')) return false;
@@ -112,6 +121,8 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
   if (!isInt(k.maint) || k.maint < 1 || k.maint > 5 || !isInt(k.crewReserve) || k.crewReserve < 0 || k.crewReserve > 2 || !isNum(k.onTime)) return false;
   if (!isObj(k.staff) || !STAFF_GROUPS.every((g) => isObj(k.staff[g]) && isInt(k.staff[g].have) && k.staff[g].have >= 0 && isNum(k.staff[g].pay) && Array.isArray(k.staff[g].pipe) && k.staff[g].pipe.every((p) => isObj(p) && isInt(p.n) && isInt(p.ready)))) return false;
   if (!isNum(k.morale) || typeof k.academy !== 'boolean' || !isNum(k.shock)) return false;
+  if (!BIZ_MODELS.includes(k.model)) return false;
+  if (k.modelNext !== null && !(isObj(k.modelNext) && BIZ_MODELS.includes(k.modelNext.model) && isInt(k.modelNext.t))) return false;
   if (k.partner !== null && !isInt(k.partner)) return false;
   if (!Array.isArray(k.goals) || !k.goals.every((g) => isObj(g) && GOAL_KINDS.includes(g.kind) && isNum(g.target) && typeof g.text === 'string' && isObj(g.reward) && isNum(g.reward.cash) && isNum(g.reward.rep) && (g.done === null || typeof g.done === 'boolean'))) return false;
   if (!isObj(k.acc) || !ACC_KEYS.every((key) => isNum((k.acc as unknown as Record<string, unknown>)[key]))) return false;
@@ -130,7 +141,7 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
 export function isValidState(v: unknown): v is AirlineState {
   if (!isObj(v)) return false;
   const s = v as unknown as AirlineState;
-  if (s.version !== 3) return false;
+  if (s.version !== 4) return false;
   if (!isInt(s.nextId) || !isInt(s.t) || !isInt(s.startT) || s.startT > s.t || s.q !== Math.floor(s.t / 3) || s.startQ !== Math.floor(s.startT / 3) || !isInt(s.startYear)) return false;
   if (s.phase !== 'manage' && s.phase !== 'gameover') return false;
   if (!Array.isArray(s.companies) || s.companies.length < 1 || s.companies.length > 4) return false;
@@ -211,6 +222,43 @@ export function migrateV2(v: unknown): unknown {
   return s;
 }
 
+const BIZ_MODELS: BizModel[] = ['full', 'lcc', 'cargo'];
+
+/** 결산에 4판에서 생긴 값(화물·부가 수입·등급 손님)이 없으면 0으로 */
+function fillReport(r: unknown): void {
+  if (!isObj(r)) return;
+  for (const key of ['cargo', 'ancillary', 'cargoT', 'cargoCap', 'paxF', 'paxC', 'revF', 'revC']) if (!isNum(r[key])) r[key] = 0;
+}
+
+/**
+ * 3판 저장을 4판(좌석 등급·사업 모델·화물)으로 바꾼다: 모든 회사는 풀서비스, 비행기는 그때의 흔한 2등급 좌석,
+ * 등급·화물 운임 조정은 0, 결산의 새 값은 0.
+ */
+export function migrateV3(v: unknown): unknown {
+  if (!isObj(v) || v.version !== 3 || !Array.isArray(v.companies)) return v;
+  const s = JSON.parse(JSON.stringify(fillMissing(v))) as Record<string, any>;
+  const year = isInt(s.t) ? Math.floor(s.t / 12) : 2000;
+  s.version = 4;
+  for (const c of s.companies) {
+    if (!isObj(c)) continue;
+    c.model = 'full';
+    c.modelNext = null;
+    for (const p of Array.isArray(c.planes) ? c.planes : []) {
+      if (!isObj(p) || typeof p.model !== 'string' || !MODEL[p.model]) continue;
+      if (!isObj(p.cabin)) p.cabin = newCabin(p.model, 'full', year);
+    }
+    for (const r of Array.isArray(c.routes) ? c.routes : []) {
+      if (!isObj(r)) continue;
+      r.fareC = 0;
+      r.fareF = 0;
+      r.fareK = 0;
+    }
+  }
+  const reports = [s.report, s.qReport, ...(Array.isArray(s.ledger) ? s.ledger : []), ...(Array.isArray(s.years) ? s.years : [])];
+  for (const rep of reports) if (isObj(rep) && Array.isArray(rep.companies)) for (const r of rep.companies) fillReport(r);
+  return s;
+}
+
 /** 3판 저장에 나중에 생긴 값(직원·시간표)이 없으면 채운다 */
 export function fillMissing(v: unknown): unknown {
   if (!isObj(v) || v.version !== 3 || !Array.isArray(v.companies)) return v;
@@ -240,13 +288,13 @@ export function fillMissing(v: unknown): unknown {
 export function parseSaved(v: unknown): SavedAirlineGame | null {
   if (!isObj(v)) return null;
   const saved = { ...(v as unknown as SavedAirlineGame) };
-  saved.state = fillMissing(migrateV2(saved.state)) as AirlineState;
+  saved.state = migrateV3(fillMissing(migrateV2(saved.state))) as AirlineState;
   if (!isValidSetup(saved.setup) || !isValidState(saved.state)) return null;
   const options = parseOptions(saved.state.options);
   // 항공사 자료가 바뀌어 없어진 항공사는 가상 항공사로 (이름·색은 그대로)
   const companies = saved.state.companies.map((c) => ({ ...c, airline: c.airline && REAL_AIRLINE[c.airline] ? c.airline : null, color: c.color ?? null }));
   return {
-    setup: { ...saved.setup, hubs: saved.setup.hubs ?? [null, null, null, null], airlines: parseAirlines(saved.setup.airlines), options: parseOptions(saved.setup.options) },
+    setup: { ...saved.setup, hubs: saved.setup.hubs ?? [null, null, null, null], airlines: parseAirlines(saved.setup.airlines), models: parseModels(saved.setup.models), options: parseOptions(saved.setup.options) },
     state: { ...saved.state, companies, options, events: [] },
     savedAt: isNum(saved.savedAt) ? saved.savedAt : Date.now(),
   };
@@ -272,7 +320,7 @@ export function clearSavedAirlineGame(): void {
 export function loadAirlineSetup(): AirlineSetup {
   const s = loadJson<AirlineSetup>(SETUP_KEY);
   if (!isValidSetup(s)) return DEFAULT_SETUP;
-  return { seats: s.seats, options: parseOptions(s.options), hubs: s.hubs ?? [null, null, null, null], airlines: parseAirlines(s.airlines) };
+  return { seats: s.seats, options: parseOptions(s.options), hubs: s.hubs ?? [null, null, null, null], airlines: parseAirlines(s.airlines), models: parseModels(s.models) };
 }
 
 export function saveAirlineSetup(setup: AirlineSetup): void {

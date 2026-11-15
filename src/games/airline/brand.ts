@@ -124,7 +124,8 @@ export function pickColors(list: { seat: number; airline: string | null }[]): (s
       const seats = [seat, 0, 1, 2, 3].map((i) => SEAT_COLORS[i as 0].main);
       const seatPick = seats.find(far) ?? seats[0];
       chosen.push(seatPick);
-      return a ? seatPick : null;
+      // 실제 항공사가 아닌 회사도 앞 회사 색과 겹치면 다른 자리 색을 쓴다
+      return a || seatPick !== SEAT_COLORS[seat as 0].main ? seatPick : null;
     }
     chosen.push(pick);
     return pick;

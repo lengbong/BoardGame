@@ -1,10 +1,12 @@
-import { MODEL, availableModels, leadTime } from './aircraft';
+import { MODEL, availableModels, capacityText, isFreighter, leadTime } from './aircraft';
+import { PRESET_INFO, cabinOf, presetBlocker, presetCabin, presetOf, refitCost } from './cabin';
 import { Planner, bestTimes, suggestRoutes, openSuggestion } from './ai';
 import { ACADEMY_COST, STAFF_GROUPS, STAFF_INFO, hireCost, hireTime, staffCap, staffNeed, staffPipe } from './staff';
 import { weather } from './calendar';
-import { CITY, REGIONS, airportClass, dist } from './cities';
+import { CITIES, CITY, REGIONS, airportClass, citySize, dist } from './cities';
+import { tradeOf } from './cargo';
 import { goalProgress } from './goals';
-import { CRISIS_MONTHS, MAX_ROUTES, applyAction, bestFreq, buyBlocker, creditLimit, fmtFine, fmtMoney, idlePlanes, planeById, routeById, usedBlocker } from './rules';
+import { CRISIS_MONTHS, MAX_ROUTES, applyAction, bestFreq, branchBlocker, buyBlocker, creditLimit, fmtFine, fmtMoney, idlePlanes, planeById, routeById, usedBlocker } from './rules';
 import {
   MAINT_COST,
   MAINT_NAMES,
@@ -20,7 +22,7 @@ import {
   planeHours,
 } from './simulate';
 import { monthOf, yearOf } from './time';
-import type { AirlineState, Company } from './types';
+import type { AirlineState, CabinPreset, Company } from './types';
 
 /**
  * 경영 비서: 지난달 숫자를 보고 할 만한 일을 3~5개 골라 준다.
@@ -68,6 +70,22 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   // 1. 첫 노선 (아직 비행기가 없을 때)
   if (c.routes.length === 0 || c.planes.length === 0) {
     const cand = suggestRoutes(state, ci, 1)[0];
+    if (!cand && c.model === 'cargo') {
+      // 화물 전문인데 본사에서 짐이 적으면: 무역 도시에 지점부터
+      const year = yearOf(state.q);
+      const trade = CITIES.filter((x) => !c.branches.includes(x.id) && !branchBlocker(state, ci, x.id)).sort((x, y) => tradeOf(y.id) * citySize(y, year) - tradeOf(x.id) * citySize(x, year))[0];
+      if (trade) {
+        out.push({
+          key: `tradehub-${trade.id}`,
+          icon: '📦',
+          title: `무역 도시 ${trade.name}에 지점 열기`,
+          detail: `${cityName(c.hub)}에서는 화물기로 남을 노선이 마땅치 않아요. 짐이 많이 오가는 ${trade.name}에 지점을 열면 그곳을 잇는 화물 노선을 권할게요.`,
+          label: '지점 열기',
+          apply: (s2) => afterAct(s2, ci, { type: 'openBranch', city: trade.id }),
+          weight: 880,
+        });
+      }
+    }
     if (cand) {
       out.push({
         key: `first-${cand.a}-${cand.b}`,
@@ -236,7 +254,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
         key: `upgrade-${p.id}`,
         icon: '⬆️',
         title: `${routeName(c, p.legs[0].route)}: ${MODEL[p.model].name} → ${MODEL[rep.model].name}`,
-        detail: `좌석이 꽉 찼어요. ${MODEL[p.model].name}(${MODEL[p.model].seats}석)${p.leased ? '를 돌려주고' : '를 팔고'} 더 큰 ${MODEL[rep.model].name}(${MODEL[rep.model].seats}석)를 리스해 띄우면 달 이익 약 +${fmtMoney(rep.gain)}.`,
+        detail: `좌석이 꽉 찼어요. ${MODEL[p.model].name}(${capacityText(MODEL[p.model])})${p.leased ? '를 돌려주고' : '를 팔고'} 더 큰 ${MODEL[rep.model].name}(${capacityText(MODEL[rep.model])})를 리스해 띄우면 달 이익 약 +${fmtMoney(rep.gain)}.`,
         gain: rep.gain,
         label: '큰 비행기로',
         apply: (s2) => replacePlane(s2, ci, p.id, rep.model),
@@ -265,6 +283,112 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
         apply: (s2) => afterAct(s2, ci, { type: 'buy', model: m.id }),
         weight: 180 + f.gain * 4,
       });
+    }
+  }
+
+  // 4¾. 등급 운임·화물 운임: 큰 노선 몇 개에서 자리가 아주 차거나 비면 (한 달에 하나만)
+  {
+    const big = [...c.routes].filter((r) => r.stats && (r.stats.cls || r.stats.cargo)).sort((x, y) => (y.stats?.revenue ?? 0) - (x.stats?.revenue ?? 0)).slice(0, 5);
+    let done = false;
+    for (const r of big) {
+      if (done) break;
+      const st = r.stats!;
+      const tries: { cls: 'c' | 'f' | 'k'; name: string; lf: number; cur: number }[] = [];
+      if (st.cls && st.cls.seats[1] > 0) tries.push({ cls: 'c', name: '비즈니스', lf: st.cls.pax[1] / st.cls.seats[1], cur: r.fareC ?? 0 });
+      if (st.cls && st.cls.seats[0] > 0) tries.push({ cls: 'f', name: '일등석', lf: st.cls.pax[0] / st.cls.seats[0], cur: r.fareF ?? 0 });
+      if (st.cargo && st.cargo.cap > 0) tries.push({ cls: 'k', name: '화물', lf: st.cargo.t / st.cargo.cap, cur: r.fareK ?? 0 });
+      for (const x of tries) {
+        const next = x.lf > 0.97 ? Math.min(30, x.cur + 10) : x.lf < 0.5 ? Math.max(-30, x.cur - 10) : x.cur;
+        if (next === x.cur) continue;
+        const now = estimateExisting(state, ci, r).profit;
+        const e = estimateExisting(state, ci, r, x.cls === 'c' ? { fareC: next } : x.cls === 'f' ? { fareF: next } : { fareK: next });
+        const gain = e.profit - now;
+        if (gain < 0.5) continue;
+        out.push({
+          key: `cls-${x.cls}-${r.id}`,
+          icon: x.cls === 'k' ? '📦' : x.cls === 'f' ? '👑' : '💼',
+          title: `${routeName(c, r.id)} ${x.name} 운임 ${next > x.cur ? '올리기' : '내리기'}`,
+          detail: `${x.name} ${x.cls === 'k' ? '짐칸' : '좌석'}이 ${Math.round(x.lf * 100)}% 찼어요. ${next > 0 ? '+' : ''}${next}%로 바꾸면 달 이익 약 +${fmtMoney(gain)}.`,
+          gain,
+          label: `${x.name} ${next > 0 ? '+' : ''}${next}%`,
+          apply: (s2) => afterAct(s2, ci, { type: 'setClassFare', route: r.id, cls: x.cls, fare: next }),
+          weight: 150 + gain * 2,
+        });
+        done = true;
+        break;
+      }
+    }
+  }
+
+  // 4⅞. 좌석 배치: 사업 손님이 많은 먼 노선에 이코노미뿐인 비행기, 관광 노선에 빈 윗등급 좌석 (풀서비스만, 한 달에 하나)
+  if (c.model === 'full') {
+    const year = yearOf(state.q);
+    const cands = c.planes.filter((p) => p.legs.length === 1 && p.refit !== state.t && !isFreighter(MODEL[p.model]) && MODEL[p.model].body !== 'sst').slice(0, 24);
+    let best: { p: (typeof cands)[number]; preset: CabinPreset; gain: number } | null = null;
+    for (const p of cands) {
+      const m = MODEL[p.model];
+      const r = routeById(c, p.legs[0].route);
+      if (!r || !r.stats) continue;
+      const cab = cabinOf(p);
+      const cur = presetOf(m, cab, year);
+      const premEmpty = r.stats.cls && r.stats.cls.seats[0] + r.stats.cls.seats[1] > 0 && (r.stats.cls.pax[0] + r.stats.cls.pax[1]) / (r.stats.cls.seats[0] + r.stats.cls.seats[1]) < 0.4;
+      const ecoOnly = cab.f + cab.c === 0;
+      const options: CabinPreset[] = premEmpty ? ['eco'] : ecoOnly && dist(r.a, r.b) > 2500 ? ['two', 'three'] : cur === 'two' && dist(r.a, r.b) > 7000 && m.seats >= 250 ? ['three'] : [];
+      for (const preset of options) {
+        if (presetBlocker(m, preset, year, c.model)) continue;
+        const now = estimateExisting(state, ci, r).profit;
+        const planes = draftsOf(state, c, r.id).map((d, i) => (c.planes.filter((x) => legFreq(x, r.id) > 0)[i]?.id === p.id ? { ...d, cabin: presetCabin(m, preset, year) } : d));
+        const gain = estimateExisting(state, ci, r, { planes }).profit - now;
+        // 한 달 쉬는 값과 바꾸는 값을 1년이면 되찾을 만큼
+        if (gain * 12 > refitCost(m) + Math.max(0, now) + 6 && (!best || gain > best.gain)) best = { p, preset, gain };
+      }
+    }
+    if (best) {
+      const m = MODEL[best.p.model];
+      out.push({
+        key: `cabin-${best.p.id}`,
+        icon: '💺',
+        title: `${m.name} 좌석을 ‘${PRESET_INFO[best.preset].name}’으로`,
+        detail: `${routeName(c, best.p.legs[0].route)} 손님에 더 맞는 배치예요. 바꾸는 데 ${fmtMoney(refitCost(m))}이 들고 이번 달은 쉬지만, 그 뒤로 달 이익이 약 +${fmtMoney(best.gain)} 늘어요.`,
+        gain: best.gain,
+        label: '좌석 바꾸기',
+        apply: (s2) => afterAct(s2, ci, { type: 'setCabin', plane: best!.p.id, preset: best!.preset }),
+        weight: 120 + best.gain * 2,
+      });
+    }
+  }
+
+  // 4⁹⁄₁₀. 짐칸이 꽉 찬 무역 노선에는 화물기 (풀서비스·화물 전문)
+  if (c.model !== 'lcc' && yearOf(state.q) >= 1965) {
+    const busy = [...c.routes].filter((r) => r.stats?.cargo && r.stats.cargo.cap > 0 && r.stats.cargo.t / r.stats.cargo.cap > 0.95).sort((x, y) => (y.stats!.cargo!.rev ?? 0) - (x.stats!.cargo!.rev ?? 0))[0];
+    if (busy) {
+      const before = estimateExisting(state, ci, busy).profit;
+      const d = dist(busy.a, busy.b);
+      const year = yearOf(state.q);
+      let pick: { model: string; freq: number; gain: number } | null = null;
+      for (const m of availableModels(year)) {
+        if (!isFreighter(m) || m.range < d || airportClass(CITY[busy.a], year) < m.runway || airportClass(CITY[busy.b], year) < m.runway) continue;
+        if (buyBlocker(state, ci, m.id, true)) continue;
+        for (const freq of [2, 4]) {
+          if (freq > maxFreq(m, d)) continue;
+          const pl = planner(state, ci);
+          const gain = estimateExisting(state, ci, busy, { planes: pl.draftOf(busy.id, null, 0, { model: m.id, freq, fixed: newLeaseFixed(state, m) }) }).profit - before;
+          if (!pick || gain > pick.gain) pick = { model: m.id, freq, gain };
+        }
+      }
+      if (pick && pick.gain > 2) {
+        const pk = pick;
+        out.push({
+          key: `freighter-${busy.id}`,
+          icon: '📦',
+          title: `${routeName(c, busy.id)}에 ${MODEL[pk.model].name} 화물기`,
+          detail: `짐칸이 꽉 차서 화물을 놓치고 있어요. ${MODEL[pk.model].name}(${MODEL[pk.model].cargo}톤)를 리스해 주 ${pk.freq}회 띄우면 달 이익 약 +${fmtMoney(pk.gain)}.`,
+          gain: pk.gain,
+          label: '화물기 리스',
+          apply: (s2) => leaseAndAssign(s2, ci, pk.model, busy.id, pk.freq),
+          weight: 160 + pk.gain * 2,
+        });
+      }
     }
   }
 
@@ -610,7 +734,10 @@ function bestLeaseFor(state: AirlineState, ci: number, routeId: number): { model
   const before = estimateExisting(state, ci, r).profit;
   const pl = planner(state, ci);
   let best: { model: string; freq: number; gain: number } | null = null;
+  // 손님 노선에는 여객기를, 화물기만 나는 노선에는 화물기를 (화물기 보태기는 따로 권한다)
+  const cargoOnly = c.planes.some((p) => legFreq(p, r.id) > 0) && c.planes.filter((p) => legFreq(p, r.id) > 0).every((p) => isFreighter(MODEL[p.model]));
   for (const m of availableModels(year)) {
+    if (isFreighter(m) !== cargoOnly) continue;
     if (m.range < d || airportClass(CITY[r.a], year) < m.runway || airportClass(CITY[r.b], year) < m.runway) continue;
     if (buyBlocker(state, ci, m.id, true)) continue;
     const freq = Math.max(1, Math.round(maxFreq(m, d) * 0.6));
@@ -644,7 +771,9 @@ function replacementFor(state: AirlineState, ci: number, planeId: number): { mod
   const onRoute = c.planes.filter((x) => legFreq(x, r.id) > 0);
   const drafts = draftsOf(state, c, r.id);
   let best: { model: string; gain: number } | null = null;
+  const freighter = isFreighter(MODEL[p.model]);
   for (const m of availableModels(year)) {
+    if (isFreighter(m) !== freighter) continue;
     if (m.range < d || airportClass(CITY[r.a], year) < m.runway || airportClass(CITY[r.b], year) < m.runway) continue;
     if (buyBlocker(state, ci, m.id, true)) continue;
     const draft = drafts.filter((_, i) => onRoute[i]?.id !== p.id);

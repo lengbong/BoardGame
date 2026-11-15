@@ -1,4 +1,4 @@
-import type { BodyType, ModelDef } from './types';
+import type { BizModel, BodyType, ModelDef } from './types';
 
 /**
  * 실제 기종 목록. 좌석(흔한 2등급 배치)·항속 거리·속도·처음 운항한 해·생산을 마친 해는 대략 맞춘 근삿값이고,
@@ -78,6 +78,31 @@ const ROWS: Row[] = [
   ['a350-1000', 'A350-1000', 'Airbus', 'wide', 2, 369, 16100, 900, 2018, 2040, 2700, 7.0, 640, 3, 5, '가장 멀리 나는 쌍발기 가운데 하나'],
 ];
 
+/**
+ * 화물기 (실제로 있던 화물 전용 기종, 값은 근삿값. 여객기를 고친 중고 화물기가 많아 값은 여객기보다 싸게 어림했다). [id, 이름, 만든 곳, 바탕 여객기, 짐(톤), 항속(짐을 가득 실었을 때 km),
+ * 처음 운항한 해, 생산 끝 해, 값, 연료, 운항비(승무원이 조종사뿐이라 여객기보다 싸다), 활주로, 설명]
+ */
+type FreighterRow = [id: string, name: string, maker: string, base: string, cargo: number, range: number, intro: number, end: number, price: number, burn: number, hourCost: number, runway: 1 | 2 | 3 | 4, note: string];
+
+const FREIGHTERS: FreighterRow[] = [
+  ['dc8-55f', 'DC-8-55F', 'Douglas', 'dc8-50', 40, 7500, 1963, 1972, 640, 7.4, 250, 3, '초기 제트 화물기'],
+  ['b707-320c', '707-320C', 'Boeing', 'b707', 40, 7500, 1963, 1979, 650, 7.3, 250, 3, '손님과 짐을 바꿔 싣는 707 화물형'],
+  ['b727-100c', '727-100C', 'Boeing', 'b727-100', 18, 4000, 1966, 1972, 330, 4.5, 180, 2, '중거리 작은 화물형'],
+  ['b747-200f', '747-200F', 'Boeing', 'b747-200', 110, 9000, 1972, 1991, 1700, 14.0, 550, 3, '코가 위로 열리는 점보 화물기'],
+  ['dc8-73f', 'DC-8-73F', 'Douglas', 'dc8-63', 50, 8000, 1982, 1990, 700, 7.0, 260, 3, '새 엔진을 달아 고친 장거리 화물기'],
+  ['b727-200f', '727-200F', 'Boeing', 'b727-200', 25, 4000, 1983, 1995, 380, 5.0, 200, 2, '여객기를 고친 중거리 화물기'],
+  ['b757-200f', '757-200F', 'Boeing', 'b757', 39, 5800, 1987, 2004, 800, 4.3, 250, 2, '특송 회사가 많이 쓴 좁은 동체 화물기'],
+  ['dc10-30f', 'DC-10-30F', 'McDonnell Douglas', 'dc10', 70, 7400, 1979, 1988, 1150, 9.6, 410, 3, '세 발 엔진 넓은 동체 화물기'],
+  ['md11f', 'MD-11F', 'McDonnell Douglas', 'md11', 90, 8500, 1991, 2001, 1300, 8.9, 400, 3, '오래 사랑받은 장거리 화물기'],
+  ['b747-400f', '747-400F', 'Boeing', 'b747-400', 112, 9800, 1993, 2009, 2000, 12.2, 540, 3, '대양을 건너는 대표 화물기'],
+  ['a300-600f', 'A300-600F', 'Airbus', 'a300-600', 48, 5500, 1994, 2007, 900, 6.3, 320, 2, '중거리 넓은 동체 화물기'],
+  ['b767-300f', '767-300F', 'Boeing', 'b767-300', 52, 7000, 1995, 2040, 1100, 6.3, 320, 2, '특송 회사가 많이 쓰는 중형 화물기'],
+  ['b737-300f', '737-300F', 'Boeing', 'b737-300', 18, 3500, 2000, 2020, 300, 3.1, 170, 1, '작은 공항에도 가는 개조 화물기'],
+  ['b777f', '777F', 'Boeing', 'b777-200', 102, 9800, 2009, 2040, 2100, 8.2, 420, 3, '연료를 아끼는 쌍발 대형 화물기'],
+  ['a330-200f', 'A330-200F', 'Airbus', 'a330-300', 65, 7800, 2010, 2021, 1350, 6.2, 340, 3, '중장거리 쌍발 화물기'],
+  ['b747-8f', '747-8F', 'Boeing', 'b747-400', 134, 9500, 2011, 2023, 2400, 13.0, 560, 3, '가장 많이 싣는 점보 화물기'],
+];
+
 /** 같은 계열 (조종사 자격과 부품을 함께 써서 여러 대를 굴리면 정비·승무원비가 줄어든다) */
 const FAMILY: Record<string, string> = {
   f27: 'F27',
@@ -128,7 +153,7 @@ const FAMILY: Record<string, string> = {
   'a220-300': 'A220',
 };
 
-export const MODELS: readonly ModelDef[] = ROWS.map(([id, name, maker, body, engines, seats, range, speed, intro, end, price, burn, hourCost, runway, comfort, note]) => ({
+const PASSENGER: ModelDef[] = ROWS.map(([id, name, maker, body, engines, seats, range, speed, intro, end, price, burn, hourCost, runway, comfort, note]) => ({
   id,
   name,
   maker,
@@ -146,9 +171,47 @@ export const MODELS: readonly ModelDef[] = ROWS.map(([id, name, maker, body, eng
   comfort,
   family: FAMILY[id] ?? id,
   note,
+  cargo: 0,
 }));
 
+const PAX_BY_ID: Record<string, ModelDef> = Object.fromEntries(PASSENGER.map((m) => [m.id, m]));
+
+export const MODELS: readonly ModelDef[] = [
+  ...PASSENGER,
+  ...FREIGHTERS.map(([id, name, maker, base, cargo, range, intro, end, price, burn, hourCost, runway, note]): ModelDef => {
+    const b = PAX_BY_ID[base];
+    return { id, name, maker, body: b.body, engines: b.engines, seats: 0, range, speed: b.speed, intro, end, price, burn, hourCost, runway, comfort: b.comfort, family: b.family, note, cargo, base };
+  }),
+];
+
 export const MODEL: Record<string, ModelDef> = Object.fromEntries(MODELS.map((m) => [m.id, m]));
+
+/** 화물기인지 */
+export function isFreighter(m: ModelDef): boolean {
+  return m.cargo > 0 && m.seats === 0;
+}
+
+/** 사업 모델에 맞는 기종인지 (화물 전문은 화물기만, 저가항공은 보통 여객기만) */
+export function fitsBizModel(model: BizModel, m: ModelDef): boolean {
+  if (model === 'cargo') return isFreighter(m);
+  if (model === 'lcc') return !isFreighter(m) && m.body !== 'sst';
+  return true;
+}
+
+/** 크기를 견주는 좌석 수 (화물기는 짐 1톤을 3석쯤으로) */
+export function sizeSeats(m: ModelDef): number {
+  return m.seats > 0 ? m.seats : m.cargo * 3;
+}
+
+/** '180석' 또는 '화물 112톤' */
+export function capacityText(m: ModelDef): string {
+  return isFreighter(m) ? `화물 ${m.cargo}톤` : `${m.seats}석`;
+}
+
+/** 사진·그림에 쓰는 기종 id (화물기는 바탕 여객기) */
+export function photoKey(m: ModelDef): string {
+  return m.base ?? m.id;
+}
 
 /** 그 해에 새로 사거나 리스할 수 있는 기종 */
 export function availableModels(year: number): ModelDef[] {
@@ -192,7 +255,8 @@ export const BODY_INFO: Record<BodyType, { name: string }> = {
 export type SizeClass = 'small' | 'medium' | 'large';
 
 export function sizeClass(m: ModelDef): SizeClass {
-  if (m.seats < 120) return 'small';
-  if (m.seats < 230) return 'medium';
+  const n = sizeSeats(m);
+  if (n < 120) return 'small';
+  if (n < 230) return 'medium';
   return 'large';
 }

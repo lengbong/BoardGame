@@ -1,5 +1,5 @@
 import { withJosa } from '../../lib/korean';
-import { availableModels, MODEL } from './aircraft';
+import { availableModels, fitsBizModel, MODEL } from './aircraft';
 import { CITIES, CITY, REGION_INFO, airportClass, citySize, dist, pairKey } from './cities';
 import { FIXED_EVENTS } from './events';
 import { companyValue, isIdle, orderPrice, slotCapacity, slotsUsed } from './simulate';
@@ -124,16 +124,16 @@ const SCENARIOS: Scenario[] = [
   },
   {
     id: 'maker',
-    when: (x) => availableModels(x.year).some((m) => x.year - m.intro <= 2),
+    when: (x) => availableModels(x.year).some((m) => x.year - m.intro <= 2 && fitsBizModel(x.c.model, m)),
     build: (x) => {
-      const m = pickOne(availableModels(x.year).filter((mm) => x.year - mm.intro <= 2), x.rng);
+      const m = pickOne(availableModels(x.year).filter((mm) => x.year - mm.intro <= 2 && fitsBizModel(x.c.model, mm)), x.rng);
       if (!m) return null;
       const price = Math.round(orderPrice(x.state, m, x.c) * 0.8);
       return {
         scenario: 'maker',
         icon: '🛩️',
         title: `제작사의 ${m.name} 할인 제안`,
-        text: `${m.maker}가 새 기종 ${m.name}(${m.seats}석, ${m.range.toLocaleString()}km)을 먼저 사 주면 20% 깎아 주겠대요.`,
+        text: `${m.maker}가 새 기종 ${m.name}(${m.cargo > 0 ? `화물 ${m.cargo}톤` : `${m.seats}석`}, ${m.range.toLocaleString()}km)을 먼저 사 주면 20% 깎아 주겠대요.`,
         options: [
           { label: '1대 주문하기', desc: `${price.toLocaleString()}억 (20% 할인) · 인도까지 몇 달 걸려요`, cost: price, ai: 0.9, effects: [{ kind: 'order', model: m.id, discount: 0.2 }] },
           { label: '할인권만 받기', desc: `1년 동안 ${m.name}을 주문하면 10% 할인`, cost: 0, ai: 0.6, effects: [{ kind: 'mod', mod: { kind: 'discount', value: 0.9, until: x.t + 12, model: m.id, label: `${m.name} 10% 할인권` } }] },

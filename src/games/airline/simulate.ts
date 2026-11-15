@@ -1,4 +1,6 @@
-import { MODEL, commonalityMult, launchDiscount } from './aircraft';
+import { MODEL, commonalityMult, isFreighter, launchDiscount, sizeSeats } from './aircraft';
+import { allocateClasses, yBizMult, cabinOf, cabinSpace, classFareMult, classShares, newCabin, premiumAppeal, seatsOf } from './cabin';
+import { CARGO_HANDLING, RATE_K, cargoDemand, oilCargoMult, planeCargoT, splitCargo } from './cargo';
 import { bizMonthMult, leisureMonthMult, weather } from './calendar';
 import { AIRPORT_INFO, CITY, FEE_INFO, REGIONS, airportClass, citySize, dist, pairIndex, pairKey } from './cities';
 import { effectMults, fixedEventMult, priceMult } from './events';
@@ -9,7 +11,9 @@ import type { WeatherCause } from './calendar';
 import type { Rng } from '../../lib/random';
 import type {
   AirlineState,
+  BizModel,
   Business,
+  Cabin,
   Company,
   CompanyReport,
   Mod,
@@ -265,6 +269,13 @@ export function isIdle(p: Plane): boolean {
   return !p.legs.some((l) => l.freq > 0);
 }
 
+/** 저가항공은 비행기를 빨리 돌려 같은 시간에 더 많이 난다 (비행시간을 이만큼으로 센다) */
+export const LCC_TURN = 0.87;
+
+export function turnMult(c: Pick<Company, 'model'>): number {
+  return c.model === 'lcc' ? LCC_TURN : 1;
+}
+
 /** 비행기가 한 주에 쓰는 비행시간 (exceptRoute는 빼고 센다) */
 export function planeHours(c: Company, p: Plane, exceptRoute?: number): number {
   const m = MODEL[p.model];
@@ -274,7 +285,7 @@ export function planeHours(c: Company, p: Plane, exceptRoute?: number): number {
     const r = routeOf(c, l.route);
     if (r) h += 2 * legHours(m, dist(r.a, r.b)) * l.freq;
   }
-  return h;
+  return h * turnMult(c);
 }
 
 /** 비행시간으로 따진 이 비행기의 이 노선 최대 왕복 수 */
@@ -283,7 +294,7 @@ export function maxFreqFor(c: Company, p: Plane, routeId: number): number {
   if (!r) return 0;
   const m = MODEL[p.model];
   const left = WEEK_HOURS - planeHours(c, p, routeId);
-  return Math.max(0, Math.min(MAX_FREQ, Math.floor(left / (2 * legHours(m, dist(r.a, r.b))) + 1e-9)));
+  return Math.max(0, Math.min(MAX_FREQ, Math.floor(left / (2 * legHours(m, dist(r.a, r.b)) * turnMult(c)) + 1e-9)));
 }
 
 /** 비행시간 사용률 0~1 */
@@ -425,6 +436,10 @@ interface OfferPlane {
   model: ModelDef;
   freq: number;
   age: number;
+  /** 좌석 (화물기는 모두 0) */
+  cabin: Cabin;
+  /** 한 편에 싣는 화물 (톤) */
+  cargo: number;
 }
 
 /** 한 회사가 두 도시 사이에 내놓은 운항 */
@@ -436,6 +451,12 @@ export interface Offer {
   /** 시간대가 손님에게 맞는 정도 (사업·관광). 없으면 1 */
   fit?: { biz: number; leisure: number };
   planes: OfferPlane[];
+  /** 비즈니스·일등석·화물 운임 조정 (%) */
+  fareC?: number;
+  fareF?: number;
+  fareK?: number;
+  /** 사업 모델 (없으면 풀서비스) */
+  model?: BizModel;
 }
 
 export interface OfferResult {
@@ -447,14 +468,42 @@ export interface OfferResult {
   seats: number;
   /** 같은 두 도시의 회사들 가운데 손님 비율 */
   share: number;
-  /** 주간 운임 수입 (양방향, 억) */
+  /** 주간 운임 수입 (양방향, 억). 화물·부가 수입은 따로 */
   revenue: number;
   /** 평균 한 번 나는 시간 (갈아타기 계산용) */
   hours: number;
+  /** 등급마다 [일등석, 비즈니스, 이코노미] 한 방향 주간 손님·좌석, 주간 수입 (양방향, 억) */
+  cls: { pax: [number, number, number]; seats: [number, number, number]; rev: [number, number, number] };
+  /** 화물: 한 방향 주간 톤·싣는 톤, 주간 수입 (양방향, 억) */
+  cargoT: number;
+  cargoCap: number;
+  cargoRev: number;
+  /** 부가 수입 (주간, 억) */
+  ancillary: number;
 }
 
 const A0_BIZ = 1.2;
 const A0_LEISURE = 1.5;
+/** 저가항공을 고르는 사업 손님 배수 */
+export const LCC_BIZ = 0.78;
+
+/** 규제가 풀리며 저가항공이 자란 정도 (1978년 0 → 2000년 1) */
+export function lccEra(year: number): number {
+  return Math.max(0, Math.min(1, (year - 1978) / 22));
+}
+
+/** 저가항공 손님 한 명의 부가 수입 (이코노미 기본 운임에 견준 비율) */
+export function ancillaryRate(year: number): number {
+  return interp(
+    [
+      [1985, 0.02],
+      [2000, 0.05],
+      [2010, 0.12],
+      [2020, 0.15],
+    ],
+    year,
+  );
+}
 
 /** 평판·광고로 정해지는 회사의 기본 매력 */
 function quality(c: Company, a: string, b: string): number {
@@ -479,7 +528,7 @@ function attraction(
   b: string,
   offer: Offer,
   bestHours: number,
-): { biz: number; leisure: number; seats: number; hours: number; premium: number } {
+): { biz: number; leisure: number; seats: number; hours: number; premium: number; cabin: Cabin } {
   const c = state.companies[offer.company];
   const d = dist(a, b);
   let freq = 0;
@@ -487,17 +536,24 @@ function attraction(
   let comfortSum = 0;
   let hoursSum = 0;
   let premiumSum = 0;
+  const cabin: Cabin = { f: 0, c: 0, y: 0 };
   for (const p of offer.planes) {
-    if (p.freq <= 0) continue;
-    const cap = p.model.seats * p.freq;
+    const n = seatsOf(p.cabin);
+    if (p.freq <= 0 || n <= 0) continue;
+    const cap = n * p.freq;
     freq += p.freq;
     seats += cap;
-    const comfort = 0.775 + 0.075 * p.model.comfort - Math.min(0.15, 0.008 * p.age);
+    cabin.f += p.cabin.f * p.freq;
+    cabin.c += p.cabin.c * p.freq;
+    cabin.y += p.cabin.y * p.freq;
+    // 좌석을 촘촘히 놓으면 덜 편하다
+    const dense = Math.max(0, n / cabinSpace(p.model) - 1.02) * 0.5;
+    const comfort = 0.775 + 0.075 * p.model.comfort - Math.min(0.15, 0.008 * p.age) - dense;
     comfortSum += comfort * cap;
     hoursSum += legHours(p.model, d) * cap;
     premiumSum += (p.model.body === 'sst' ? SST_PREMIUM : 1) * cap;
   }
-  if (freq === 0) return { biz: 0, leisure: 0, seats: 0, hours: 0, premium: 1 };
+  if (freq === 0) return { biz: 0, leisure: 0, seats: 0, hours: 0, premium: 1, cabin };
   // 조직 만족도가 낮으면 서비스가 덜 친절하다
   const comfort = (comfortSum / seats) * (0.9 + 0.05 * (c.service - 1)) * (0.96 + 0.08 * ((c.morale ?? 65) / 100));
   const hours = hoursSum / seats;
@@ -518,12 +574,15 @@ function attraction(
   const common = quality(c, a, b) * hub * partnerBonus(state, c, a, b);
   // 지연·결항이 잦으면 손님(특히 사업 손님)이 덜 고른다
   const rel = Math.max(0.8, Math.min(1.06, 1 + 0.8 * ((offer.rel ?? 0.85) - 0.85)));
+  // 사업 손님은 윗등급 좌석이 있는 회사를 반기고, 라운지·마일리지가 없는 저가항공은 덜 고른다
+  const cabinBiz = premiumAppeal(cabin, d) * (offer.model === 'lcc' ? LCC_BIZ : 1);
   return {
-    biz: freq ** 0.6 * p ** -0.8 * common * comfort ** 1.5 * speed * bizBonus * rel ** 1.5 * (offer.fit?.biz ?? 1) * demandMult(c, a, b, state.t, 'biz'),
+    biz: freq ** 0.6 * p ** -0.8 * common * comfort ** 1.5 * speed * bizBonus * rel ** 1.5 * (offer.fit?.biz ?? 1) * cabinBiz * demandMult(c, a, b, state.t, 'biz'),
     leisure: freq ** 0.5 * p ** -1.8 * common * comfort ** 0.5 * speed ** 0.3 * leisureBonus * rel * (offer.fit?.leisure ?? 1) * demandMult(c, a, b, state.t, 'leisure'),
     seats,
     hours,
     premium,
+    cabin,
   };
 }
 
@@ -534,8 +593,12 @@ export interface SplitResult {
 }
 
 /** 두 도시 사이 손님을 회사들이 나눈다 (좌석이 모자라면 남은 손님 절반은 다른 회사로) */
-export function splitMarketFull(state: AirlineState, a: string, b: string, offers: Offer[], demand = pairDemand(state, a, b)): SplitResult {
+export function splitMarketFull(state: AirlineState, a: string, b: string, offers: Offer[], demand0 = pairDemand(state, a, b)): SplitResult {
   const d = dist(a, b);
+  const year = yearOf(state.q);
+  // 저가항공이 날면 싼 표를 찾는 관광 손님이 새로 생긴다 (규제가 풀린 뒤로 점점)
+  const stim = offers.some((o) => o.model === 'lcc' && o.planes.some((x) => x.freq > 0 && seatsOf(x.cabin) > 0)) ? 1 + 0.7 * lccEra(year) : 1;
+  const demand = stim > 1 ? { biz: demand0.biz, leisure: demand0.leisure * stim } : demand0;
   let bestHours = Infinity;
   for (const o of offers) for (const p of o.planes) if (p.freq > 0) bestHours = Math.min(bestHours, legHours(p.model, d));
   if (!Number.isFinite(bestHours)) bestHours = 0;
@@ -564,19 +627,52 @@ export function splitMarketFull(state: AirlineState, a: string, b: string, offer
       gotL[i] += addL;
     }
   }
-  const total = gotB.reduce((s, x) => s + x, 0) + gotL.reduce((s, x) => s + x, 0);
+  // 등급마다 나누고 수입을 셈한다
   const fare = baseFare(d, state.q);
+  const sh = classShares(year, d);
+  const cm = classFareMult(d);
+  const anc = ancillaryRate(year);
+  const yBiz = yBizMult(year);
+  const cls = offers.map((o, i) => allocateClasses(attrs[i].cabin, gotB[i], gotL[i], sh, o.fareC ?? 0, o.fareF ?? 0));
+  const total = cls.reduce((s, x) => s + x.f + x.c + x.y, 0);
+  // 화물
+  const cargoOffers = offers.map((o) => {
+    let cap = 0;
+    let fcap = 0;
+    for (const p of o.planes) {
+      if (p.freq <= 0 || p.cargo <= 0) continue;
+      cap += p.cargo * p.freq;
+      if (isFreighter(p.model)) fcap += p.cargo * p.freq;
+    }
+    return { cap, fareK: o.fareK ?? 0, freighter: cap > 0 ? fcap / cap : 0 };
+  });
+  const anyCargo = cargoOffers.some((x) => x.cap > 0);
+  const cargoGot = anyCargo ? splitCargo(cargoDemand(state, a, b) * oilCargoMult(state.oil ?? 1), cargoOffers) : offers.map(() => 0);
+  // 화물 운임은 가까워도 아주 싸지지는 않는다 (싣고 내리는 값이 있으니)
+  const rate = (d < 2500 ? baseFare(2500, state.q) : fare) * RATE_K;
   const results = offers.map((o, i) => {
     const p = (1 + o.fare / 100) * attrs[i].premium;
-    const pax = gotB[i] + gotL[i];
+    const x = cls[i];
+    const pax = x.f + x.c + x.y;
+    const want = gotB[i] + gotL[i];
+    const k = want > 0 ? pax / want : 0;
+    const revF = (x.f * fare * cm.f * (1 + (o.fareF ?? 0) / 100) * 2) / 10000;
+    const revC = (x.c * fare * cm.c * (1 + (o.fareC ?? 0) / 100) * 2) / 10000;
+    const revY = ((x.yBiz * yBiz + (x.y - x.yBiz)) * fare * p * 2) / 10000;
+    const seat = attrs[i].cabin;
     return {
       company: o.company,
-      biz: gotB[i],
-      leisure: gotL[i],
+      biz: gotB[i] * k,
+      leisure: gotL[i] * k,
       seats: attrs[i].seats,
       share: total > 0 ? pax / total : 0,
-      revenue: ((gotB[i] * BIZ_PREMIUM + gotL[i]) * fare * p * 2) / 10000,
+      revenue: revF + revC + revY,
       hours: attrs[i].hours,
+      cls: { pax: [x.f, x.c, x.y] as [number, number, number], seats: [seat.f, seat.c, seat.y] as [number, number, number], rev: [revF, revC, revY] as [number, number, number] },
+      cargoT: cargoGot[i],
+      cargoCap: cargoOffers[i].cap,
+      cargoRev: (cargoGot[i] * rate * (1 + cargoOffers[i].fareK / 100) * 2) / 10000,
+      ancillary: o.model === 'lcc' ? (x.y * fare * anc * 2) / 10000 : 0,
     };
   });
   return { results, unserved: { biz: A0_BIZ / (sumB + A0_BIZ), leisure: A0_LEISURE / (sumL + A0_LEISURE) } };
@@ -617,6 +713,9 @@ export interface CostCtx {
   salesMult: number;
   crewMult: number;
   families: Map<string, number>;
+  /** 저가항공 (승무원·서비스·판매 수수료가 싸다) */
+  lcc: boolean;
+  year: number;
 }
 
 /** 정비 수준(1~5)마다 승무원·정비비 배수 */
@@ -635,12 +734,14 @@ export function costCtx(state: Pick<AirlineState, 't' | 'oil'>, c: Company): Cos
     fuelMult: modMult(c, 'fuel', state.t),
     serviceMult: modMult(c, 'service', state.t),
     salesMult: modMult(c, 'sales', state.t),
-    crewMult: modMult(c, 'crew', state.t) * (MAINT_COST[c.maint] ?? 1) * (RESERVE_COST[c.crewReserve] ?? 1),
+    crewMult: modMult(c, 'crew', state.t) * (MAINT_COST[c.maint] ?? 1) * (RESERVE_COST[c.crewReserve] ?? 1) * (c.model === 'lcc' ? 0.75 : 1),
     families: familyCounts(c),
+    lcc: c.model === 'lcc',
+    year: yearOf(Math.floor(state.t / 3)),
   };
 }
 
-/** 노선 하나의 달 비용 (억). paxWeek: 한 방향 주간 손님, revenue: 달 운임 수입 */
+/** 노선 하나의 달 비용 (억). paxWeek: 한 방향 주간 손님, revenue: 달 운임 수입, cargo: 한 방향 주간 화물 톤과 달 화물 수입 */
 export function routeCost(
   state: Pick<AirlineState, 'q' | 't' | 'oil' | 'companies'>,
   ci: number,
@@ -650,6 +751,7 @@ export function routeCost(
   paxWeek: number,
   revenue: number,
   ctx: CostCtx = costCtx(state, state.companies[ci]),
+  cargo: { t: number; rev: number } = { t: 0, rev: 0 },
 ): RouteCost {
   const d = dist(a, b);
   const c = state.companies[ci];
@@ -666,17 +768,19 @@ export function routeCost(
     fuel += trips * 2 * d * p.model.burn * (1 + 0.006 * p.age) * FUEL_PRICE * ctx.oil * ctx.fuelMult;
     const common = commonalityMult(ctx.families.get(p.model.family) ?? 1);
     crew += trips * 2 * (legHours(p.model, d) * CREW_MULT + CYCLE_HOURS) * p.model.hourCost * (1 + 0.025 * p.age) * common * ctx.crewMult * (1 - STAFF_SHARE);
-    airport += trips * (feeA + feeB) * (p.model.seats / 150) ** 0.7;
+    airport += trips * (feeA + feeB) * (sizeSeats(p.model) / 150) ** 0.7 * (ctx.lcc ? 0.8 : 1);
   }
   const paxQ = paxWeek * 2 * WEEKS;
-  airport += paxQ * HANDLING;
-  const service = paxQ * (0.3 + 0.00025 * d) * SERVICE_COST[c.service] * ctx.serviceMult;
+  airport += paxQ * HANDLING + cargo.t * 2 * WEEKS * CARGO_HANDLING;
+  const service = paxQ * (0.3 + 0.00025 * d) * SERVICE_COST[c.service] * ctx.serviceMult * (ctx.lcc ? 0.6 : 1);
   // 만 원 → 억 원
   fuel /= 10000;
   crew /= 10000;
   airport /= 10000;
   const serviceE = service / 10000;
-  const sales = revenue * SALES_RATE * ctx.salesMult;
+  // 저가항공은 표를 직접 판다 (인터넷 시대에는 더)
+  const direct = ctx.lcc ? (ctx.year >= 1995 ? 0.5 : 0.75) : 1;
+  const sales = revenue * SALES_RATE * ctx.salesMult * direct + cargo.rev * SALES_RATE * 0.6;
   return { fuel, crew, airport, service: serviceE, sales, lease, total: fuel + crew + airport + serviceE + sales + lease };
 }
 
@@ -686,6 +790,8 @@ export interface DraftPlane {
   model: string;
   freq: number;
   age?: number;
+  /** 좌석 (없으면 이 회사가 새로 들일 때의 좌석) */
+  cabin?: Cabin;
   /** 이 노선 몫의 리스료·보험 (분기). 없으면 새 리스기 한 대를 통째로 쓴다고 보고 셈한다 */
   fixed?: number;
 }
@@ -700,12 +806,32 @@ export interface RouteEstimate {
   /** 한 방향 주간 잠재 손님 (모든 회사·다른 탈것 포함) */
   demandWeek: number;
   share: number;
-  /** 분기 값 (억) */
+  /** 달 수입 (억): 운임 + 화물 + 부가 수입 */
   revenue: number;
   cost: RouteCost;
   profit: number;
   /** 같은 두 도시를 나는 다른 회사 수 */
   rivals: number;
+  /** 등급마다 [일등석, 비즈니스, 이코노미] 한 방향 주간 손님·좌석, 달 수입 */
+  cls: { pax: [number, number, number]; seats: [number, number, number]; rev: [number, number, number] };
+  /** 화물: 한 방향 주간 톤·싣는 톤, 달 수입 */
+  cargoT: number;
+  cargoCap: number;
+  cargoRev: number;
+  /** 달 부가 수입 */
+  ancillary: number;
+}
+
+/** 운임 조정 묶음 (이코노미·비즈니스·일등석·화물) */
+export interface Fares {
+  y: number;
+  c: number;
+  f: number;
+  k: number;
+}
+
+export function routeFares(r: Pick<Route, 'fare' | 'fareC' | 'fareF' | 'fareK'>): Fares {
+  return { y: r.fare, c: r.fareC ?? 0, f: r.fareF ?? 0, k: r.fareK ?? 0 };
 }
 
 /** 노선의 운항 (lost: 결항·기체 점검으로 못 뜬 비율) */
@@ -714,10 +840,24 @@ function offerFromRoute(state: Pick<AirlineState, 't' | 'companies'>, ci: number
   const planes: OfferPlane[] = [];
   for (const p of c.planes) {
     const f = legFreq(p, route.id);
-    if (f > 0) planes.push({ model: MODEL[p.model], freq: f * (1 - lost), age: planeAge(state, p) });
+    // 좌석을 바꾸느라 정비고에 들어간 비행기는 이번 달 날지 않는다
+    if (f > 0 && p.refit !== state.t) {
+      const m = MODEL[p.model];
+      planes.push({ model: m, freq: f * (1 - lost), age: planeAge(state, p), cabin: cabinOf(p), cargo: planeCargoT(m, c.model) });
+    }
   }
   const d = dist(route.a, route.b);
-  return { company: ci, fare: route.fare, planes, rel: route.stats?.onTime, fit: route.times ? timeFit(legalTimes(route, yearOf(Math.floor(state.t / 3))), d) : undefined };
+  return {
+    company: ci,
+    fare: route.fare,
+    fareC: route.fareC ?? 0,
+    fareF: route.fareF ?? 0,
+    fareK: route.fareK ?? 0,
+    model: c.model,
+    planes,
+    rel: route.stats?.onTime,
+    fit: route.times ? timeFit(legalTimes(route, yearOf(Math.floor(state.t / 3))), d) : undefined,
+  };
 }
 
 /** 회사마다 두 도시 → 노선 (회사 객체가 바뀌지 않으면 다시 만들지 않는다) */
@@ -762,21 +902,37 @@ export function estimateRoute(
   b: string,
   planes: readonly DraftPlane[],
   fare: number,
-  extra?: { xfer?: number; xferRev?: number; rel?: number; times?: readonly number[] },
+  extra?: { xfer?: number; xferRev?: number; rel?: number; times?: readonly number[]; fares?: Partial<Fares> },
 ): RouteEstimate {
+  const c = state.companies[ci];
   const offers = rivalOffers(state, ci, a, b);
   const models = planes.map((p) => MODEL[p.model]);
-  const times = extra?.times ?? defaultTimes(a, b, yearOf(state.q));
-  const mine: Offer = { company: ci, fare, planes: planes.map((p, i) => ({ model: models[i], freq: p.freq, age: p.age ?? 0 })), rel: extra?.rel, fit: timeFit(times, dist(a, b)) };
+  const year = yearOf(state.q);
+  const times = extra?.times ?? defaultTimes(a, b, year);
+  const mine: Offer = {
+    company: ci,
+    fare,
+    fareC: extra?.fares?.c ?? 0,
+    fareF: extra?.fares?.f ?? 0,
+    fareK: extra?.fares?.k ?? 0,
+    model: c.model,
+    planes: planes.map((p, i) => ({ model: models[i], freq: p.freq, age: p.age ?? 0, cabin: p.cabin ?? newCabin(p.model, c.model, year), cargo: planeCargoT(models[i], c.model) })),
+    rel: extra?.rel,
+    fit: timeFit(times, dist(a, b)),
+  };
   const demand = pairDemand(state, a, b);
   const results = splitMarket(state, a, b, [...offers, mine], demand);
   const r = results[results.length - 1];
   const local = r.biz + r.leisure;
-  const room = Math.max(0, r.seats - local);
+  // 저가항공은 갈아타는 손님을 받지 않는다
+  const room = c.model === 'lcc' ? 0 : Math.max(0, r.seats - local);
   const xfer = extra?.xfer ? Math.min(room, extra.xfer) : 0;
   const xferRev = extra?.xfer && extra.xfer > 0 ? ((extra.xferRev ?? 0) * xfer) / extra.xfer : 0;
   const paxWeek = local + xfer;
-  const revenue = (r.revenue + xferRev) * WEEKS;
+  const ticket = (r.revenue + xferRev) * WEEKS;
+  const cargoRev = r.cargoRev * WEEKS;
+  const ancillary = r.ancillary * WEEKS;
+  const revenue = ticket + cargoRev + ancillary;
   const cost = routeCost(
     state,
     ci,
@@ -784,19 +940,27 @@ export function estimateRoute(
     b,
     planes.map((p, i) => ({ model: models[i], freq: p.freq, age: p.age ?? 0, fixed: p.fixed ?? newLeaseFixed(state, models[i]) })),
     paxWeek,
-    revenue,
+    ticket,
+    undefined,
+    { t: r.cargoT, rev: cargoRev },
   );
+  const lfPax = r.seats > 0 ? paxWeek / r.seats : 0;
   return {
     paxWeek,
     xferWeek: xfer,
     seatsWeek: r.seats,
-    lf: r.seats > 0 ? paxWeek / r.seats : 0,
+    lf: r.seats > 0 ? lfPax : r.cargoCap > 0 ? r.cargoT / r.cargoCap : 0,
     demandWeek: demand.biz + demand.leisure,
     share: r.share,
     revenue,
     cost,
     profit: revenue - cost.total,
     rivals: offers.length,
+    cls: { pax: r.cls.pax, seats: r.cls.seats, rev: r.cls.rev.map((x) => x * WEEKS) as [number, number, number] },
+    cargoT: r.cargoT,
+    cargoCap: r.cargoCap,
+    cargoRev,
+    ancillary,
   };
 }
 
@@ -806,7 +970,7 @@ export function draftsOf(state: Pick<AirlineState, 't'>, c: Company, routeId: nu
   for (const p of c.planes) {
     const f = legFreq(p, routeId);
     if (f <= 0) continue;
-    out.push({ model: p.model, freq: f, age: planeAge(state, p), fixed: fixedShare(c, p, routeId) });
+    out.push({ model: p.model, freq: p.refit === state.t ? 0 : f, age: planeAge(state, p), fixed: fixedShare(c, p, routeId), cabin: cabinOf(p) });
   }
   return out;
 }
@@ -820,11 +984,17 @@ export function fixedShare(c: Company, p: Plane, routeId: number): number {
 }
 
 /** 지금 노선 그대로의 어림 (지난 분기의 갈아타는 손님도 그대로 탄다고 본다) */
-export function estimateExisting(state: AirlineState, ci: number, route: Route, override?: { fare?: number; planes?: DraftPlane[]; times?: readonly number[] }): RouteEstimate {
+export function estimateExisting(
+  state: AirlineState,
+  ci: number,
+  route: Route,
+  override?: { fare?: number; fareC?: number; fareF?: number; fareK?: number; planes?: DraftPlane[]; times?: readonly number[] },
+): RouteEstimate {
   const c = state.companies[ci];
   const planes = override?.planes ?? draftsOf(state, c, route.id);
   const times = override?.times ?? legalTimes(route, yearOf(state.q));
-  const extra = route.stats ? { xfer: route.stats.xfer, xferRev: route.stats.xferRev, rel: route.stats.onTime, times } : { times };
+  const fares = { c: override?.fareC ?? route.fareC ?? 0, f: override?.fareF ?? route.fareF ?? 0, k: override?.fareK ?? route.fareK ?? 0 };
+  const extra = route.stats ? { xfer: route.stats.xfer, xferRev: route.stats.xferRev, rel: route.stats.onTime, times, fares } : { times, fares };
   return estimateRoute(state, ci, route.a, route.b, planes, override?.fare ?? route.fare, extra);
 }
 
@@ -843,6 +1013,14 @@ export interface RouteRun {
   freq: number;
   xfer: number;
   xferRev: number;
+  cls: OfferResult['cls'];
+  cargoT: number;
+  cargoCap: number;
+  /** 주간 화물·부가 수입 (양방향, 억) */
+  cargoRev: number;
+  ancillary: number;
+  /** 저가항공 (갈아타는 손님을 받지 않는다) */
+  lcc: boolean;
 }
 
 export interface RouteMonthStats {
@@ -855,6 +1033,8 @@ export interface RouteMonthStats {
   xferRev: number;
   onTime: number;
   cancel: number;
+  cls: { pax: [number, number, number]; seats: [number, number, number]; rev: [number, number, number] };
+  cargo: { t: number; cap: number; rev: number };
 }
 
 export interface QuarterOutcome {
@@ -914,7 +1094,8 @@ interface Conn {
  */
 function assignTransfers(state: AirlineState, runs: RouteRun[], unserved: Map<number, { biz: number; leisure: number }>): TransferReport[] {
   const byCompany = new Map<number, RouteRun[]>();
-  for (const r of runs) if (r.freq > 0) byCompany.set(r.ci, [...(byCompany.get(r.ci) ?? []), r]);
+  // 저가항공·화물기 노선은 갈아타는 손님을 받지 않는다
+  for (const r of runs) if (r.freq > 0 && r.seats > 0 && !r.lcc) byCompany.set(r.ci, [...(byCompany.get(r.ci) ?? []), r]);
   /** 출발지–도착지마다 네트워크별 가장 짧은 연결 */
   const options = new Map<number, Conn[]>();
   for (const group of networks(state)) {
@@ -1219,8 +1400,26 @@ export function computeMonth(state: AirlineState, rng?: Rng): QuarterOutcome {
     const split = splitMarketFull(state, a, b, offers);
     unserved.set(pairIndex(a, b), split.unserved);
     split.results.forEach((res, k) => {
-      const freq = offers[k].planes.reduce((s, p) => s + p.freq, 0);
-      runs.push({ ci: res.company, route: routes[k], seats: res.seats, biz: res.biz, leisure: res.leisure, share: res.share, revenue: res.revenue, hours: res.hours, freq, xfer: 0, xferRev: 0 });
+      const freq = offers[k].planes.reduce((s, p) => s + (seatsOf(p.cabin) > 0 ? p.freq : 0), 0);
+      runs.push({
+        ci: res.company,
+        route: routes[k],
+        seats: res.seats,
+        biz: res.biz,
+        leisure: res.leisure,
+        share: res.share,
+        revenue: res.revenue,
+        hours: res.hours,
+        freq,
+        xfer: 0,
+        xferRev: 0,
+        cls: res.cls,
+        cargoT: res.cargoT,
+        cargoCap: res.cargoCap,
+        cargoRev: res.cargoRev,
+        ancillary: res.ancillary,
+        lcc: offers[k].model === 'lcc',
+      });
     });
   }
   // 2) 갈아타는 손님
@@ -1250,13 +1449,17 @@ export function computeMonth(state: AirlineState, rng?: Rng): QuarterOutcome {
     for (const p of c.planes) {
       const f = legFreq(p, run.route.id);
       if (f <= 0) continue;
-      planes.push({ model: MODEL[p.model], freq: f * keep, age: planeAge(state, p), fixed: fixedShare(c, p, run.route.id) });
-      seatSum += MODEL[p.model].seats * f;
-      freqSum += f;
+      const fly = p.refit === state.t ? 0 : f;
+      planes.push({ model: MODEL[p.model], freq: fly * keep, age: planeAge(state, p), fixed: fixedShare(c, p, run.route.id) });
+      seatSum += sizeSeats(MODEL[p.model]) * fly;
+      freqSum += fly;
     }
     const paxWeek = run.biz + run.leisure + run.xfer;
-    const revenue = (run.revenue + run.xferRev) * WEEKS;
-    const cost = routeCost(state, ci, a, b, planes, paxWeek, revenue, ctxs[ci]);
+    const ticket = (run.revenue + run.xferRev) * WEEKS;
+    const cargoRev = run.cargoRev * WEEKS;
+    const ancillary = run.ancillary * WEEKS;
+    const revenue = ticket + cargoRev + ancillary;
+    const cost = routeCost(state, ci, a, b, planes, paxWeek, ticket, ctxs[ci], { t: run.cargoT, rev: cargoRev });
     const pax = paxWeek * 2 * WEEKS;
     const rep = reports[ci];
     // 일손 부족 결항을 운항 사건에 더한다
@@ -1271,7 +1474,15 @@ export function computeMonth(state: AirlineState, rng?: Rng): QuarterOutcome {
     // 지연·결항 보상, 돌아간 비행 비용
     const seatsPer = freqSum > 0 ? seatSum / freqSum : 150;
     const disrupt = o ? o.late * seatsPer * 0.00012 + o.cancelled * seatsPer * 0.0012 + o.diverted * (0.15 + seatsPer * 0.0012) : 0;
-    rep.ticket += revenue;
+    rep.ticket += ticket;
+    rep.cargo += cargoRev;
+    rep.ancillary += ancillary;
+    rep.cargoT += run.cargoT * 2 * WEEKS;
+    rep.cargoCap += run.cargoCap * 2 * WEEKS;
+    rep.paxF += run.cls.pax[0] * 2 * WEEKS;
+    rep.paxC += run.cls.pax[1] * 2 * WEEKS;
+    rep.revF += run.cls.rev[0] * WEEKS;
+    rep.revC += run.cls.rev[1] * WEEKS;
     rep.fuel += cost.fuel;
     rep.crew += cost.crew;
     rep.airport += cost.airport;
@@ -1303,7 +1514,9 @@ export function computeMonth(state: AirlineState, rng?: Rng): QuarterOutcome {
     arrivals[ci].set(b, (arrivals[ci].get(b) ?? 0) + leisureM);
     const flown = o ? o.flights - o.cancelled : flights;
     routeStats[ci].set(run.route.id, {
-      lf: run.seats > 0 ? paxWeek / run.seats : 0,
+      lf: run.seats > 0 ? paxWeek / run.seats : run.cargoCap > 0 ? run.cargoT / run.cargoCap : 0,
+      cls: { pax: run.cls.pax, seats: run.cls.seats, rev: run.cls.rev.map((x) => x * WEEKS) as [number, number, number] },
+      cargo: { t: run.cargoT, cap: run.cargoCap, rev: cargoRev },
       pax,
       revenue,
       profit,
@@ -1347,7 +1560,7 @@ export function computeMonth(state: AirlineState, rng?: Rng): QuarterOutcome {
     rep.staff = payroll(state, c, needs[ci]);
     rep.strike = strikes[ci];
     const before =
-      rep.ticket + rep.side - rep.fuel - rep.crew - rep.airport - rep.service - rep.sales - rep.lease - rep.fleet - rep.branch - rep.ads - rep.interest - rep.disrupt - rep.staff;
+      rep.ticket + rep.cargo + rep.ancillary + rep.side - rep.fuel - rep.crew - rep.airport - rep.service - rep.sales - rep.lease - rep.fleet - rep.branch - rep.ads - rep.interest - rep.disrupt - rep.staff;
     rep.tax = Math.max(0, before) * TAX_RATE;
     rep.profit = before - rep.tax;
   }
@@ -1365,10 +1578,23 @@ export function expectedOnTime(state: AirlineState, ci: number, routeId: number)
 }
 
 /** 빈 결산 한 줄 */
+/** 달 수입 합 (운임 + 호텔·여행사 + 화물 + 부가 수입) */
+export function revenueOf(r: Pick<CompanyReport, 'ticket' | 'side' | 'cargo' | 'ancillary'>): number {
+  return r.ticket + r.side + (r.cargo ?? 0) + (r.ancillary ?? 0);
+}
+
 export function emptyReport(): CompanyReport {
   return {
     ticket: 0,
     side: 0,
+    cargo: 0,
+    ancillary: 0,
+    cargoT: 0,
+    cargoCap: 0,
+    paxF: 0,
+    paxC: 0,
+    revF: 0,
+    revC: 0,
     fuel: 0,
     crew: 0,
     airport: 0,
@@ -1411,7 +1637,7 @@ export function sumReports(list: readonly CompanyReport[]): CompanyReport {
   const out = emptyReport();
   if (list.length === 0) return out;
   const add: (keyof CompanyReport)[] = [
-    'ticket', 'side', 'fuel', 'crew', 'airport', 'service', 'sales', 'lease', 'fleet', 'tax', 'branch', 'ads', 'interest', 'profit',
+    'ticket', 'side', 'cargo', 'ancillary', 'cargoT', 'cargoCap', 'paxF', 'paxC', 'revF', 'revC', 'fuel', 'crew', 'airport', 'service', 'sales', 'lease', 'fleet', 'tax', 'branch', 'ads', 'interest', 'profit',
     'pax', 'seats', 'autoLoan', 'pacificPax', 'resortPax', 'sstProfit', 'hubPax', 'xferPax', 'flights', 'late', 'cancelled', 'diverted', 'disrupt', 'staff', 'staffCancelled',
   ];
   for (const r of list) {
@@ -1434,7 +1660,7 @@ export function fleetAge(state: Pick<AirlineState, 't'>, c: Company): number {
   let seats = 0;
   let sum = 0;
   for (const p of c.planes) {
-    const s = MODEL[p.model].seats;
+    const s = sizeSeats(MODEL[p.model]);
     seats += s;
     sum += s * planeAge(state, p);
   }
@@ -1449,10 +1675,10 @@ export function reputationTarget(state: Pick<AirlineState, 't'>, c: Company): nu
   let seats = 0;
   for (const p of c.planes) {
     const m = MODEL[p.model];
-    comfort += m.comfort * m.seats;
-    seats += m.seats;
+    comfort += m.comfort * sizeSeats(m);
+    seats += sizeSeats(m);
   }
-  comfort /= seats;
+  comfort = seats > 0 ? comfort / seats : 3;
   const ageAdj = age < 5 ? 8 : age < 10 ? 2 : age < 16 ? -6 : -14;
   const onTimeAdj = Math.max(-12, Math.min(6, (c.onTime - 0.85) * 80));
   return Math.max(0, Math.min(100, 25 + 9 * c.service + ageAdj + (comfort - 3) * 4 + onTimeAdj));

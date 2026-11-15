@@ -1,4 +1,5 @@
-import { MODEL } from './aircraft';
+import { MODEL, sizeSeats } from './aircraft';
+import { cabinOf, seatsOf } from './cabin';
 import { CITY, citySize, dist } from './cities';
 import { yearOf } from './time';
 import type { AirlineState, Company, StaffGroup, StaffState } from './types';
@@ -108,9 +109,9 @@ function computeNeed(state: Pick<AirlineState, 'q' | 't'>, c: Company): Record<S
     const block = weekHours(c, p.legs, p.model) * weeks;
     const age = Math.max(0, (state.t - p.since) / 12);
     pilot += (block * 2) / 70;
-    cabin += (block * Math.ceil(m.seats / 50)) / 75;
+    cabin += (block * Math.ceil(seatsOf(cabinOf(p)) / 50)) / 75;
     const cycles = p.legs.reduce((s, l) => s + l.freq * 2 * weeks, 0);
-    tech += 5 * (m.seats / 150) ** 0.6 * (1 + 0.02 * age) + cycles * 0.002;
+    tech += 5 * (sizeSeats(m) / 150) ** 0.6 * (1 + 0.02 * age) + cycles * 0.002;
   }
   let ground = 0;
   const year = yearOf(state.q);

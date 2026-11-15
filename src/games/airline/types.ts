@@ -150,7 +150,27 @@ export interface ModelDef {
   /** 같은 계열 (조종사 자격·부품을 함께 쓴다: 정비·승무원비 할인) */
   family: string;
   note: string;
+  /** 화물기 한 편에 싣는 짐 (톤). 여객기는 0 (배 아래 짐칸은 cargo.ts에서 따로 셈한다) */
+  cargo: number;
+  /** 화물기의 바탕이 된 여객기 (사진·그림) */
+  base?: string;
 }
+
+/** 사업 모델: 풀서비스·저가항공·화물 전문 */
+export type BizModel = 'full' | 'lcc' | 'cargo';
+
+/** 비행기 한 대의 좌석: 일등석·비즈니스·이코노미 */
+export interface Cabin {
+  f: number;
+  c: number;
+  y: number;
+}
+
+/** 좌석 배치 본보기 */
+export type CabinPreset = 'three' | 'two' | 'eco' | 'dense';
+
+/** 좌석 등급 */
+export type SeatClass = 'f' | 'c' | 'y';
 
 /** 우리 회사 비행기 한 대 */
 export interface Plane {
@@ -165,6 +185,10 @@ export interface Plane {
   since: number;
   /** 띄우는 노선들 (한 대가 비행시간 안에서 여러 노선을 난다). 비면 쉬는 중 */
   legs: Leg[];
+  /** 좌석 배치 (없으면 흔한 2등급). 화물기는 모두 0 */
+  cabin?: Cabin;
+  /** 좌석을 바꾸느라 정비고에 들어간 달 (그 달에는 날지 않는다) */
+  refit?: number;
 }
 
 /** 비행기 한 대가 한 노선을 한 주에 몇 번 왕복하는지 */
@@ -309,14 +333,22 @@ export interface RouteStats {
   cancel: number;
   /** 최근 열두 달 [탑승률, 이익] (그래프) */
   hist: [number, number][];
+  /** 등급마다 [일등석, 비즈니스, 이코노미]: 한 방향 주간 손님·좌석, 달 수입 */
+  cls?: { pax: [number, number, number]; seats: [number, number, number]; rev: [number, number, number] };
+  /** 화물: 한 방향 주간 톤·싣는 톤, 달 수입 */
+  cargo?: { t: number; cap: number; rev: number };
 }
 
 export interface Route {
   id: number;
   a: string;
   b: string;
-  /** 운임 조정 (%) −30 … +30 */
+  /** 운임 조정 (%) −30 … +30 (이코노미. 저가항공은 −50까지) */
   fare: number;
+  /** 비즈니스·일등석·화물 운임 조정 (%) — 없으면 0 */
+  fareC?: number;
+  fareF?: number;
+  fareK?: number;
   /** 연 달 */
   since: number;
   stats: RouteStats | null;
@@ -406,6 +438,10 @@ export interface Company {
   academy: boolean;
   /** 내보내기·파업으로 생긴 서운함 (만족도를 깎고 달마다 줄어든다) */
   shock: number;
+  /** 사업 모델 (풀서비스·저가항공·화물 전문) */
+  model: BizModel;
+  /** 바꾸는 중인 사업 모델 (t 달에 바뀐다) */
+  modelNext: { model: BizModel; t: number } | null;
   /** 실제 항공사 id (realAirlines.ts). 가상 항공사면 null */
   airline: string | null;
   /** 회사 색 (실제 항공사의 칠 색에서 고른 것). null이면 자리 색 */
@@ -462,6 +498,8 @@ export interface AirlineSetup {
   hubs: (string | null)[];
   /** 자리마다 고른 실제 항공사 id (실제 항공사 모드). null이면 저절로 고른다 */
   airlines: (string | null)[];
+  /** 자리마다 고른 사업 모델 (사람). 없으면 풀서비스, 컴퓨터는 저절로 */
+  models?: (BizModel | null)[];
 }
 
 /** 사건의 효과 (until 달이 되면 없어진다) */
@@ -493,6 +531,18 @@ export interface NewsItem {
 export interface CompanyReport {
   ticket: number;
   side: number;
+  /** 화물 수입 (배 아래 짐칸 + 화물기) */
+  cargo: number;
+  /** 부가 수입 (저가항공의 짐·좌석 지정·기내 판매) */
+  ancillary: number;
+  /** 실은 화물 (톤, 양방향) · 실을 수 있던 화물 (톤) */
+  cargoT: number;
+  cargoCap: number;
+  /** 일등석·비즈니스 손님 (양방향)과 그 수입 */
+  paxF: number;
+  paxC: number;
+  revF: number;
+  revC: number;
   fuel: number;
   crew: number;
   airport: number;
@@ -701,6 +751,12 @@ export type AirlineAction =
   | { type: 'buildAcademy' }
   /** 노선 시간대 나누기 [아침, 낮, 저녁, 밤] */
   | { type: 'setTimes'; route: number; times: [number, number, number, number] }
+  /** 좌석 배치 바꾸기 (돈이 들고 그 달은 날지 않는다) */
+  | { type: 'setCabin'; plane: number; preset: CabinPreset }
+  /** 비즈니스(c)·일등석(f)·화물(k) 운임 조정 */
+  | { type: 'setClassFare'; route: number; cls: 'c' | 'f' | 'k'; fare: number }
+  /** 사업 모델 바꾸기 (돈이 들고 몇 달 뒤에 바뀐다) */
+  | { type: 'setModel'; model: BizModel }
   | { type: 'borrow'; amount: number }
   | { type: 'repay'; amount: number }
   | { type: 'build'; city: string; kind: BusinessKind }
@@ -737,7 +793,7 @@ export type Phase = 'manage' | 'gameover';
 
 export interface AirlineState {
   /** 저장 형식 판 (2판 저장은 3판으로 바꿔 읽는다) */
-  version: 3;
+  version: 4;
   options: AirlineOptions;
   /** 시작한 해 */
   startYear: number;

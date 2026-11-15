@@ -1,4 +1,5 @@
-import { MODEL, availableModels, leadTime } from './aircraft';
+import { MODEL, availableModels, isFreighter, leadTime, sizeSeats } from './aircraft';
+import { RATE_K, cargoDemand, tradeOf } from './cargo';
 import { MAX_ROUTES } from './limits';
 import { ACADEMY_COST, STAFF_GROUPS, hireCost, hireTime, staffNeed, staffPipe } from './staff';
 import { aiChoose, allianceScore } from './choices';
@@ -13,6 +14,9 @@ import {
   fleetCount,
   hireBlocker,
   idlePlanes,
+  fareMin,
+  modelFits,
+  planeLimit,
   planeById,
   proposeBlocker,
   routeBlocker,
@@ -156,8 +160,8 @@ export class Planner {
     const yearsIn = (this.s.q - this.s.startQ) / 4;
     if (!this.normal) return 1;
     if (this.style === 'relaxed') return yearsIn < 2 ? ((this.s.q - this.s.startQ) % 2 === 0 ? 1 : 0) : 1;
-    if (this.style === 'normal') return yearsIn < 1 ? 1 : 2;
-    return 3;
+    if (this.style === 'normal') return yearsIn < 1 ? 2 : 3;
+    return 4;
   }
 
   run(): void {
@@ -169,7 +173,11 @@ export class Planner {
       // 계획 달이 아니면 가볍게: 쉬는 비행기, 아주 차거나 빈 노선의 운임, 광고
       this.quickFares();
       this.useIdlePlanes();
-      if (this.normal) this.setAds();
+      if (this.normal) {
+        this.setAds();
+        // 돈이 넉넉하면 계획하는 달이 아니어도 좋은 노선을 연다 (분기마다 여는 수 안에서)
+        if (this.c.cash - this.reserve() > 300) this.expand(this.maxNewRoutes() - this.openedThisQuarter());
+      }
       return;
     }
     this.tuneRoutes();
@@ -180,6 +188,7 @@ export class Planner {
       this.manageLoans(true);
       this.expand(this.maxNewRoutes() - this.openedThisQuarter());
       this.addCapacity();
+      this.upsizeFleet();
       this.renewFleet();
       this.orderAhead();
       this.setAds();
@@ -243,12 +252,14 @@ export class Planner {
 
   /** 아주 꽉 차거나 많이 빈 노선만 운임을 한 칸 고친다 */
   private quickFares(): void {
-    const cap = this.style === 'relaxed' ? 10 : this.normal ? 25 : 15;
+    const lcc = this.c.model === 'lcc';
+    const cap = lcc ? 10 : this.style === 'relaxed' ? 10 : this.normal ? 30 : 15;
+    const floor = Math.max(fareMin(this.c), lcc ? -45 : -25);
     for (const r of this.c.routes) {
       const st = r.stats;
       if (!st || st.pax <= 0) continue;
       if (st.lf > 0.985 && r.fare + 5 <= cap) this.act({ type: 'setFare', route: r.id, fare: r.fare + 5 });
-      else if (st.lf < 0.5 && r.fare - 5 >= -25) this.act({ type: 'setFare', route: r.id, fare: r.fare - 5 });
+      else if (st.lf < 0.5 && r.fare - 5 >= floor) this.act({ type: 'setFare', route: r.id, fare: r.fare - 5 });
     }
   }
 
@@ -322,7 +333,9 @@ export class Planner {
   }
 
   private tuneRoutes(): void {
-    const fareCap = this.style === 'relaxed' ? 10 : 25;
+    const lcc = this.c.model === 'lcc';
+    const fareCap = lcc ? 10 : this.style === 'relaxed' ? 10 : 30;
+    const fareFloor = lcc ? -45 : -25;
     for (const r0 of [...this.c.routes]) {
       const r = routeById(this.c, r0.id);
       if (!r) continue;
@@ -332,6 +345,7 @@ export class Planner {
         if (this.s.t - r.since >= 6) this.act({ type: 'closeRoute', route: r.id });
         continue;
       }
+      this.tuneClassFares(r.id);
       if (!this.normal) {
         if (st && st.lf >= 0.95 && r.fare < 15) this.act({ type: 'setFare', route: r.id, fare: r.fare + 5 });
         else if (st && st.lf < 0.6 && r.fare > -15) this.act({ type: 'setFare', route: r.id, fare: r.fare - 5 });
@@ -344,8 +358,8 @@ export class Planner {
       const extreme = lf > 0.97 || lf < 0.6;
       const steps = !extreme && (this.s.q + r.id) % 2 === 1 ? [] : lf > 0.97 ? [r.fare + 5, r.fare + 10] : lf < 0.6 ? [r.fare - 10, r.fare - 5] : [r.fare - 5, r.fare + 5];
       let bestProfit = steps.length ? this.estimate(r.id) : 0;
-      for (const f of steps) {
-        if (f < -25 || f > fareCap) continue;
+      for (const f of planes.every((p) => isFreighter(MODEL[p.model])) ? [] : steps) {
+        if (f < fareFloor || f > fareCap) continue;
         const e = estimateExisting(this.s, this.ci, r, { fare: f });
         if (e.profit > bestProfit + 0.2) {
           bestProfit = e.profit;
@@ -384,6 +398,31 @@ export class Planner {
       const after = this.estimate(now.id);
       const fixed = this.c.planes.reduce((sum, p) => sum + (legFreq(p, r.id) > 0 ? fixedShare(this.c, p, r.id) : 0), 0);
       if (after < -fixed * 0.5) this.act({ type: 'closeRoute', route: r.id });
+    }
+  }
+
+  /** 비즈니스·일등석·화물 운임: 자리가 꽉 차면 올리고 많이 비면 내린다 */
+  private tuneClassFares(routeId: number): void {
+    const r = routeById(this.c, routeId);
+    const st = r?.stats;
+    if (!r || !st) return;
+    const step = this.normal ? 10 : 5;
+    const nudge = (cls: 'c' | 'f' | 'k', cur: number, lf: number, has: boolean) => {
+      if (!has) return;
+      const next = lf > 0.97 ? cur + step : lf < 0.5 ? cur - step : cur;
+      const v = Math.max(-30, Math.min(this.normal ? 30 : 15, next));
+      if (v !== cur) this.act({ type: 'setClassFare', route: r.id, cls, fare: v });
+    };
+    if (st.cls) {
+      nudge('f', r.fareF ?? 0, st.cls.seats[0] > 0 ? st.cls.pax[0] / st.cls.seats[0] : 0, st.cls.seats[0] > 0);
+      nudge('c', r.fareC ?? 0, st.cls.seats[1] > 0 ? st.cls.pax[1] / st.cls.seats[1] : 0, st.cls.seats[1] > 0);
+    }
+    if (st.cargo && st.cargo.cap > 0) {
+      const lf = st.cargo.t / st.cargo.cap;
+      const cur = r.fareK ?? 0;
+      const next = lf > 0.95 ? cur + 5 : lf < 0.55 ? cur - 5 : cur;
+      const v = Math.max(-30, Math.min(25, next));
+      if (v !== cur) this.act({ type: 'setClassFare', route: r.id, cls: 'k', fare: v });
     }
   }
 
@@ -455,7 +494,7 @@ export class Planner {
     const p = planeById(this.c, planeId);
     if (!p) return false;
     const m = MODEL[p.model];
-    const lease = this.c.planes.find((x) => x.leased && x.legs.length > 0 && MODEL[x.model].family === m.family && Math.abs(MODEL[x.model].seats - m.seats) < m.seats * 0.3);
+    const lease = this.c.planes.find((x) => x.leased && x.legs.length > 0 && MODEL[x.model].family === m.family && isFreighter(MODEL[x.model]) === isFreighter(m) && Math.abs(sizeSeats(MODEL[x.model]) - sizeSeats(m)) < sizeSeats(m) * 0.3);
     if (!lease) return false;
     const legs = lease.legs.map((l) => ({ ...l }));
     if (!this.act({ type: 'sell', plane: lease.id })) return false;
@@ -497,8 +536,10 @@ export class Planner {
 
   // ---------------------------------------------------------------- 넓히기
 
+  /** 이 회사가 쓸 기종 (사업 모델에 맞게. 풀서비스는 보통 컴퓨터만 1970년 뒤 화물기도 본다) */
   private models(): ModelDef[] {
-    return availableModels(this.year);
+    const c = this.c;
+    return availableModels(this.year).filter((m) => !modelFits(c, m.id) && (!isFreighter(m) || c.model === 'cargo' || (this.normal && this.year >= 1970)));
   }
 
   private fits(m: ModelDef, a: string, b: string): boolean {
@@ -544,9 +585,16 @@ export class Planner {
         const d = dist(a, b);
         if (d < 300 || d > maxRange) continue;
         if (!this.normal && d > 6500) continue;
+        // 저가항공은 짧고 중간 거리만 (긴 노선은 싼 운임으로 버티기 어렵다)
+        if (c.model === 'lcc' && d > 5000) continue;
         if (this.slotsLeft(b) < 2) continue;
         const dem = pairDemand(this.s, a, b);
-        let v = (dem.biz * 1.7 + dem.leisure) * baseFare(d, this.s.q);
+        let v =
+          c.model === 'cargo'
+            ? cargoDemand(this.s, a, b) * RATE_K * baseFare(Math.max(2500, d), this.s.q) * 0.6
+            : c.model === 'lcc'
+              ? (dem.biz * 0.9 + dem.leisure * 1.3) * baseFare(d, this.s.q)
+              : (dem.biz * 1.7 + dem.leisure) * baseFare(d, this.s.q);
         let rivals = 0;
         for (let i = 0; i < this.s.companies.length; i++) {
           const x = this.s.companies[i];
@@ -590,6 +638,7 @@ export class Planner {
     const slotLimit = Math.min(this.slotsLeft(a), this.slotsLeft(b));
     const dem = pairDemand(this.s, a, b);
     const reach = (dem.biz + dem.leisure) * 0.7;
+    const reachT = cargoDemand(this.s, a, b) * 0.45;
     const hubBonus = this.normal && (a === this.c.hub || b === this.c.hub) ? 1.06 : 1;
     // 1단계: 기종마다 알맞은 횟수 하나로 어림한다
     const first: { m: ModelDef; max: number; fit: number; score: number }[] = [];
@@ -607,8 +656,10 @@ export class Planner {
       if (!this.fits(m, a, b)) continue;
       const max = Math.min(maxFreq(m, d), slotLimit);
       if (max < 1) continue;
-      if (m.seats > reach * 1.3 && models.length > 1) continue;
-      const fit = Math.max(1, Math.min(max, Math.round(reach / m.seats)));
+      const freighter = isFreighter(m);
+      if (!freighter && m.seats > reach * 1.3 && models.length > 1) continue;
+      if (freighter && m.cargo > reachT * 1.5 && models.length > 1) continue;
+      const fit = Math.max(1, Math.min(max, Math.round(freighter ? reachT / m.cargo : reach / m.seats)));
       first.push({ m, max, fit, score: tryOne(m, fit) });
     }
     // 2단계: 좋은 기종 몇 개만 다른 횟수도 본다
@@ -658,8 +709,33 @@ export class Planner {
     return this.candList;
   }
 
+  /** 노선 수 한도에 닿으면 가장 못한 노선을 닫고 더 나은 후보를 연다 (석 달에 한 번쯤) */
+  private swapWorstRoute(): void {
+    if (this.c.routes.length < MAX_ROUTES || (this.s.t + this.ci) % 2 !== 0) return;
+    const worst = [...this.c.routes].filter((r) => r.stats && this.s.t - r.since >= 6).sort((x, y) => (x.stats?.profit ?? 0) - (y.stats?.profit ?? 0))[0];
+    if (!worst) return;
+    const cand = this.bestCandidates(4).find((x) => x.profit > (worst.stats?.profit ?? 0) + 6 / Q && x.capital < this.c.cash - this.reserve());
+    if (!cand) return;
+    const freed = this.c.planes.find((p) => p.legs.length === 1 && p.legs[0].route === worst.id && MODEL[p.model].range >= dist(cand.a, cand.b));
+    const before = this.s;
+    const n = this.actions.length;
+    if (!this.act({ type: 'closeRoute', route: worst.id })) return;
+    this.candList = null;
+    if (!this.openCandidate(cand, freed?.id)) {
+      this.s = before;
+      this.actions.length = n;
+    }
+  }
+
   private expand(max: number): void {
+    this.swapWorstRoute();
     if (max <= 0 || this.c.cash - this.reserve() < 30) return;
+    // 화물 전문인데 갈 곳이 없으면 무역 도시에 지점부터
+    if (this.c.model === 'cargo' && this.c.routes.length === 0 && !this.candidates().some((x) => x.profit > 5 / Q)) {
+      const year = this.year;
+      const trade = CITIES.filter((x) => !this.c.branches.includes(x.id) && !branchBlocker(this.s, this.ci, x.id)).sort((x, y) => tradeOf(y.id) * citySize(y, year) - tradeOf(x.id) * citySize(x, year))[0];
+      if (trade && this.act({ type: 'openBranch', city: trade.id })) this.candList = null;
+    }
     const list = [...this.candidates()];
     if (list.length > 1 && this.rng() < 0.2) [list[0], list[1]] = [list[1], list[0]];
     const usedCities = new Set<string>();
@@ -692,24 +768,27 @@ export class Planner {
   /** 꽉 찬 노선에 비행기를 보탠다 */
   private addCapacity(): void {
     let added = 0;
-    const routes = [...this.c.routes].filter((r) => r.stats && r.stats.lf > 0.9 && r.stats.profit > 0).sort((x, y) => y.stats!.profit - x.stats!.profit);
+    const routes = [...this.c.routes].filter((r) => r.stats && r.stats.lf > 0.85 && r.stats.profit > 0).sort((x, y) => y.stats!.profit - x.stats!.profit);
     for (const r of routes.slice(0, 4)) {
-      if (added >= 2) break;
+      if (added >= 3) break;
       const budget = this.c.cash - this.reserve();
       if (budget < 30) break;
       const route = routeById(this.c, r.id)!;
       const before = this.estimate(route.id);
       let best: { m: ModelDef; freq: number; gain: number } | null = null;
-      const seatsNow = this.c.planes.filter((p) => legFreq(p, route.id) > 0).map((p) => MODEL[p.model].seats);
+      const onRoute = this.c.planes.filter((p) => legFreq(p, route.id) > 0).map((p) => MODEL[p.model]);
+      const cargoOnly = onRoute.length > 0 && onRoute.every(isFreighter);
+      const seatsNow = onRoute.map(sizeSeats);
       const avg = seatsNow.length > 0 ? seatsNow.reduce((x, y) => x + y, 0) / seatsNow.length : 150;
       for (const m of this.models()) {
-        if (m.seats < avg * 0.45 || m.seats > avg * 1.6) continue;
+        if (isFreighter(m) !== cargoOnly) continue;
+        if (sizeSeats(m) < avg * 0.45 || sizeSeats(m) > avg * 1.6) continue;
         if (!this.fits(m, route.a, route.b)) continue;
         const max = Math.min(maxFreq(m, dist(route.a, route.b)), this.slotsLeft(route.a), this.slotsLeft(route.b));
         if (max < 1) continue;
         const after = estimateExisting(this.s, this.ci, route, { planes: this.draftOf(route.id, null, 0, { model: m.id, freq: max, fixed: newLeaseFixed(this.s, m) }) }).profit;
         const gain = after - before;
-        if (gain > 8 / Q && (!best || gain > best.gain)) best = { m, freq: max, gain };
+        if (gain > 6 / Q && (!best || gain > best.gain)) best = { m, freq: max, gain };
       }
       if (!best || depositFor(this.s, this.ci, best.m.id) > budget) continue;
       if (!this.act({ type: 'lease', model: best.m.id })) continue;
@@ -717,6 +796,42 @@ export class Planner {
       const f = Math.min(best.freq, bestFreq(this.s, this.ci, pid, route.id));
       if (f >= 1) this.act({ type: 'assign', plane: pid, route: route.id, freq: f });
       added++;
+    }
+  }
+
+  /** 꽉 찬 노선의 작은 비행기를 더 큰 기종으로 바꾼다 (슬롯·노선 수 한도에 닿아도 자랄 수 있게) */
+  private upsizeFleet(): void {
+    let done = 0;
+    const full = new Set(this.c.routes.filter((r) => r.stats && r.stats.lf > 0.9 && r.stats.profit > 0).map((r) => r.id));
+    const small = this.c.planes
+      .filter((p) => p.legs.length === 1 && full.has(p.legs[0].route) && p.refit !== this.s.t)
+      .sort((x, y) => sizeSeats(MODEL[x.model]) - sizeSeats(MODEL[y.model]))
+      .slice(0, 4);
+    for (const p0 of small) {
+      if (done >= 2 || this.c.cash - this.reserve() < 30) break;
+      const p = planeById(this.c, p0.id);
+      if (!p || p.legs.length !== 1) continue;
+      const leg = p.legs[0];
+      const r = routeById(this.c, leg.route);
+      if (!r) continue;
+      const cur = MODEL[p.model];
+      const before = this.estimate(r.id);
+      const onRoute = this.c.planes.filter((x) => legFreq(x, r.id) > 0);
+      const base = draftsOf(this.s, this.c, r.id).filter((_, i) => onRoute[i]?.id !== p.id);
+      let best: { m: ModelDef; profit: number } | null = null;
+      for (const m of this.models()) {
+        if (isFreighter(m) !== isFreighter(cur) || sizeSeats(m) < sizeSeats(cur) * 1.2 || !this.fits(m, r.a, r.b)) continue;
+        if (buyBlocker(this.s, this.ci, m.id, true)) continue;
+        const prof = estimateExisting(this.s, this.ci, r, { planes: [...base, { model: m.id, freq: Math.min(leg.freq, maxFreq(m, dist(r.a, r.b))), fixed: newLeaseFixed(this.s, m) }] }).profit;
+        if (!best || prof > best.profit) best = { m, profit: prof };
+      }
+      if (!best || best.profit < before + 4 / Q || depositFor(this.s, this.ci, best.m.id) > this.c.cash - this.reserve()) continue;
+      if (!this.act({ type: 'lease', model: best.m.id })) continue;
+      const pid = this.c.planes[this.c.planes.length - 1].id;
+      if (!this.act({ type: 'sell', plane: p.id })) continue;
+      const f = Math.min(leg.freq, bestFreq(this.s, this.ci, pid, r.id));
+      if (f >= 1) this.act({ type: 'assign', plane: pid, route: r.id, freq: f });
+      done++;
     }
   }
 
@@ -734,7 +849,7 @@ export class Planner {
       const before = estimateExisting(this.s, this.ci, r).profit;
       let best: { m: ModelDef; profit: number } | null = null;
       for (const m of this.models()) {
-        if (!this.fits(m, r.a, r.b)) continue;
+        if (!this.fits(m, r.a, r.b) || isFreighter(m) !== isFreighter(MODEL[p.model])) continue;
         const draft = draftsOf(this.s, this.c, r.id).filter((_, i) => this.c.planes.filter((x) => legFreq(x, r.id) > 0)[i]?.id !== p.id);
         draft.push({ model: m.id, freq: Math.min(leg.freq, maxFreq(m, dist(r.a, r.b))), fixed: newLeaseFixed(this.s, m) });
         const prof = estimateExisting(this.s, this.ci, r, { planes: draft }).profit;
@@ -756,7 +871,7 @@ export class Planner {
 
   /** 돈이 넉넉하면 많이 리스한 기종을 미리 주문해 둔다 (도착하면 리스기와 바꾼다) */
   private orderAhead(): void {
-    if (this.c.orders.length >= 3) return;
+    if (this.c.orders.length >= 2 + Math.floor(this.c.planes.length / 12)) return;
     const leased = this.c.planes.filter((p) => p.leased);
     if (leased.length < 2) return;
     const count = new Map<string, number>();
@@ -764,8 +879,8 @@ export class Planner {
     const [model] = [...count.entries()].sort((x, y) => y[1] - x[1])[0];
     const m = MODEL[model];
     const price = orderPrice(this.s, m, this.c);
-    if (this.c.cash - price < this.reserve() * 4 + 200) return;
-    if (fleetCount(this.c) >= 58 || leadTime(m, this.year) > 9) return;
+    if (this.c.cash - price < this.reserve() * 3 + 150) return;
+    if (fleetCount(this.c) >= planeLimit(this.c) - 2 || leadTime(m, this.year) > 12) return;
     this.act({ type: 'buy', model });
   }
 
@@ -791,6 +906,7 @@ export class Planner {
   }
 
   private setService(): void {
+    if (this.c.model === 'lcc') return;
     const rep = this.s.report?.companies[this.ci];
     const profitable = !!rep && rep.profit > 0;
     const want = profitable && this.c.reputation < 55 ? 4 : 3;

@@ -4,7 +4,7 @@ import { planModelsFor } from './bizmodel';
 import { Planner, bestTimes, suggestRoutes, openSuggestion } from './ai';
 import { ACADEMY_COST, STAFF_GROUPS, STAFF_INFO, hireCost, hireTime, staffCap, staffNeed, staffPipe } from './staff';
 import { weather } from './calendar';
-import { CITY, REGIONS, airportClass, dist } from './cities';
+import { CITY, REGIONS, airportClass, dist, pairKey } from './cities';
 import { goalProgress } from './goals';
 import { CRISIS_MONTHS, MAX_ROUTES, applyAction, assignBlocker, bestFreq, buyBlocker, checkBlocker, creditLimit, fmtFine, fmtMoney, idlePlanes, oilTarget, planeById, routeById, usedBlocker } from './rules';
 import { FUEL_TON, TANK_LEVELS, tankBlocker, tankCap, tankOf, tankSpace, tonPrice } from './fuel';
@@ -29,6 +29,7 @@ import {
   slotsUsed,
 } from './simulate';
 import { monthOf, yearOf } from './time';
+import type { Candidate } from './ai';
 import type { AirlineState, CharterOffer, Company, Plane } from './types';
 
 /**
@@ -56,6 +57,20 @@ function cityName(id: string): string {
 function routeName(c: Company, routeId: number): string {
   const r = routeById(c, routeId);
   return r ? `${cityName(r.a)}–${cityName(r.b)}` : '노선';
+}
+
+function pairName(a: string, b: string): string {
+  return `${cityName(a)}–${cityName(b)}`;
+}
+
+/** 쉬는 비행기를 띄울 때 쉴 때보다 이만큼(억)만 더 벌어도 권한다 (리스료·보험료는 쉬어도 나간다) */
+const IDLE_MIN_GAIN = 1;
+/** 새 비행기를 들여 여는 새 노선은 달 이익이 이만큼(억)은 넘어야 권한다 */
+const NEW_ROUTE_MIN = 3;
+
+/** 새 노선을 여는 권유 (경영 비서 목록에 늘 한 자리를 남겨 둔다). 권할 노선이 없을 때의 까닭 알림(noroute)도 그 자리를 쓴다 */
+export function isRouteAdvice(a: Pick<Advice, 'key'>): boolean {
+  return /^(first|route|swaproute|noroute)(-|$)/.test(a.key);
 }
 
 /** 적용이 안 됐을 때의 까닭 (applyAdvice가 한 번 적용하는 동안만 쓴다) */
@@ -92,10 +107,14 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     out.push({ key: 'choice', icon: c.choice.icon, title: `결정할 일: ${c.choice.title}`, detail: '고르지 않으면 차례를 마칠 때 마지막 안으로 정해져요.', weight: 1000 });
   }
 
+  // 권할 새 노선이 없을 때 그 까닭 (목록 끝에 한 줄로 알린다)
+  let noRouteWhy: string | null = null;
+
   // 1. 첫 노선 (아직 비행기가 없을 때)
   if (c.routes.length === 0 || c.planes.length === 0) {
     const cand = suggestRoutes(state, ci, 1)[0];
-    if (cand) {
+    if (!cand) noRouteWhy = whyNoRoute(state, ci, undefined);
+    else {
       out.push({
         key: `first-${cand.a}-${cand.b}`,
         icon: '🛫',
@@ -122,32 +141,76 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   const keep = spareKeep(state, c, idle, legOf);
   const keepIds = new Set(keep.map((p) => p.id));
   const free = idle.filter((p) => !keepIds.has(p.id));
-  // 쉬는 내 비행기가 노선을 넘겨받을 수 있는 리스기가 있으면, 팔지 말고 리스기를 돌려주는 게 낫다
+  // 쉬는 내 비행기가 노선을 넘겨받을 수 있는 리스기가 있으면, 팔지 말고 리스기를 돌려주는 게 낫다 (아래 ‘리스기 바꾸기’)
   const swaps = swapPairs(state, ci, free);
-  for (const p of free.slice(0, 2)) {
-    const best = legOf(p.id);
-    const m = MODEL[p.model];
-    if (best && best.gain > 0) {
-      out.push({
-        key: `idle-${p.id}`,
-        icon: '😴',
-        title: `쉬는 ${m.name}를 ${routeName(c, best.route)}에`,
-        detail: `주 ${best.freq}회 띄우면 달 이익이 약 ${fmtMoney(best.gain)} 늘어요. 쉬는 비행기도 보험·보관비가 나가요.`,
-        gain: best.gain,
-        label: '띄우기',
-        apply: (s) => afterAct(s, ci, { type: 'assign', plane: p.id, route: best.route, freq: best.freq }),
-        weight: 500 + best.gain,
-      });
-    } else if (!swaps.some((x) => x.own === p.id)) {
-      out.push({
-        key: `idle-sell-${p.id}`,
-        icon: '😴',
-        title: `쉬는 ${m.name} ${p.leased ? '돌려주기' : '팔기'}`,
-        detail: p.leased ? '띄울 노선이 마땅치 않아요. 돌려주면 리스료가 나가지 않아요 (위약금 한 달 치).' : '띄울 노선이 마땅치 않아요. 팔면 현금이 생겨요.',
-        label: p.leased ? '돌려주기' : '팔기',
-        apply: (s) => afterAct(s, ci, { type: 'sell', plane: p.id }),
-        weight: 300,
-      });
+  // 나머지 쉬는 비행기는 이미 있는 노선에 보태거나 새 노선을 연다. 리스료·보험료는 쉬어도 나가니
+  // 쉴 때보다 1억이라도 더 벌면 띄우고, 띄울 곳이 정말 없을 때만 팔기(돌려주기)를 권한다
+  const idlePairs = new Set<string>();
+  {
+    // 이미 다른 쉬는 비행기에게 권한 노선 (같은 노선을 두 번 권하지 않는다)
+    const idleRoutes = new Set<number>();
+    const wide = planner(state, ci);
+    wide.wide = true;
+    // 띄울 곳이 없던 기종 (같은 기종·리스 여부는 다시 찾지 않는다)
+    const hopeless = new Set<string>();
+    let shown = 0;
+    let looked = 0;
+    for (const p of free) {
+      if (shown >= 2 || looked >= 4) break;
+      if (swaps.some((x) => x.own === p.id)) continue;
+      const kind = `${p.model}|${p.leased}`;
+      if (hopeless.has(kind)) continue;
+      looked++;
+      const m = MODEL[p.model];
+      // 둘 다 리스료·보험료를 뺀, 쉴 때보다 더 버는 돈으로 견준다
+      const ex = planner(state, ci).bestExistingLeg(p.id, true);
+      const nr = wide.idleCandidates(p.id, 4).find((x) => !idlePairs.has(pairKey(x.a, x.b)));
+      const exTaken = ex !== null && idleRoutes.has(ex.route);
+      const exGain = ex && !exTaken ? ex.gain : -Infinity;
+      const nrGain = nr ? nr.profit : -Infinity;
+      if (ex && !exTaken && exGain >= IDLE_MIN_GAIN && exGain >= nrGain) {
+        shown++;
+        idleRoutes.add(ex.route);
+        out.push({
+          key: `idle-${p.id}`,
+          icon: '😴',
+          title: `쉬는 ${m.name}를 ${routeName(c, ex.route)}에`,
+          detail: `주 ${ex.freq}회 띄우면 쉴 때보다 달 이익이 약 ${fmtMoney(exGain)} 늘어요. 쉬는 비행기도 리스료·보험료가 나가요.`,
+          gain: exGain,
+          label: '띄우기',
+          apply: (s) => afterAct(s, ci, { type: 'assign', plane: p.id, route: ex.route, freq: ex.freq }),
+          weight: 500 + exGain,
+        });
+      } else if (nr && nrGain >= IDLE_MIN_GAIN) {
+        shown++;
+        idlePairs.add(pairKey(nr.a, nr.b));
+        const rentNote = p.leased && p.rent > nrGain ? ` 리스기라 돌려주면 리스료(달 ${fmtMoney(p.rent)})가 안 나가니, 그쪽이 더 나을 수도 있어요.` : ' 쉬는 비행기도 리스료·보험료가 나가요.';
+        out.push({
+          key: `route-plane${p.id}-${nr.a}-${nr.b}`,
+          icon: '🗺️',
+          title: `새 노선: ${pairName(nr.a, nr.b)} (쉬는 ${m.name})`,
+          detail: `쉬는 비행기를 주 ${nr.freq}회 띄우면 쉴 때보다 달 이익이 약 ${fmtMoney(nrGain)} 늘어요${nr.needBranch.length ? ` (지점 ${nr.needBranch.map(cityName).join('·')} 함께)` : ''}.${rentNote}`,
+          gain: nrGain,
+          label: '노선 열기',
+          apply: (s) => openSuggestion(s, ci, nr, p.id, note),
+          weight: 500 + nrGain,
+        });
+      } else if (exTaken && ex.gain >= IDLE_MIN_GAIN) {
+        // 띄울 곳은 있는데 앞의 비행기에게 이미 권했다: 그 권유를 먼저 해 보면 된다
+        continue;
+      } else {
+        shown++;
+        hopeless.add(kind);
+        out.push({
+          key: `idle-sell-${p.id}`,
+          icon: '😴',
+          title: `쉬는 ${m.name} ${p.leased ? '돌려주기' : '팔기'}`,
+          detail: `이미 있는 노선에도, 새 노선에도 띄워서 달 ${fmtMoney(IDLE_MIN_GAIN)}이 남는 곳이 없어요. ${p.leased ? '돌려주면 리스료가 나가지 않아요 (위약금 한 달 치).' : '팔면 현금이 생겨요.'}`,
+          label: p.leased ? '돌려주기' : '팔기',
+          apply: (s) => afterAct(s, ci, { type: 'sell', plane: p.id }),
+          weight: 300,
+        });
+      }
     }
   }
   if (keep.length > 0) {
@@ -338,8 +401,9 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   }
 
   // 6. 새 노선 (노선 수 한도에 닿으면 가장 못한 노선과 바꾸기)
+  // 후보는 모든 지점에서 찾는다 (suggestRoutes). 쉬는 비행기로 이미 권한 노선은 빼고
   if (c.routes.length > 0 && c.planes.length > 0) {
-    const cand = suggestRoutes(state, ci, 1)[0];
+    const cand = suggestRoutes(state, ci, 3).find((x) => !idlePairs.has(pairKey(x.a, x.b)));
     const reserve = Math.max(60, (state.report?.companies[ci]?.ticket ?? 0) * 0.45);
     const full = c.routes.length >= MAX_ROUTES;
     const worst = full
@@ -362,7 +426,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
         },
         weight: 130 + cand.profit - (worst.stats?.profit ?? 0),
       });
-    } else if (!full && cand && cand.profit > 3 && c.cash - cand.capital > reserve) {
+    } else if (!full && cand && cand.profit > NEW_ROUTE_MIN && c.cash - cand.capital > reserve) {
       // 시간이 많이 남는 내 비행기가 있으면 그 비행기로, 같은 기종 중고가 있고 돈이 넉넉하면 중고로, 아니면 리스로
       // (이번 달 전세기로 나가는 비행기는 노선에 넣을 수 없다)
       const d = dist(cand.a, cand.b);
@@ -389,7 +453,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
         },
         weight: 150 + cand.profit,
       });
-    }
+    } else noRouteWhy = whyNoRoute(state, ci, cand, { full, reserve });
   }
 
   // 6¼. 직원: 모자라거나 곧 모자랄 그룹은 미리 뽑기, 만족도가 낮으면 임금
@@ -741,6 +805,11 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     out.push({ key: 'auto', icon: '⏩', title: '한동안 맡겨 두기', detail: '지금은 크게 고칠 곳이 없어요. ‘결정할 일이 생길 때까지 자동 진행’을 누르면 결정할 일·큰 사건·돈 걱정·라이벌 소식이 생길 때까지 달을 넘겨요.', label: '자동 진행', weight: 30 });
   }
 
+  // 새 노선을 하나도 권하지 못했으면 왜 그런지 한 줄로 알린다
+  if (noRouteWhy && !out.some(isRouteAdvice)) {
+    out.push({ key: 'noroute', icon: '🗺️', title: '지금은 권할 새 노선이 없어요', detail: noRouteWhy, weight: 20 });
+  }
+
   // 같은 노선 권고가 겹치지 않게 하고 무게 순으로
   out.sort((x, y) => y.weight - x.weight);
   const seen = new Set<string>();
@@ -751,7 +820,36 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     picked.push(a);
     if (picked.length >= max) break;
   }
+  // 새 노선 권유(또는 권할 노선이 없는 까닭)는 다른 권유에 밀려나지 않게 한 자리를 남겨 둔다
+  if (!picked.some(isRouteAdvice)) {
+    const route = out.find((a) => isRouteAdvice(a) && !seen.has(a.title));
+    if (route) {
+      if (picked.length >= max) {
+        // 가장 가벼운 권유를 내린다 (결정할 일은 남긴다)
+        for (let i = picked.length - 1; i >= 0; i--) {
+          if (picked[i].key === 'choice') continue;
+          picked.splice(i, 1);
+          break;
+        }
+      }
+      if (picked.length < max) picked.push(route);
+    }
+  }
   return picked;
+}
+
+/** 새 노선을 권하지 못한 까닭 (경영 비서 목록에 한 줄로 보여 준다) */
+function whyNoRoute(state: AirlineState, ci: number, cand: Candidate | undefined, opts: { full?: boolean; reserve?: number } = {}): string {
+  const c = state.companies[ci];
+  const later = '도시와 공항은 해마다 커지고 새 기종도 나오니, 그때 다시 찾아 드릴게요. 지도에서 도시를 눌러 직접 살펴볼 수도 있어요.';
+  if (opts.full) return `노선이 ${MAX_ROUTES}개로 꽉 찼고, 지금 노선을 닫고 바꿀 만큼 나은 새 노선이 없어요.`;
+  if (cand && cand.profit > NEW_ROUTE_MIN && opts.reserve !== undefined) {
+    return `${pairName(cand.a, cand.b)} 노선은 달 약 ${fmtMoney(cand.profit)}을 벌 만하지만, 지점·보증금으로 ${fmtMoney(cand.capital)}을 쓰면 남겨 둘 돈(${fmtMoney(opts.reserve)})보다 현금이 적어져요.`;
+  }
+  if (cand) return `가장 나은 후보인 ${pairName(cand.a, cand.b)} 노선도 비행기를 새로 리스해 띄우면 달 약 ${fmtMoney(cand.profit)}밖에 남지 않아요. 남은 도시는 아직 손님이 적거나, 공항이 작아 띄울 수 있는 기종이 닿지 않아요. ${later}`;
+  const open = c.branches.filter((b) => slotCapacity(state, ci, b) - slotsUsed(c, b) >= 2).length;
+  if (c.branches.length > 0 && open === 0) return `지점 공항의 슬롯이 모두 찼어요. 본사에 전용 터미널을 짓거나 손님이 적은 노선의 횟수를 줄이면 자리가 생겨요.`;
+  return `남은 도시는 아직 손님이 적거나, 공항이 작아 띄울 수 있는 기종이 닿지 않아요. ${later}`;
 }
 
 function signed(v: number): string {

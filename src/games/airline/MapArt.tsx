@@ -140,6 +140,7 @@ export function adviceIcon(key: string): AnyIcon | null {
     case 'first':
     case 'route':
     case 'swaproute':
+    case 'noroute':
       return m('route');
     case 'idle':
       return f('parked');

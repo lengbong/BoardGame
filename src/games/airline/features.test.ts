@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { MODEL } from './aircraft';
 import { defaultCabin } from './cabin';
 import { seededRandom } from '../../lib/random';
-import { advise, applyAdvice } from './advisor';
-import { aiTurn, planTurn } from './ai';
+import { advise, applyAdvice, isRouteAdvice } from './advisor';
+import { Planner, aiTurn, planTurn, suggestRoutes } from './ai';
 import { SCENARIO_IDS, allianceScore, makeChoice } from './choices';
 import { goalMet, gradeYear, newGoals } from './goals';
 import { CRISIS_MONTHS, MAX_PLANES, actor, applyAction, choiceBlocker, createGame, hubCandidates, proposeBlocker, routeOnPair, runMonth } from './rules';
@@ -273,6 +273,8 @@ describe('경영 비서', () => {
         const list = advise(s, ci);
         expect(list.length).toBeLessThanOrEqual(5);
         expect(new Set(list.map((a) => a.key)).size).toBe(list.length);
+        // 새 노선 권유(또는 권할 노선이 없는 까닭)는 늘 한 자리를 차지한다
+        expect(list.some(isRouteAdvice), list.map((a) => a.key).join(' ')).toBe(true);
         for (const a of list) {
           expect(a.title.length).toBeGreaterThan(0);
           if (!a.apply) continue;
@@ -330,13 +332,14 @@ describe('경영 비서: 쉬는 비행기', () => {
     expect(isValidState(res.state)).toBe(true);
   });
 
-  it('같은 계열 리스기가 없으면 쉬는 내 비행기는 팔라고 하고, 그 기종 주문은 여전히 권하지 않는다', () => {
+  it('같은 계열 리스기가 없으면 쉬는 내 비행기는 노선에 띄우거나 팔라고 하고, 그 기종 주문은 여전히 권하지 않는다', () => {
     const { s, own } = fleet();
     // 리스기를 모두 다른 계열로 바꿔 둔다
     s.companies[0].planes = s.companies[0].planes.map((p) => (p.leased ? { ...p, model: 'dc9', cabin: defaultCabin(MODEL.dc9) } : p));
     const keys = advise(s, 0, 20).map((a) => a.key);
     expect(keys.some((k) => k.startsWith('swap-'))).toBe(false);
-    expect(keys).toContain(`idle-sell-${own}`);
+    // 팔기 전에 새 노선(또는 이미 있는 노선)부터 찾아 준다
+    expect(keys.some((k) => k === `idle-sell-${own}` || k === `idle-${own}` || k.startsWith(`route-plane${own}-`)), keys.join(' ')).toBe(true);
     expect(keys).not.toContain('order-f27');
   });
 
@@ -388,6 +391,70 @@ describe('경영 비서: 쉬는 비행기', () => {
   it('비행기가 적으면 예비기로 두라고 하지 않는다', () => {
     const { s } = fleet();
     expect(advise(s, 0, 20).some((a) => a.key === 'keepspare')).toBe(false);
+  });
+});
+
+describe('경영 비서: 새 노선', () => {
+  it('쉬는 비행기는 팔기 전에 새 노선부터 찾아 주고, 적용하면 리스 없이 그 비행기로 연다', () => {
+    let s = createGame(setup(['human', 'ai-normal'], {}, ['seoul']), seededRandom(4));
+    s = act(s, { type: 'openBranch', city: 'newyork' }, { type: 'openRoute', a: 'seoul', b: 'newyork' }, { type: 'lease', model: 'b777-200' });
+    const big = s.companies[0].planes[0].id;
+    s = act(s, { type: 'assign', plane: big, route: s.companies[0].routes[0].id, freq: 3 }, { type: 'lease', model: 'atr72' });
+    // ATR72는 서울–뉴욕을 못 나니 이미 있는 노선에는 띄울 곳이 없다
+    const atr = s.companies[0].planes.find((p) => p.model === 'atr72')!;
+    const tips = advise(s, 0, 20);
+    expect(tips.some((a) => a.key === `idle-sell-${atr.id}`)).toBe(false);
+    const tip = tips.find((a) => a.key.startsWith(`route-plane${atr.id}-`))!;
+    expect(tip, tips.map((a) => a.key).join(' ')).toBeTruthy();
+    expect(tip.label).toBe('노선 열기');
+    expect(tip.gain!).toBeGreaterThanOrEqual(1);
+    const res = applyAdvice(tip, s);
+    expect(res.why).toBeNull();
+    const c = res.state.companies[0];
+    expect(c.routes).toHaveLength(2);
+    expect(c.planes).toHaveLength(2);
+    expect(c.planes.find((p) => p.id === atr.id)!.legs.length).toBe(1);
+    expect(isValidState(res.state)).toBe(true);
+  });
+
+  it('새 노선 후보는 큰 지점 8곳만이 아니라 모든 지점에서 찾는다 (컴퓨터 항공사는 큰 지점 8곳 그대로)', () => {
+    const s = createGame(setup(['human', 'ai-normal'], {}, ['seoul']), seededRandom(4));
+    // 큰 도시 여덟 곳은 슬롯을 다 써서 더 열 수 없고, 남은 지점은 케이프타운뿐
+    for (const [a, b] of [['seoul', 'tokyo'], ['beijing', 'shanghai'], ['osaka', 'hongkong'], ['taipei', 'newyork']]) addRoute(s, 0, a, b, 'b777-200', 500);
+    s.companies[0].branches.push('capetown');
+    expect(new Planner(s, 0, 'ai-normal', () => 0.5).bestCandidates(5)).toHaveLength(0);
+    const wide = suggestRoutes(s, 0, 5);
+    expect(wide.length).toBeGreaterThan(0);
+    expect(wide.every((x) => x.a === 'capetown' || x.b === 'capetown')).toBe(true);
+  });
+
+  it('새 노선 권유는 다른 권유에 밀려나지 않는다', () => {
+    let s = createGame(setup(['human', 'ai-normal'], {}, ['seoul']), seededRandom(4));
+    s = act(s, { type: 'openBranch', city: 'tokyo' }, { type: 'openRoute', a: 'seoul', b: 'tokyo' }, { type: 'lease', model: 'a320' });
+    s = act(s, { type: 'assign', plane: s.companies[0].planes[0].id, route: s.companies[0].routes[0].id, freq: 14 });
+    const all = advise(s, 0, 50);
+    expect(all.some(isRouteAdvice)).toBe(true);
+    // 한 개만 보여 줘도 새 노선 권유가 남는다
+    const one = advise(s, 0, 1);
+    expect(one).toHaveLength(1);
+    expect(isRouteAdvice(one[0]), one[0].key).toBe(true);
+  });
+
+  it('권할 새 노선이 없으면 까닭을 한 줄로 알려 준다 (적용 버튼은 없다)', () => {
+    let s = createGame(setup(['human', 'ai-normal'], {}, ['seoul']), seededRandom(4));
+    s = act(s, { type: 'openBranch', city: 'tokyo' }, { type: 'openRoute', a: 'seoul', b: 'tokyo' }, { type: 'lease', model: 'a320' });
+    s = act(s, { type: 'assign', plane: s.companies[0].planes[0].id, route: s.companies[0].routes[0].id, freq: 14 });
+    // 돈이 없어 새 노선을 열 수 없다
+    const poor = { ...s, companies: s.companies.map((c, i) => (i === 0 ? { ...c, cash: 0 } : c)) };
+    const note = advise(poor, 0).find((a) => a.key === 'noroute');
+    expect(note).toBeTruthy();
+    expect(note!.apply).toBeUndefined();
+    expect(note!.detail).toContain('남겨 둘 돈');
+    // 큰 도시 여덟 곳의 슬롯을 다 써서 열 곳이 없다
+    const full = createGame(setup(['human', 'ai-normal'], {}, ['seoul']), seededRandom(4));
+    for (const [a, b] of [['seoul', 'tokyo'], ['beijing', 'shanghai'], ['osaka', 'hongkong'], ['taipei', 'newyork']]) addRoute(full, 0, a, b, 'b777-200', 500);
+    const why = advise(full, 0).find((a) => a.key === 'noroute');
+    expect(why?.detail).toContain('슬롯이 모두 찼어요');
   });
 });
 

@@ -166,6 +166,11 @@ export class Planner {
    * 보통 컴퓨터가 직접 경영할 때(run)만 켠다. 사람에게 보여 주는 추천 노선은 새 비행기를 들이는 기준 그대로.
    */
   private fillSpare = false;
+  /**
+   * 경영 비서가 사람에게 권할 때만 켠다: 새 노선 후보를 큰 지점 8곳이 아니라 모든 지점에서 찾고 더 많이 따져 본다.
+   * 노선이 100개쯤 되면 큰 도시 8곳에서 갈 만한 곳은 이미 다 열려 권할 노선이 없어졌다. 컴퓨터 항공사는 그대로 둔다
+   */
+  wide = false;
   /** 행동이 안 됐을 때 그 까닭을 듣는 곳 (경영 비서가 사람에게 알려 준다) */
   onBlock?: (why: string) => void;
 
@@ -737,15 +742,27 @@ export class Planner {
     return v;
   }
 
-  /** 후보 노선들 (이익 어림 순) */
-  bestCandidates(limit: number, only?: ModelDef, from?: string): Candidate[] {
+  /**
+   * 쉬는 비행기 한 대로 열 만한 새 노선 (경영 비서가 쓴다). 그 비행기의 리스료·보험료는 쉬어도 나가니 빼고 셈한다:
+   * profit은 그 비행기가 쉴 때보다 달마다 더 버는 돈이다 (새로 여는 지점의 유지비는 뺀다). 많이 버는 순
+   */
+  idleCandidates(planeId: number, limit: number): Candidate[] {
+    const p = planeById(this.c, planeId);
+    if (!p || this.c.routes.length >= MAX_ROUTES) return [];
+    const plane: SparePlane = { id: p.id, left: WEEK_HOURS - planeHours(this.c, p), age: planeAge(this.s, p) };
+    if (plane.left <= 0) return [];
+    return this.bestCandidates(limit, MODEL[p.model], undefined, plane).sort((x, y) => y.profit - x.profit);
+  }
+
+  /** 후보 노선들 (이익 어림 순). idle: 이 쉬는 비행기 한 대로만 따진다 (idleCandidates) */
+  bestCandidates(limit: number, only?: ModelDef, from?: string, idle?: SparePlane): Candidate[] {
     const c = this.c;
     const served = regionsServed(c);
     const goalMode = this.s.options.mode === 'goal' || this.s.challenge?.id === 'sixregions';
     const year = this.year;
     const origins = from
       ? [from]
-      : [...c.branches].sort((x, y) => (x === c.hub ? -1 : y === c.hub ? 1 : citySize(CITY[y], year) - citySize(CITY[x], year))).slice(0, 8);
+      : [...c.branches].sort((x, y) => (x === c.hub ? -1 : y === c.hub ? 1 : citySize(CITY[y], year) - citySize(CITY[x], year))).slice(0, this.wide ? undefined : 8);
     const models = only ? [only] : this.models();
     const quick: { a: string; b: string; v: number; d: number; pull: number }[] = [];
     const seen = new Set<string>();
@@ -795,7 +812,7 @@ export class Planner {
     }
     quick.sort((x, y) => y.v - x.v);
     // 먼 노선일수록 표값이 커서 앞에 오기 쉬우니, 거리마다 몇 개씩 고루 따져 본다
-    const bands = this.normal ? [5, 5, 4] : [3, 2, 1];
+    const bands = this.wide ? [10, 10, 8] : this.normal ? [5, 5, 4] : [3, 2, 1];
     const pick: typeof quick = [];
     const used = [0, 0, 0];
     for (const q of quick) {
@@ -806,15 +823,15 @@ export class Planner {
     }
     const out: Candidate[] = [];
     for (const q of pick) {
-      const cand = this.evaluatePair(q.a, q.b, models, goalMode && (!served.has(CITY[q.a].region) || !served.has(CITY[q.b].region)));
+      const cand = this.evaluatePair(q.a, q.b, models, goalMode && (!served.has(CITY[q.a].region) || !served.has(CITY[q.b].region)), idle);
       if (cand) out.push(q.pull === 1 ? cand : { ...cand, score: cand.score * q.pull });
     }
     out.sort((x, y) => y.score - x.score);
     return out.slice(0, limit);
   }
 
-  /** 두 도시에 가장 알맞은 기종·횟수 */
-  evaluatePair(a: string, b: string, models: ModelDef[], newRegion: boolean): Candidate | null {
+  /** 두 도시에 가장 알맞은 기종·횟수 (idle: 이 쉬는 비행기로만, 리스료 없이) */
+  evaluatePair(a: string, b: string, models: ModelDef[], newRegion: boolean, idle?: SparePlane): Candidate | null {
     const d = dist(a, b);
     const needBranch = [a, b].filter((x) => !this.c.branches.includes(x));
     const branchMoney = needBranch.reduce((sum, x) => sum + branchCost(x, this.s.q), 0);
@@ -838,6 +855,18 @@ export class Planner {
       if (!best || score > best.score) best = { a, b, model: m, freq, fare: 0, profit, capital, needBranch, score, plane: spare?.id };
       return score;
     };
+    if (idle) {
+      // 쉬는 비행기 한 대: 손님에 맞는 횟수, 가장 많이, 그 사이를 본다 (한 대뿐이니 손님보다 큰 비행기도 그대로 본다)
+      for (const m of models) {
+        if (!this.fits(m, a, b)) continue;
+        const max = Math.min(maxFreq(m, d), slotLimit, Math.floor(idle.left / (2 * legHours(m, d)) + 1e-9));
+        if (max < 1) continue;
+        const rf = isFreighter(m) ? reachFor(this.s, m, a, b) : { unit: m.seats, reach };
+        const fit = Math.max(1, Math.min(max, Math.round(rf.reach / rf.unit)));
+        for (const f of new Set([fit, max, Math.max(1, Math.round((fit + max) / 2))])) tryOne(m, f, idle);
+      }
+      return best;
+    }
     for (const m of models) {
       if (!this.fits(m, a, b)) continue;
       const max = Math.min(maxFreq(m, d), slotLimit);
@@ -1345,6 +1374,8 @@ export function bestTimes(state: AirlineState, ci: number, routeId: number): { t
 /** 사람에게 보여 줄 추천 노선 (보통 컴퓨터처럼 어림한 것, 이익 순) */
 export function suggestRoutes(state: AirlineState, ci: number, limit = 5, from?: string): Candidate[] {
   const ai = new Planner(state, ci, 'ai-normal', () => 0.5);
+  // 사람에게 권하는 노선이니 모든 지점에서 찾는다 (컴퓨터 항공사는 큰 지점 8곳만)
+  ai.wide = true;
   const list = ai.bestCandidates(limit * 3, undefined, from);
   return list.filter((c) => c.profit > 0).slice(0, limit);
 }

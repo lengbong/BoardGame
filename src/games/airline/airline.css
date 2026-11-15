@@ -1211,6 +1211,13 @@
   margin: 0;
   font-size: 13px;
 }
+.al-nr-right > .al-route-block {
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--al-bad) 35%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--al-bad) 9%, transparent);
+  font-weight: 600;
+}
 .al-dest-list {
   list-style: none;
   margin: 0;

@@ -670,6 +670,12 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                 {AIRPORT_INFO[airportClass(CITY[to], year)].name}
                 {needBranch.length > 0 && ` · 지점 새로 열기: ${needBranch.map((c) => `${CITY[c].name} ${fmtMoney(branchCost(c, state.q))} (유지비 달 ${fmtMoney(branchUpkeep(c, state.q))})`).join(', ')}`}
               </p>
+              {/* 노선 자체를 못 여는 이유는 여기 한 번만 (버튼마다 되풀이하지 않는다) */}
+              {why && (
+                <p className="al-why al-route-block" role="note" data-testid="al-route-block">
+                  🚫 {why}
+                </p>
+              )}
               {options.length === 0 ? (
                 <p className="al-why">지금 이 노선에 띄울 수 있는 비행기가 없어요. (거리·공항 크기·슬롯을 확인하세요)</p>
               ) : (
@@ -692,6 +698,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                             small
                             primary
                             blocker={why ?? buyBlocker(state, viewer, o.m.id, true)}
+                            quiet={!!why}
                             onClick={() => openWith(o, 'lease')}
                             title={(() => {
                               const dep = depositFor(state, viewer, o.m.id);
@@ -703,7 +710,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                           {(() => {
                             const used = state.market.find((u) => u.model === o.m.id);
                             return used ? (
-                              <ActButton small blocker={why ?? usedBlocker(state, viewer, used.id)} onClick={() => openWith(o, 'used')} title={`${used.age}년 된 중고`}>
+                              <ActButton small blocker={why ?? usedBlocker(state, viewer, used.id)} quiet={!!why} onClick={() => openWith(o, 'used')} title={`${used.age}년 된 중고`}>
                                 중고 {fmtMoney(used.price)}
                               </ActButton>
                             ) : null;
@@ -731,7 +738,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                               이 노선 이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/달 <span className="al-muted">(리스료는 이미 내는 중)</span>
                             </small>
                           </span>
-                          <ActButton small blocker={why} onClick={() => openWith(o, o.p.id)}>
+                          <ActButton small blocker={why} quiet onClick={() => openWith(o, o.p.id)}>
                             이 비행기로 열기
                           </ActButton>
                         </div>
@@ -741,7 +748,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                 </>
               )}
               <div className="al-nr-foot">
-                <ActButton blocker={why} onClick={openRouteOnly} testId="al-open-route-only">
+                <ActButton blocker={why} quiet onClick={openRouteOnly} testId="al-open-route-only">
                   노선만 열기 (비행기는 나중에)
                 </ActButton>
                 <p className="al-muted al-tip">이익은 라이벌이 지금 그대로일 때의 어림이에요. 계절과 사건에 따라 달라져요.</p>

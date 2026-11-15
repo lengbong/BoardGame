@@ -471,9 +471,42 @@
 .al-map-legend li {
   display: flex;
   align-items: center;
-  gap: 4px;
 }
-.al-map-legend .al-out {
+.al-legend-btn {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 -6px;
+  padding: 1px 6px;
+  border: 1.5px solid transparent;
+  border-radius: 7px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.al-legend-btn:hover:not(:disabled) {
+  border-color: var(--al-co, var(--accent));
+}
+.al-legend-btn:focus-visible {
+  outline: 3px solid var(--accent);
+}
+.al-legend-btn:disabled {
+  cursor: default;
+}
+.al-map-legend .al-on .al-legend-btn {
+  border-color: var(--al-co);
+  background: color-mix(in srgb, var(--al-co) 16%, transparent);
+}
+/* 한 회사만 보는 중이면 나머지는 흐리게 */
+.al-legend-focus li:not(.al-on) .al-legend-btn:not(.al-legend-all) {
+  opacity: 0.5;
+}
+.al-legend-all {
+  color: var(--accent-dark);
+}
+.al-map-legend .al-out .al-legend-btn {
   opacity: 0.45;
   text-decoration: line-through;
 }
@@ -1794,6 +1827,30 @@
 }
 .al-prow.al-out {
   opacity: 0.5;
+}
+/* 지도 화면에서는 줄을 눌러 그 회사 노선만 본다 (줄 전체를 덮는 단추) */
+.al-prow-pick {
+  position: relative;
+}
+.al-prow-btn {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  cursor: pointer;
+}
+.al-prow-btn:focus-visible {
+  outline: 3px solid var(--accent);
+}
+.al-prow-pick:hover {
+  background: var(--surface-2);
+}
+.players li.al-prow-focus {
+  outline: 2px solid var(--al-co);
+  background: color-mix(in srgb, var(--al-co) 12%, var(--surface));
 }
 .al-log li {
   font-size: 12.5px;

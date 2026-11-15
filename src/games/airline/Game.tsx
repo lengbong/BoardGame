@@ -84,6 +84,8 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   const [game, setGame] = useState<AirlineState>(initialState);
   const [tab, setTab] = useState<Tab>('map');
   const [selected, setSelected] = useState<Selection>(null);
+  /** 지도에서 이 회사 노선만 본다 (null이면 모두) */
+  const [focusCo, setFocusCo] = useState<number | null>(null);
   const [routeFocus, setRouteFocus] = useState<number | null>(null);
   const [planner, setPlanner] = useState<Planner | null>(null);
   const [report, setReport] = useState<Report | null>(null);
@@ -346,6 +348,12 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
     setSelected({ kind: 'city', id });
     setTab('map');
   };
+  const focusCompany = (ci: number | null) => {
+    setFocusCo(ci);
+    // 고른 회사가 아닌 노선을 보고 있었으면 지도에서 사라지니 정보 칸도 닫는다
+    if (ci !== null && selected?.kind === 'route' && selected.company !== ci) setSelected(null);
+  };
+  const canFocus = game.companies.length > 1;
 
   // 키보드
   useEffect(() => {
@@ -373,6 +381,8 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
         e.preventDefault();
         endTurn();
       } else if (e.key === 'Escape') {
+        // 고른 것이 없으면 지도의 회사 고르기를 푼다
+        if (!selected && !planner) setFocusCo(null);
         setSelected(null);
         setPlanner(null);
       } else if (tab === 'map' && (e.key === '+' || e.key === '=')) setZoomCmd((z) => ({ n: (z?.n ?? 0) + 1, kind: 'in' }));
@@ -447,7 +457,18 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   if (tab === 'map')
     content = (
       <div className="al-map-tab">
-        <MapView state={game} viewer={viewer} selected={selected} onSelect={setSelected} pulses={pulses} flying={flying} fx={delays.fx} zoomCmd={zoomCmd} />
+        <MapView
+          state={game}
+          viewer={viewer}
+          selected={selected}
+          onSelect={setSelected}
+          pulses={pulses}
+          flying={flying}
+          fx={delays.fx}
+          zoomCmd={zoomCmd}
+          focusCo={canFocus ? focusCo : null}
+          onFocusCo={canFocus ? focusCompany : undefined}
+        />
         <InfoPanel
           state={game}
           viewer={viewer}
@@ -574,6 +595,8 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
           if (game.phase === 'gameover' || window.confirm('지금 게임을 그만두고 새 게임을 할까요? (하던 게임은 저장되어 있어요)')) onChangeSetup();
         }}
         onExit={onExit}
+        focusCo={focusCo}
+        onFocusCo={tab === 'map' && canFocus ? focusCompany : undefined}
       />
 
       {choiceOpen && !report && !flying && me.choice && (

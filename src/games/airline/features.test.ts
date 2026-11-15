@@ -393,6 +393,17 @@ describe('경영 비서: 쉬는 비행기', () => {
     expect(next.planes.find((p) => p.id === own)!.legs).toHaveLength(0);
   });
 
+  it('비행기가 많아도 쉬는 리스기는 예비기로 두지 않는다 (리스료가 나가니 띄우거나 돌려준다)', () => {
+    const { s, own } = fleet();
+    grow(s, 13);
+    // 쉬는 내 F27을 리스기로 바꿔 둔다: 쉬는 내 비행기는 없고 리스기만 쉰다
+    s.companies[0].planes = s.companies[0].planes.map((p) => (p.id === own ? { ...p, leased: true, rent: 1 } : p));
+    const tips = advise(s, 0, 20);
+    expect(tips.some((a) => a.key === 'keepspare')).toBe(false);
+    // 예비기로 잡아 두지 않으니 여느 쉬는 비행기처럼 띄울 곳(여기서는 새 노선 서울–타이베이)을 권한다. 띄울 곳이 없으면 돌려주기
+    expect(tips.some((a) => a.key.startsWith(`route-plane${own}-`) || a.key === `idle-${own}` || a.key === `idle-sell-${own}`)).toBe(true);
+  });
+
   it('비행기가 적으면 예비기로 두라고 하지 않는다', () => {
     const { s } = fleet();
     expect(advise(s, 0, 20).some((a) => a.key === 'keepspare')).toBe(false);

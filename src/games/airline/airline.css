@@ -221,6 +221,13 @@
   margin-left: auto;
   flex-wrap: wrap;
 }
+.al-tab-icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+.al-tab.al-on .al-tab-icon {
+  color: inherit;
+}
 .al-tab {
   position: relative;
   display: inline-flex;

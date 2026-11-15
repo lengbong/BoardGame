@@ -8,7 +8,7 @@ import { FIXED_ICON } from './events';
 import { axisMoney, fmtMoney, fmtPax, pct, signedMoney } from './format';
 import { GRADE_INFO } from './goals';
 import { rankings } from './rules';
-import { companyValue, pairDemand, regionsServed } from './simulate';
+import { companyValue, pairDemand, regionsServed, revenueOf } from './simulate';
 import { staffTotal } from './staff';
 import { mLabel, mOf, mShort, monthOf, qLabel, qShort, quarterOf, yearOf, yearOfM } from './time';
 import type { AirlineState, CompanyReport, MonthPoint } from './types';
@@ -116,7 +116,7 @@ function MonthView({ state, viewer }: { state: AirlineState; viewer: number }) {
                   return (
                     <tr key={l.t}>
                       <th>{mLabel(l.t)}</th>
-                      <td>{fmtMoney(r.ticket + r.side)}</td>
+                      <td>{fmtMoney(revenueOf(r))}</td>
                       <td>{fmtMoney(costOf(r))}</td>
                       <td className={r.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(r.profit)}</td>
                       <td>{fmtPax(r.pax)}</td>
@@ -133,7 +133,7 @@ function MonthView({ state, viewer }: { state: AirlineState; viewer: number }) {
           <ProfitBars
             data={ledger.map((l) => {
               const r = l.companies[viewer];
-              return { label: mShort(l.t), value: r.profit, detail: [`수입 ${fmtMoney(r.ticket + r.side)}`, `비용 ${fmtMoney(costOf(r))}`, `손님 ${fmtPax(r.pax)}`, `정시율 ${r.flights > 0 ? pct(r.onTime) : '—'}`] };
+              return { label: mShort(l.t), value: r.profit, detail: [`수입 ${fmtMoney(revenueOf(r))}`, `비용 ${fmtMoney(costOf(r))}`, `손님 ${fmtPax(r.pax)}`, `정시율 ${r.flights > 0 ? pct(r.onTime) : '—'}`] };
             })}
             format={signedMoney}
             axisFormat={axisMoney}
@@ -215,6 +215,8 @@ function MonthView({ state, viewer }: { state: AirlineState; viewer: number }) {
                   <th>탑승률</th>
                   <th>이익</th>
                   <th>지난달 이익</th>
+                  <th title="일등석·비즈니스·이코노미 탑승률 (지난달)">등급 F·C·Y</th>
+                  <th>화물</th>
                   <th>정시율</th>
                   <th>결항률</th>
                 </tr>
@@ -233,6 +235,8 @@ function MonthView({ state, viewer }: { state: AirlineState; viewer: number }) {
                         <SparkBars values={hist.map((x) => x[1])} label={`${name} 최근 이익`} />
                       </td>
                       <td className={r.stats && r.stats.profit < 0 ? 'al-neg' : 'al-pos'}>{r.stats ? signedMoney(r.stats.profit) : '—'}</td>
+                      <td className="al-muted">{classText(r.stats?.cls)}</td>
+                      <td>{r.stats?.cargo && r.stats.cargo.cap > 0 ? `${pct(r.stats.cargo.t / r.stats.cargo.cap)} · ${fmtMoney(r.stats.cargo.rev)}` : '—'}</td>
                       <td>{r.stats ? pct(r.stats.onTime) : '—'}</td>
                       <td>{r.stats ? pct(r.stats.cancel) : '—'}</td>
                     </tr>
@@ -245,6 +249,13 @@ function MonthView({ state, viewer }: { state: AirlineState; viewer: number }) {
       </section>
     </>
   );
+}
+
+/** 등급 탑승률을 짧게: 'F 80% · C 95% · Y 88%' (없는 등급은 뺀다) */
+function classText(cls: NonNullable<AirlineState['companies'][number]['routes'][number]['stats']>['cls'] | undefined): string {
+  if (!cls) return '—';
+  const parts = (['F', 'C', 'Y'] as const).map((k, i) => (cls.seats[i] > 0 ? `${k} ${pct(cls.pax[i] / cls.seats[i])}` : null)).filter(Boolean);
+  return parts.length ? parts.join(' · ') : '—';
 }
 
 function YearView({ state, viewer }: { state: AirlineState; viewer: number }) {
@@ -268,6 +279,8 @@ function YearView({ state, viewer }: { state: AirlineState; viewer: number }) {
                   <th>이익</th>
                   <th>손님</th>
                   <th>탑승률</th>
+                  <th title="일등석·비즈니스 수입">윗등급</th>
+                  <th>화물</th>
                   <th>정시율</th>
                   <th>평가</th>
                 </tr>
@@ -280,6 +293,8 @@ function YearView({ state, viewer }: { state: AirlineState; viewer: number }) {
                   <td className={acc.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(acc.profit)}</td>
                   <td>{fmtPax(acc.pax)}</td>
                   <td>{pct(acc.seats > 0 ? acc.pax / acc.seats : 0)}</td>
+                  <td>—</td>
+                  <td>—</td>
                   <td>{pct(me.onTime)}</td>
                   <td>—</td>
                 </tr>
@@ -290,11 +305,13 @@ function YearView({ state, viewer }: { state: AirlineState; viewer: number }) {
                   return (
                     <tr key={y.year}>
                       <th>{y.year}년</th>
-                      <td>{fmtMoney(r.ticket + r.side)}</td>
+                      <td>{fmtMoney(revenueOf(r))}</td>
                       <td>{fmtMoney(costOf(r))}</td>
                       <td className={r.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(r.profit)}</td>
                       <td>{fmtPax(r.pax)}</td>
                       <td>{pct(r.seats > 0 ? r.pax / r.seats : 0)}</td>
+                      <td>{r.revF + r.revC > 0 ? fmtMoney(r.revF + r.revC) : '—'}</td>
+                      <td>{r.cargo > 0 ? fmtMoney(r.cargo) : '—'}</td>
                       <td>{r.flights > 0 ? pct(r.onTime) : '—'}</td>
                       <td>
                         {review ? (

@@ -6,7 +6,7 @@ import { coColors } from './brand';
 import { CompanyBadge, SEAT_SHAPES } from './Art';
 import { CHALLENGE } from './challenges';
 import { fmtMoney } from './format';
-import { actor, endT, rankings } from './rules';
+import { MODEL_INFO, actor, endT, rankings } from './rules';
 import { companyValue, regionsServed } from './simulate';
 import { mLabel } from './time';
 import type { AirlineState } from './types';
@@ -155,6 +155,11 @@ export function Panel({ state, viewer, hint, canEnd, busy, onEndTurn, auto, onAu
                     <span className="player-kind" title={KIND_LABEL[c.kind]}>
                       {c.kind === 'human' ? '사람' : `컴퓨터 ${SEAT_KIND_OPTIONS.find((o) => o.value === c.kind)?.short ?? ''}`}
                     </span>
+                    {c.model !== 'full' && (
+                      <span className="al-model-tag" title={MODEL_INFO[c.model].desc}>
+                        {MODEL_INFO[c.model].icon} {MODEL_INFO[c.model].short}
+                      </span>
+                    )}
                   </span>
                   <span className="al-prow-sub">
                     <b>{fmtMoney(companyValue(state, i))}</b>

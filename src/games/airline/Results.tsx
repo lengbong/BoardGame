@@ -6,7 +6,7 @@ import { CITY } from './cities';
 import { fmtMoney, fmtPax, pct, signedMoney } from './format';
 import { GRADE_INFO } from './goals';
 import { rankings } from './rules';
-import { companyValue, regionsServed } from './simulate';
+import { companyValue, regionsServed, revenueOf } from './simulate';
 import { qLabel } from './time';
 import type { AirlineState, QuarterReport as Report } from './types';
 import { AirlinePhoto } from './AirlinePicker';
@@ -73,17 +73,17 @@ export function QuarterReport({ state, report, viewer, onClose, onDetail }: { st
           </div>
         </div>
         <div className="al-qr-bars" aria-hidden="true">
-          <span className="al-c-rev" style={{ width: `${(r.ticket + r.side) / Math.max(1, r.ticket + r.side, costs) * 100}%` }} />
-          <span className="al-c-fuel" style={{ width: `${(costs / Math.max(1, r.ticket + r.side, costs)) * 100}%` }} />
+          <span className="al-c-rev" style={{ width: `${revenueOf(r) / Math.max(1, revenueOf(r), costs) * 100}%` }} />
+          <span className="al-c-fuel" style={{ width: `${(costs / Math.max(1, revenueOf(r), costs)) * 100}%` }} />
         </div>
         <p className="al-qr-sub">
-          수입 {fmtMoney(r.ticket + r.side)} · 비용 {fmtMoney(costs)} (연료 {fmtMoney(r.fuel)}) · 정시 운항률 {r.flights > 0 ? pct(r.onTime) : '—'} · 결항 {r.cancelled}편
+          수입 {fmtMoney(revenueOf(r))} · 비용 {fmtMoney(costs)} (연료 {fmtMoney(r.fuel)}) · 정시 운항률 {r.flights > 0 ? pct(r.onTime) : '—'} · 결항 {r.cancelled}편
         </p>
         {year && (
           <div className="al-qr-year" data-testid="al-year-report">
             <b>📆 {year.year}년 한 해 결산</b>
             <span>
-              수입 {fmtMoney(year.r.ticket + year.r.side)} · 이익 <b className={year.r.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(year.r.profit)}</b> · 손님 {fmtPax(year.r.pax)} · 탑승률 {pct(year.r.seats > 0 ? year.r.pax / year.r.seats : 0)} · 정시율 {year.r.flights > 0 ? pct(year.r.onTime) : '—'}
+              수입 {fmtMoney(revenueOf(year.r))} · 이익 <b className={year.r.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(year.r.profit)}</b> · 손님 {fmtPax(year.r.pax)} · 탑승률 {pct(year.r.seats > 0 ? year.r.pax / year.r.seats : 0)} · 정시율 {year.r.flights > 0 ? pct(year.r.onTime) : '—'}
             </span>
           </div>
         )}

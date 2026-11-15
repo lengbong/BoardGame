@@ -3319,3 +3319,71 @@
     gap: 3px;
   }
 }
+
+/* 좌석 등급·운임·사업 모델 */
+.al-cabin-pick {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+  margin: 6px 0 2px;
+}
+.al-cabin-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 12.5px;
+}
+.al-cabin-opt.al-on {
+  border-color: var(--accent);
+}
+.al-cabin-pick .al-tip {
+  grid-column: 1 / -1;
+}
+.al-fare-row {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+.al-fare-row input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.al-fare-label {
+  font-size: 13px;
+  white-space: nowrap;
+}
+.al-class-table td,
+.al-class-table th {
+  white-space: nowrap;
+}
+.al-model-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+.al-model-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+.al-model-tag {
+  font-size: 11px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.al-model-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}

@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { coColors } from './brand';
-import { BODY_INFO, MODEL, MODELS, availableModels, commonalityMult, launchDiscount, leadTime, sizeClass, type SizeClass } from './aircraft';
+import { BODY_INFO, MODEL, MODELS, availableModels, capacityText, commonalityMult, fitsBizModel, isFreighter, launchDiscount, leadTime, photoKey, sizeClass, type SizeClass } from './aircraft';
+import { PRESETS, PRESET_INFO, cabinOf, cabinText, presetCabin, presetOf, refitCost } from './cabin';
+import { bellyT } from './cargo';
 import { PlaneArt, SEAT_SHAPES } from './Art';
 import { AIRPORT_INFO, CITY } from './cities';
 import { fmtMoney, km } from './format';
-import { CANCEL_REFUND, buyBlocker, deliveriesThisQuarter, depositFor, firstYearHelp, sellAmount, sellBlocker, usedBlocker } from './rules';
+import { CANCEL_REFUND, buyBlocker, cabinBlocker, deliveriesThisQuarter, depositFor, firstYearHelp, sellAmount, sellBlocker, usedBlocker } from './rules';
 import {
   MAX_DELIVERIES,
   WEEK_HOURS,
@@ -34,20 +36,23 @@ interface FleetViewProps {
 const notMine = '내 차례에만 할 수 있어요';
 
 /** 좌석 100개를 100km 나르는 데 드는 연료 (kg) */
-const fuelPerSeat = (m: ModelDef) => (m.burn / m.seats) * 10000;
-const BEST_FUEL = Math.min(...MODELS.map(fuelPerSeat));
+/** 좌석(화물기는 짐 1톤을 3석으로) 하나당 연료 */
+const fuelPerSeat = (m: ModelDef) => (m.burn / (m.seats > 0 ? m.seats : m.cargo * 3)) * 10000;
+const BEST_FUEL = Math.min(...MODELS.filter((m) => !isFreighter(m)).map(fuelPerSeat));
 
 type Tab = 'hangar' | 'shop' | 'used' | 'day';
 
 export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRoutes }: FleetViewProps) {
   const me = state.companies[viewer];
   const [tab, setTab] = useState<Tab>(me.planes.length === 0 && me.orders.length === 0 ? 'shop' : 'hangar');
-  const [size, setSize] = useState<SizeClass | 'all'>('all');
+  const [size, setSize] = useState<SizeClass | 'all' | 'cargo'>('all');
+  const [cabinFor, setCabinFor] = useState<number | null>(null);
   const year = yearOf(state.q);
   const color = coColors(me);
   const shape = SEAT_SHAPES[me.seat];
   const planes = [...me.planes].sort((a, b) => (a.legs.length === 0 ? 0 : 1) - (b.legs.length === 0 ? 0 : 1) || planeHours(me, a) - planeHours(me, b));
-  const models = availableModels(year).filter((m) => size === 'all' || sizeClass(m) === size);
+  const fitting = availableModels(year).filter((m) => fitsBizModel(me.model, m));
+  const models = fitting.filter((m) => (size === 'cargo' ? isFreighter(m) : size === 'all' || (!isFreighter(m) && sizeClass(m) === size)));
   const soon = MODELS.filter((m) => m.intro > year && m.intro <= year + 4);
   const delivered = deliveriesThisQuarter(state, viewer);
   const families = familyCounts(me);
@@ -115,7 +120,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                     const m = MODEL[o.model];
                     return (
                       <li key={o.id}>
-                        <Photo src={aircraftPhoto(m.id)} alt={`${m.name} 사진`} className="al-thumb" fallback={<PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={64} />} />
+                        <Photo src={aircraftPhoto(photoKey(m))} alt={`${m.name} 사진`} className="al-thumb" fallback={<PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={64} />} />
                         <b>{m.name}</b>
                         <span>
                           {mLabel(o.due)} 도착 <small className="al-muted">({o.due - state.t}달 뒤)</small>
@@ -158,13 +163,20 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
               return (
                 <li key={p.id} className={p.legs.length ? '' : 'al-idle'}>
                   <span className="al-pl-art">
-                    <Photo src={aircraftPhoto(m.id)} alt={`${m.name} 사진`} className="al-thumb" fallback={<PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={96} />} />
+                    <Photo src={aircraftPhoto(photoKey(m))} alt={`${m.name} 사진`} className="al-thumb" fallback={<PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={96} />} />
                   </span>
                   <div className="al-pl-name">
                     <b>{m.name}</b>
                     <small>
-                      {m.maker} · {m.seats}석 · {km(m.range)}
+                      {m.maker} · {isFreighter(m) ? `화물 ${m.cargo}톤` : cabinText(cabinOf(p))} · {km(m.range)}
                     </small>
+                    {p.refit === state.t && <small className="al-flag al-flag-warn">좌석 바꾸는 중 (이번 달 쉼)</small>}
+                    {!isFreighter(m) && m.body !== 'sst' && (
+                      <button type="button" className="al-link al-small" onClick={() => setCabinFor(cabinFor === p.id ? null : p.id)} aria-expanded={cabinFor === p.id} data-testid={`al-cabin-open-${p.id}`}>
+                        💺 좌석 배치 {cabinFor === p.id ? '닫기' : '바꾸기'}
+                      </button>
+                    )}
+                    {cabinFor === p.id && <CabinPicker state={state} viewer={viewer} planeId={p.id} canAct={canAct} perform={perform} />}
                     <small>
                       {Math.floor(age)}년째 · {p.leased ? `리스 (달 ${fmtMoney(p.rent)}${p.deposit > 0 ? ` · 보증금 ${fmtMoney(p.deposit)}` : ''})` : `내 것 (가치 ${fmtMoney(planeValue(state, p))})`}
                       {old && ' · 단종'}
@@ -226,11 +238,13 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
       {tab === 'shop' && (
         <div className="al-shop">
           <div className="al-sort" role="group" aria-label="크기">
-            {(['all', 'small', 'medium', 'large'] as const).map((k) => (
-              <button key={k} type="button" className={`al-chip${size === k ? ' al-on' : ''}`} onClick={() => setSize(k)}>
-                {k === 'all' ? `전체 ${availableModels(year).length}` : k === 'small' ? '작은 (120석 아래)' : k === 'medium' ? '중간 (230석 아래)' : '큰 비행기'}
-              </button>
-            ))}
+            {(['all', 'small', 'medium', 'large', 'cargo'] as const)
+              .filter((k) => (k === 'cargo' ? fitting.some(isFreighter) : me.model !== 'cargo' || k === 'all'))
+              .map((k) => (
+                <button key={k} type="button" className={`al-chip${size === k ? ' al-on' : ''}`} onClick={() => setSize(k)} data-testid={`al-size-${k}`}>
+                  {k === 'all' ? `전체 ${fitting.length}` : k === 'small' ? '작은 (120석 아래)' : k === 'medium' ? '중간 (230석 아래)' : k === 'large' ? '큰 비행기' : `📦 화물기 ${fitting.filter(isFreighter).length}`}
+                </button>
+              ))}
             <span className="al-muted al-shop-note">
               {year}년에 살 수 있는 기종 · 값은 어림한 오늘 돈 · 주문은 값을 먼저 내고 3~12달 뒤에 받아요. 리스는 바로 받지만 달마다 값의 1.2% 남짓을 내요.
               {help && ' 첫해에는 리스 보증금이 없어요.'}
@@ -250,9 +264,9 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                 <li key={m.id} className="al-model-card" data-testid={`al-model-${m.id}`}>
                   <div className="al-mc-art">
                     <Photo
-                      src={aircraftPhoto(m.id)}
-                      credit={`aircraft/${m.id}`}
-                      alt={`${m.maker} ${m.name} 사진`}
+                      src={aircraftPhoto(photoKey(m))}
+                      credit={`aircraft/${photoKey(m)}`}
+                      alt={isFreighter(m) ? `${m.name}의 바탕이 된 여객기 사진` : `${m.maker} ${m.name} 사진`}
                       fallback={<PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={150} title={`${m.name} 옆모습`} />}
                     />
                   </div>
@@ -273,8 +287,8 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                   </div>
                   <dl className="al-mc-specs">
                     <div>
-                      <dt>좌석</dt>
-                      <dd>{m.seats}석</dd>
+                      <dt>{isFreighter(m) ? '화물' : '좌석'}</dt>
+                      <dd title={isFreighter(m) ? undefined : `배 아래 짐칸 약 ${Math.round(bellyT(m))}톤`}>{isFreighter(m) ? `${m.cargo}톤` : `${m.seats}석`}</dd>
                     </div>
                     <div>
                       <dt>거리</dt>
@@ -360,9 +374,9 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                 <li key={u.id} className="al-model-card al-used-card" data-testid={`al-used-${u.id}`}>
                   <div className="al-mc-art">
                     <Photo
-                      src={aircraftPhoto(m.id)}
-                      credit={`aircraft/${m.id}`}
-                      alt={`${m.maker} ${m.name} 사진`}
+                      src={aircraftPhoto(photoKey(m))}
+                      credit={`aircraft/${photoKey(m)}`}
+                      alt={isFreighter(m) ? `${m.name}의 바탕이 된 여객기 사진` : `${m.maker} ${m.name} 사진`}
                       fallback={<PlaneArt body={m.body} engines={m.engines} color={color.main} dark={color.dark} shape={shape} width={130} title={`${m.name} 옆모습`} />}
                     />
                   </div>
@@ -376,8 +390,8 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                   </div>
                   <dl className="al-mc-specs">
                     <div>
-                      <dt>좌석</dt>
-                      <dd>{m.seats}석</dd>
+                      <dt>{isFreighter(m) ? '화물' : '좌석'}</dt>
+                      <dd>{capacityText(m)}</dd>
                     </div>
                     <div>
                       <dt>거리</dt>
@@ -399,6 +413,39 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+/** 좌석 배치 고르기: 본보기마다 등급 좌석 수, 값, 못 고르는 까닭 */
+function CabinPicker({ state, viewer, planeId, canAct, perform }: { state: AirlineState; viewer: number; planeId: number; canAct: boolean; perform: (a: AirlineAction) => void }) {
+  const me = state.companies[viewer];
+  const p = me.planes.find((x) => x.id === planeId);
+  if (!p) return null;
+  const m = MODEL[p.model];
+  const year = yearOf(state.q);
+  const now = presetOf(m, cabinOf(p), year);
+  return (
+    <div className="al-cabin-pick" role="group" aria-label={`${m.name} 좌석 배치`}>
+      {PRESETS.map((k) => {
+        const cab = presetCabin(m, k, year);
+        const why = canAct ? cabinBlocker(state, viewer, p.id, k) : '내 차례에만 할 수 있어요';
+        const on = now === k;
+        return (
+          <div key={k} className={`al-cabin-opt${on ? ' al-on' : ''}`}>
+            <b>{PRESET_INFO[k].name}</b>
+            <small>{cabinText(cab)}</small>
+            {on ? (
+              <small className="al-muted">지금 배치</small>
+            ) : (
+              <ActButton small blocker={why} onClick={() => perform({ type: 'setCabin', plane: p.id, preset: k })} testId={`al-cabin-${p.id}-${k}`}>
+                바꾸기 −{fmtMoney(refitCost(m))}
+              </ActButton>
+            )}
+          </div>
+        );
+      })}
+      <p className="al-muted al-tip">좌석을 바꾸면 그 달은 정비고에 들어가 날지 않아요. 일등석은 이코노미 3.5석, 비즈니스는 2석 넓이를 써요. 사업 손님이 많은 먼 노선에는 윗등급이, 관광 노선에는 이코노미가 알맞아요.</p>
     </div>
   );
 }

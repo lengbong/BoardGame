@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 import { coColors } from './brand';
-import { MODEL, availableModels } from './aircraft';
+import { MODEL, availableModels, capacityText, fitsBizModel, isFreighter } from './aircraft';
+import { cabinOf, cabinText } from './cabin';
+import { FaresCard } from './FaresCard';
 import { openSuggestion, type Candidate } from './ai';
 import { PlaneArt, SEAT_SHAPES } from './Art';
 import { AIRPORT_INFO, CITIES, CITY, REGIONS, REGION_INFO, airportClass, dist, pairKey } from './cities';
 import { fareText, fmtMoney, fmtPax, km, pct, signedMoney } from './format';
-import { FARE_MAX, FARE_MIN, applyAction, assignBlocker, bestFreq, buyBlocker, depositFor, maxRangeNow, routeBlocker, routeOnPair, usedBlocker } from './rules';
+import { applyAction, assignBlocker, bestFreq, buyBlocker, depositFor, maxRangeNow, routeBlocker, routeOnPair, usedBlocker } from './rules';
 import {
   WEEK_HOURS,
   branchCost,
@@ -164,6 +166,7 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
     const base = draftsOf(state, me, r.id);
     const left = Math.min(slotCapacity(state, viewer, r.a) - slotsUsed(me, r.a), slotCapacity(state, viewer, r.b) - slotsUsed(me, r.b));
     for (const m of availableModels(year)) {
+      if (!fitsBizModel(me.model, m)) continue;
       if (m.range < d || airportClass(CITY[r.a], year) < m.runway || airportClass(CITY[r.b], year) < m.runway) continue;
       const f = Math.min(maxFreq(m, d), left);
       if (f < 1) continue;
@@ -233,7 +236,7 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
                     <span className="al-pr-name">
                       <b>{m.name}</b>
                       <small>
-                        {m.seats}석 · {p.leased ? '리스' : '내 것'} · 가동 {Math.round(use * 100)}%
+                        {isFreighter(m) ? `화물 ${m.cargo}톤` : cabinText(cabinOf(p))} · {p.leased ? '리스' : '내 것'} · 가동 {Math.round(use * 100)}%
                       </small>
                       {elsewhere.length > 0 && (
                         <small className="al-muted" title={elsewhere.map((x) => `${CITY[x!.a].name}–${CITY[x!.b].name}`).join(', ')}>
@@ -313,34 +316,7 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
               </>
             )}
           </section>
-          <section className="al-card">
-            <h4>
-              운임 <small>{fareText(r.fare)}</small>
-            </h4>
-            <div className="al-fare">
-              <span>싸게</span>
-              <input
-                type="range"
-                min={FARE_MIN}
-                max={FARE_MAX}
-                step={5}
-                value={r.fare}
-                disabled={!canAct}
-                onChange={(e) => perform({ type: 'setFare', route: r.id, fare: Number(e.target.value) })}
-                aria-label="운임 조정"
-                data-testid="al-fare"
-              />
-              <span>비싸게</span>
-            </div>
-            <div className="al-fare-quick">
-              {[-15, 0, 15].map((f) => (
-                <button key={f} type="button" className={`al-chip${r.fare === f ? ' al-on' : ''}`} disabled={!canAct} onClick={() => perform({ type: 'setFare', route: r.id, fare: f })}>
-                  {fareText(f)}
-                </button>
-              ))}
-            </div>
-            <p className="al-muted al-tip">싸면 손님이 늘고(특히 관광객), 비싸면 한 명에게 더 받아요. 좌석이 꽉 차면 올려 보고, 많이 비면 내려 보세요.</p>
-          </section>
+          <FaresCard state={state} viewer={viewer} canAct={canAct} perform={perform} route={r} est={est} />
           <TimetableCard state={state} viewer={viewer} canAct={canAct} perform={perform} route={r} />
         </div>
         <div className="al-editor-right">
@@ -452,9 +428,27 @@ export function EstimateCard({ est, lastProfit, lastLf, title = '이번 달 어�
           <dd>{pct(est.share)}</dd>
         </div>
         <div>
-          <dt>달 운임 수입</dt>
-          <dd>{fmtMoney(est.revenue)}</dd>
+          <dt>달 수입</dt>
+          <dd>
+            {fmtMoney(est.revenue)}
+            {(est.cargoRev > 0 || est.ancillary > 0) && (
+              <small className="al-muted">
+                {' '}
+                (운임 {fmtMoney(est.revenue - est.cargoRev - est.ancillary)}
+                {est.cargoRev > 0 ? ` · 화물 ${fmtMoney(est.cargoRev)}` : ''}
+                {est.ancillary > 0 ? ` · 부가 ${fmtMoney(est.ancillary)}` : ''})
+              </small>
+            )}
+          </dd>
         </div>
+        {est.cargoCap > 0 && (
+          <div>
+            <dt>화물 (한 방향 주간)</dt>
+            <dd>
+              {Math.round(est.cargoT).toLocaleString('ko-KR')} / {Math.round(est.cargoCap).toLocaleString('ko-KR')}톤 · {pct(est.cargoCap > 0 ? est.cargoT / est.cargoCap : 0)}
+            </dd>
+          </div>
+        )}
       </dl>
       <div className="al-costbar" aria-hidden="true">
         <span className="al-c-rev" style={{ width: `${(est.revenue / total) * 100}%` }} />
@@ -515,10 +509,11 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
     const left = Math.min(slotCapacity(state, viewer, from) - slotsUsed(me, from), slotCapacity(state, viewer, to) - slotsUsed(me, to));
     const dem = pairDemand(state, from, to);
     for (const m of availableModels(year)) {
+      if (!fitsBizModel(me.model, m)) continue;
       if (m.range < d || airportClass(CITY[from], year) < m.runway || airportClass(CITY[to], year) < m.runway) continue;
       const max = Math.min(maxFreq(m, d), left);
       if (max < 1) continue;
-      const fit = Math.max(1, Math.min(max, Math.round(((dem.biz + dem.leisure) * 0.7) / m.seats)));
+      const fit = isFreighter(m) ? Math.min(max, 3) : Math.max(1, Math.min(max, Math.round(((dem.biz + dem.leisure) * 0.7) / m.seats)));
       let best: { m: ModelDef; freq: number; e: RouteEstimate } | null = null;
       for (const f of new Set([fit, max, Math.max(1, Math.round((fit + max) / 2))])) {
         const e = estimateRoute(state, viewer, from, to, [{ model: m.id, freq: f }], 0);
@@ -665,7 +660,7 @@ function NewRoute({ state, viewer, canAct, apply, planner, onPlanner, onFocus }:
                       <span className="al-opt-text">
                         <b>{o.m.name}</b>
                         <small>
-                          주 {o.freq}회 · {o.m.seats}석 · 탑승률 {pct(o.e.lf)}
+                          주 {o.freq}회 · {capacityText(o.m)} · {isFreighter(o.m) ? '화물칸' : '탑승률'} {pct(o.e.lf)}
                         </small>
                         <small>
                           이익 <b className={o.e.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(o.e.profit)}</b>/달

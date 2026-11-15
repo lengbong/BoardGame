@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import { MODEL } from './aircraft';
 import { CITY, REGIONS, REGION_INFO } from './cities';
-import { fmtMoney, signedMoney } from './format';
+import { fmtMoney, pct, signedMoney } from './format';
 import { GRADE_INFO, goalProgress } from './goals';
-import { ADS_MAX, allianceOutlook, borrowBlocker, proposeBlocker, repayBlocker } from './rules';
+import { ADS_MAX, MODEL_INFO, MODEL_SWITCH_MONTHS, allianceOutlook, borrowBlocker, modelBlocker, modelSwitchCost, proposeBlocker, repayBlocker } from './rules';
 import {
   MAINT_COST,
   MAINT_NAMES,
@@ -19,7 +19,7 @@ import {
   planeValue,
   reputationTarget,
 } from './simulate';
-import { mLabel } from './time';
+import { mLabel, yearOf } from './time';
 import type { AirlineAction, AirlineState, CompanyReport, Mod } from './types';
 import { ActButton, CoName, Meter, Stepper } from './ui';
 
@@ -34,6 +34,8 @@ const notMine = '내 차례에만 할 수 있어요';
 
 const INCOME: { key: keyof CompanyReport; name: string }[] = [
   { key: 'ticket', name: '운임 수입' },
+  { key: 'cargo', name: '화물 수입' },
+  { key: 'ancillary', name: '부가 수입 (짐·좌석·기내 판매)' },
   { key: 'side', name: '호텔·여행사 수입' },
 ];
 const COSTS: { key: keyof CompanyReport; name: string }[] = [
@@ -83,7 +85,7 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
             </tr>
           </thead>
           <tbody>
-            {INCOME.map((x) => (
+            {INCOME.filter((x) => x.key === 'ticket' || Math.round((rep?.[x.key] as number) ?? 0) !== 0 || Math.round((next?.[x.key] as number) ?? 0) !== 0).map((x) => (
               <tr key={x.key}>
                 <th>{x.name}</th>
                 <td className="al-pos">{rep ? `+${fmtMoney(rep[x.key] as number)}` : '—'}</td>
@@ -181,6 +183,8 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
         </div>
         <p className="al-muted al-tip">한도는 내 비행기 가치의 절반 + 처음 믿어 주는 돈이에요. 한도의 80%를 넘게 빌리면 금리가 2%p 올라가요.</p>
       </section>
+
+      <ModelCard state={state} viewer={viewer} canAct={canAct} perform={perform} />
 
       <section className="al-card al-alliance">
         <h4>🤝 제휴 (코드셰어)</h4>
@@ -390,6 +394,63 @@ export function FinanceView({ state, viewer, canAct, perform }: FinanceViewProps
         )}
       </section>
     </div>
+  );
+}
+
+/** 사업 모델: 지금 모델, 바꾸기 (값·걸리는 달), 모델마다 규칙 */
+function ModelCard({ state, viewer, canAct, perform }: FinanceViewProps) {
+  const me = state.companies[viewer];
+  const info = MODEL_INFO[me.model];
+  const year = yearOf(state.q);
+  const rep = state.report?.companies[viewer];
+  return (
+    <section className="al-card al-bizmodel-card" data-testid="al-bizmodel-card">
+      <h4>
+        {info.icon} 사업 모델: {info.name}
+        {me.modelNext && (
+          <small>
+            {' '}
+            → {MODEL_INFO[me.modelNext.model].name} ({mLabel(me.modelNext.t)}부터)
+          </small>
+        )}
+      </h4>
+      <p className="al-muted">{info.desc}.</p>
+      {rep && (rep.cargo > 0 || rep.paxC + rep.paxF > 0 || rep.ancillary > 0) && (
+        <p className="al-model-stats">
+          {rep.paxF + rep.paxC > 0 && <span className="tag">👑💼 윗등급 손님 {Math.round(rep.paxF + rep.paxC).toLocaleString('ko-KR')}명 · {fmtMoney(rep.revF + rep.revC)}</span>}
+          {rep.cargo > 0 && (
+            <span className="tag">
+              📦 화물 {Math.round(rep.cargoT).toLocaleString('ko-KR')}톤 · 짐칸 {pct(rep.cargoCap > 0 ? rep.cargoT / rep.cargoCap : 0)} 참 · {fmtMoney(rep.cargo)}
+            </span>
+          )}
+          {rep.ancillary > 0 && <span className="tag">🎒 부가 수입 {fmtMoney(rep.ancillary)}</span>}
+        </p>
+      )}
+      <div className="al-model-switch">
+        {(['full', 'lcc', 'cargo'] as const)
+          .filter((m) => m !== me.model)
+          .map((m) => (
+            <ActButton
+              key={m}
+              small
+              blocker={canAct ? modelBlocker(state, viewer, m) : notMine}
+              onClick={() => {
+                if (window.confirm(`${MODEL_INFO[m].name}로 바꿀까요? ${fmtMoney(modelSwitchCost(me, m))}이 들고 ${MODEL_SWITCH_MONTHS}달 뒤에 바뀌어요.${m === 'lcc' ? ' 그때 모든 여객기 좌석이 한 등급 고밀도로 바뀌고 제휴가 끝나요.' : ''}`)) perform({ type: 'setModel', model: m });
+              }}
+              testId={`al-switch-${m}`}
+            >
+              {MODEL_INFO[m].icon} {MODEL_INFO[m].name}로 바꾸기 ({fmtMoney(modelSwitchCost(me, m))})
+            </ActButton>
+          ))}
+      </div>
+      <p className="al-muted al-tip">
+        {me.model === 'lcc'
+          ? `저가항공은 승무원·판매·서비스 비용이 싸고 비행기를 더 빨리 돌려요. 싼 표를 찾는 관광 손님이 새로 생기지만 ${year < 1990 ? '아직은 규제가 남아 그 효과가 작아요. ' : ''}사업 손님은 덜 골라요.`
+          : me.model === 'cargo'
+            ? '화물은 연말(10~12월)에 가장 많고 기름값이 오르면 조금 줄어요. 무역 도시(홍콩·프랑크푸르트·싱가포르·두바이…)를 이어 보세요.'
+            : '여객기 배 아래 짐칸에도 화물이 실려요 (넓은 동체기일수록 많이). 짐이 많은 노선에는 화물기를 보탤 수도 있어요.'}
+      </p>
+    </section>
   );
 }
 

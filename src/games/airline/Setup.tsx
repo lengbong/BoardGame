@@ -9,7 +9,7 @@ import { CHALLENGES } from './challenges';
 import { SEASON_NAMES } from './calendar';
 import { CITY, REGIONS, REGION_INFO, airportClass, citySize } from './cities';
 import { fmtMoney } from './format';
-import { DEFAULT_NAMES, GOAL_VALUES, START_MONEY, companyName, hubCandidates } from './rules';
+import { DEFAULT_NAMES, GOAL_VALUES, MODEL_INFO, START_MONEY, companyName, hubCandidates } from './rules';
 import { companyValue } from './simulate';
 import type { SavedAirlineGame } from './storage';
 import { mLabel } from './time';
@@ -17,7 +17,7 @@ import { AirlinePicker, AirlinePhoto, airlineYears } from './AirlinePicker';
 import { gameHub } from './brand';
 import { CreditsModal } from './CreditsModal';
 import { REAL_AIRLINE, airlinesAt } from './realAirlines';
-import type { AiStyle, AirlineOptions, AirlineSetup, MoneyLevel, NameMode, StartEra } from './types';
+import type { AiStyle, AirlineOptions, AirlineSetup, BizModel, MoneyLevel, NameMode, StartEra } from './types';
 import { IataBadge } from './ui';
 import { Meter } from './ui';
 
@@ -211,6 +211,13 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
     return a ? REAL_AIRLINE[a].name : setup.seats[i].name.trim() || `${SEAT_COLORS[i as 0].name} 자리`;
   };
 
+  const models = [0, 1, 2, 3].map((i) => setup.models?.[i] ?? null);
+  const setModel = (seat: number, m: BizModel) => {
+    const next = [...models];
+    next[seat] = m;
+    setSetup((s) => ({ ...s, models: next }));
+  };
+
   const setHub = (seat: number, city: string | null) => {
     const next = [...hubs];
     for (let i = 0; i < next.length; i++) if (next[i] === city) next[i] = null;
@@ -357,6 +364,44 @@ export function AirlineSetupScreen({ initialSetup, saved, settings, onSettings, 
             ) : (
               <p className="al-note">지어낸 이름의 항공사로 해요. 이름은 위 자리 칸에 적을 수 있어요.</p>
             )}
+          </section>
+
+          <section className="setup-section">
+            <h2>사업 모델</h2>
+            <ul className="al-hub-seats al-model-seats">
+              {setup.seats.map((seat, i) =>
+                seat.kind === 'empty' ? null : (
+                  <li key={i}>
+                    <span className="al-hub-who" style={{ borderColor: SEAT_COLORS[i as 0].main }}>
+                      {`${SEAT_COLORS[i as 0].name} · ${seat.kind === 'human' ? '사람' : '컴퓨터'}`}
+                    </span>
+                    {seat.kind === 'human' ? (
+                      <span className="al-model-chips" role="radiogroup" aria-label="사업 모델">
+                        {(['full', 'lcc', 'cargo'] as const).map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            role="radio"
+                            aria-checked={(models[i] ?? 'full') === m}
+                            className={`al-chip${(models[i] ?? 'full') === m ? ' al-on' : ''}`}
+                            onClick={() => setModel(i, m)}
+                            title={MODEL_INFO[m].desc}
+                            data-testid={`al-setup-model-${i}-${m}`}
+                          >
+                            {MODEL_INFO[m].icon} {MODEL_INFO[m].name}
+                          </button>
+                        ))}
+                      </span>
+                    ) : (
+                      <span className="al-muted">거의 풀서비스 (셋 넘게 겨루면 저가항공이나 화물 회사가 하나 나올 수 있어요)</span>
+                    )}
+                  </li>
+                ),
+              )}
+            </ul>
+            <p className="al-note">
+              🛫 풀서비스는 여러 등급 좌석·갈아타기·제휴·배 아래 화물까지 해요. 🎒 저가항공은 한 등급 촘촘한 좌석과 싼 운임으로 관광 손님을 모으고 비용이 싸요 — 1978년 미국 규제 완화 뒤로 점점 유리해져요. 📦 화물 전문은 화물기로 짐만 날라요 — 홍콩·프랑크푸르트·런던·뉴욕·도쿄·서울·싱가포르·두바이 같은 무역 도시에 본사를 두면 좋아요. 게임 중에 돈과 몇 달을 들여 바꿀 수도 있어요.
+            </p>
           </section>
 
           <section className="setup-section">
@@ -543,6 +588,12 @@ function HowTo() {
         </li>
         <li>
           <b>계절과 운항 현장</b>: 손님은 달마다 달라요 — 하와이·방콕은 겨울, 지중해는 여름, 설·추석·여름방학·연말엔 여행이 늘어요 (지도 위 날짜 옆에 이번 달 손님 분위기가 나와요). 날씨(동아시아 태풍 7~9월, 북쪽 폭설 12~2월, 남아시아 몬순 6~9월, 안개)와 낡은 비행기·정비·혼잡 때문에 <b>지연·결항·회항·기체 점검</b>이 생겨요. 재무 화면의 <b>정비 수준</b>·<b>예비 승무원</b>과, 노선에 넣지 않은 <b>예비기</b>로 줄일 수 있어요. 정시 운항률은 평판과 손님에 영향을 줘요. 모두 게임 속 이야기이고 사고는 없어요.
+        </li>
+        <li>
+          <b>💺 좌석 등급과 📦 화물</b>: 비행기마다 좌석을 <b>3등급(일등석·비즈니스·이코노미)·2등급·모두 이코노미·고밀도</b>로 놓아요 (비행기 화면 ‘좌석 배치’, 바꾸면 그 달은 쉬어요). 일등석은 이코노미 3.5석, 비즈니스는 2석 넓이를 쓰고 값은 훨씬 비싸요. 사업 손님이 많고 멀수록 윗등급 손님이 많고, 옛날일수록 일등석을 찾았어요 (비즈니스석은 1979년부터). 등급마다 운임을 따로 정해요. 여객기 배 아래 짐칸에는 <b>화물</b>이 실리고(넓은 동체기일수록 많이), 무역 도시를 잇는 노선에는 <b>화물기</b>를 띄울 수도 있어요. 화물은 10~12월에 가장 많고 기름값이 오르면 조금 줄어요.
+        </li>
+        <li>
+          <b>🛫 사업 모델</b>: 시작할 때 <b>풀서비스·저가항공·화물 전문</b> 가운데 골라요. 저가항공은 한 등급 촘촘한 좌석, 싼 운임(−50%까지), 싼 승무원·판매 비용, 빨리 돌리는 비행기, 짐·좌석 값 같은 부가 수입이 있지만 갈아타기·제휴·화물은 없고 사업 손님은 덜 골라요. 규제가 풀린 1978년 뒤로 싼 표를 찾는 손님이 점점 늘어요. 화물 전문은 화물기만 굴려요. 재무 화면에서 돈과 여섯 달을 들여 바꿀 수 있어요.
         </li>
         <li>
           <b>👥 직원과 조직</b>: 비행기를 띄우려면 <b>조종사·객실 승무원·정비사·지상직</b>이 있어야 해요. 필요한 사람 수는 비행시간·좌석·비행기 나이·지점·손님 수로 정해지고, 뽑으면 바로 오지 않아요 (조종사 4~5달, 정비사 2~3달, 객실 승무원 1~2달, 지상직 1달 — 훈련원이 있으면 더 빨라요). 모자라면 15%까지는 초과 근무로 버티지만 그 넘게는 <b>결항</b>이 나요. <b>임금 수준</b>·초과 근무·회사 성장이 <b>조직 만족도</b>를 움직이고, 만족도가 정시 운항·서비스에 닿으며 너무 낮으면 <b>파업</b>이 날 수 있어요. 인사 화면에서 뽑고, 내보내고, 임금을 정해요.

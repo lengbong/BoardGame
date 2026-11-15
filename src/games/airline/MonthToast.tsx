@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { revenueOf } from './simulate';
 import { fmtMoney, fmtPax, pct, signedMoney } from './format';
 import { causeInfo } from './ReportView';
 import { CITY } from './cities';
@@ -42,15 +43,15 @@ export function MonthToast({ state, report, viewer, onClose, onDetail }: { state
         </div>
         <div>
           <dt>수입</dt>
-          <dd>{fmtMoney(r.ticket + r.side)}</dd>
+          <dd>{fmtMoney(revenueOf(r))}</dd>
         </div>
         <div>
           <dt>이익</dt>
           <dd className={r.profit < 0 ? 'al-neg' : 'al-pos'}>{signedMoney(r.profit)}</dd>
         </div>
         <div>
-          <dt>탑승률</dt>
-          <dd>{pct(lf)}</dd>
+          <dt>{r.seats === 0 && r.cargoCap > 0 ? '화물칸' : '탑승률'}</dt>
+          <dd>{pct(r.seats === 0 && r.cargoCap > 0 ? r.cargoT / r.cargoCap : lf)}</dd>
         </div>
         <div>
           <dt>정시율</dt>

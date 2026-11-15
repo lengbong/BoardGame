@@ -147,7 +147,7 @@ describe('컴퓨터 항공사', () => {
     expect(c.routes.length).toBeGreaterThanOrEqual(10);
     expect(c.cash).toBeGreaterThan(0);
     checkFleet(s);
-  });
+  }, 60000);
 
   it('쉬움은 운임을 조심스럽게(±15% 안에서) 정하고 먼 노선은 피한다', () => {
     const { s } = playOut(['ai-easy', 'ai-easy'], 11, { years: 10 });

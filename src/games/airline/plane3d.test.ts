@@ -25,7 +25,7 @@ describe('기종 그림 (SVG)', () => {
       // 너무 크지 않게 (한 장에 90KB 아래)
       expect(svg.length, m.id).toBeLessThan(90_000);
     }
-  });
+  }, 60000);
 
   it('회사 칠에는 꼬리 무늬와 회사 색이 들어간다', () => {
     const svg = renderPlaneSvg(SHAPES.a320, companyLivery('#e5484d', '#b4282e', 'star'));

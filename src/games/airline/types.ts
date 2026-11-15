@@ -662,6 +662,9 @@ export interface CompanyReport {
   checks?: number;
   /** C점검 값 (억, '운항 수당·정비 부품'에 들어 있다) */
   checkCost?: number;
+  /** 전세기로 다녀온 의뢰 수와 보수 (보수는 부대 수입에 들어 있다) */
+  charters?: number;
+  charterRev?: number;
   /** 정시 운항률 (결항은 빼고 뜬 편 가운데 제때 뜬 비율) */
   onTime: number;
   /** 경영 평가 (4분기 결산에만) */
@@ -750,6 +753,27 @@ export interface MonthPoint {
 export interface YearReport {
   year: number;
   companies: CompanyReport[];
+}
+
+/** 전세기 의뢰 (charters.ts) */
+export interface CharterOffer {
+  id: number;
+  /** 출발지와 도착지 (왕복) */
+  a: string;
+  b: string;
+  pax: number;
+  /** 보수 (억) */
+  pay: number;
+  title: string;
+  icon: string;
+  /** 올라온 달 */
+  listed: number;
+  /** 이 달까지 맡을 수 있다 */
+  expires: number;
+  /** 맡은 회사·비행기·나는 달 */
+  by?: number;
+  plane?: number;
+  t?: number;
 }
 
 /** 연말 시상식 (awards.ts) */
@@ -858,6 +882,8 @@ export type AirlineAction =
   | { type: 'checkPlane'; plane: number; on: boolean }
   /** C점검 시점 (기체 상태 %) */
   | { type: 'setCheckAt'; at: number }
+  /** 전세기 의뢰를 이 쉬는 비행기로 맡는다 (이번 달에 다녀온다) */
+  | { type: 'charter'; offer: number; plane: number }
   /** 공항 시설 짓기·팔기 */
   | { type: 'buildFacility'; city: string; kind: FacilityKind }
   | { type: 'sellFacility'; city: string; kind: FacilityKind }
@@ -883,6 +909,7 @@ export type GameEvent =
   | { id: number; type: 'fuel'; company: number; tons: number; what: 'buy' | 'sell' | 'tank' }
   | { id: number; type: 'check'; company: number; plane: number; on: boolean }
   | { id: number; type: 'facility'; company: number; city: string; kind: FacilityKind }
+  | { id: number; type: 'charter'; company: number; offer: number }
   | { id: number; type: 'turn'; company: number }
   | { id: number; type: 'month'; t: number }
   | { id: number; type: 'quarter'; q: number }
@@ -943,6 +970,8 @@ export interface AirlineState {
   years: YearReport[];
   /** 해마다 연말 시상식 (예전 저장에는 없다) */
   awards?: AwardYear[];
+  /** 전세기 의뢰 게시판 (예전 저장에는 없다) */
+  charters?: CharterOffer[];
   nextId: number;
   result: GameResult | null;
   challenge: ChallengeProgress | null;

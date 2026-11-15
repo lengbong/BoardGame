@@ -149,5 +149,5 @@ export const INCOME_PARTS: { key: string; name: string; get: (r: CompanyReport) 
   { key: 'ticket', name: '여객 운임', get: (r) => r.ticket - (r.cargo ?? 0) - (r.ancillary ?? 0) },
   { key: 'cargo', name: '화물 수입', get: (r) => r.cargo ?? 0 },
   { key: 'ancillary', name: '부가 수입', get: (r) => r.ancillary ?? 0 },
-  { key: 'side', name: '부대사업 수입', get: (r) => r.side },
+  { key: 'side', name: '부대사업·전세기 수입', get: (r) => r.side },
 ];

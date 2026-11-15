@@ -2,6 +2,7 @@ import { MODEL, leadTime } from './aircraft';
 import { MAX_ROUTES } from './limits';
 import { CAMPAIGN_INFO, MEDIA_INFO, mediaOf } from './ads';
 import { cabinPresets, sameCabin } from './cabin';
+import { charterBlocker, charterPlaneIds, charterProfit, openCharters } from './charters';
 import { checkAtOf, inCheck } from './condition';
 import { countFacility, facilityBlocker, facilityCost } from './facilities';
 import { TANK_LEVELS, tankBlocker, tankOf, tonPrice } from './fuel';
@@ -212,6 +213,7 @@ export class Planner {
     this.decide();
     this.emergency();
     this.manageStaff();
+    this.takeCharters();
     if (!this.planning) {
       // 계획 달이 아니면 가볍게: 쉬는 비행기, 아주 차거나 빈 노선의 운임, 광고
       this.quickFares();
@@ -521,9 +523,10 @@ export class Planner {
     // 한 차례에 살펴보는 쉬는 비행기 수 (나머지는 다음 달에). 큰 사건 뒤 노선망을 한꺼번에 되살리면
     // 한 차례에 노선 80개를 여느라 화면이 멈춘 듯했다. 몇 달에 걸쳐 되살리는 편이 실제와도 비슷하다
     let budget = IDLE_PER_TURN;
+    const chartered = charterPlaneIds(this.s, this.ci);
     for (const p0 of idlePlanes(this.c)) {
       const p = planeById(this.c, p0.id);
-      if (!p) continue;
+      if (!p || chartered.has(p.id)) continue;
       const m = MODEL[p.model];
       if (spares > 0 && !p.leased && planeAge(this.s, p) < 22) {
         spares--;
@@ -564,6 +567,28 @@ export class Planner {
       if (f >= 1 && this.act({ type: 'assign', plane: p.id, route: l.route, freq: f })) moved = true;
     }
     return moved;
+  }
+
+  /**
+   * 전세기 의뢰: 쉬는 비행기로 남는 의뢰가 있으면 맡는다 (한 차례에 두 건까지, 쉬움은 많이 남을 때만).
+   * 쉬는 비행기는 예비기이기도 해서, 보수의 일부는 남아야 맡는다.
+   */
+  private takeCharters(): void {
+    const offers = openCharters(this.s);
+    if (offers.length === 0) return;
+    for (let k = 0; k < 2; k++) {
+      let best: { offer: number; plane: number; profit: number } | null = null;
+      const busy = charterPlaneIds(this.s, this.ci);
+      for (const o of openCharters(this.s)) {
+        for (const p of this.c.planes) {
+          if (p.legs.length > 0 || busy.has(p.id) || charterBlocker(this.s, this.ci, o.id, p.id)) continue;
+          const profit = charterProfit(this.s, this.ci, o, p);
+          const need = Math.max(2, o.pay * (this.normal ? 0.15 : 0.3));
+          if (profit > need && (!best || profit > best.profit)) best = { offer: o.id, plane: p.id, profit };
+        }
+      }
+      if (!best || !this.act({ type: 'charter', offer: best.offer, plane: best.plane })) return;
+    }
   }
 
   /** 비행시간이 많이 남는 비행기를 다른 노선에도 띄운다 (가장 많이 남는 몇 대만 살핀다) */

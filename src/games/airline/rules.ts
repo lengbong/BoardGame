@@ -7,6 +7,7 @@ import { BIZ_CHANGE_MONTHS, BIZ_INFO, assignBizModels, bizCabinBlocker, bizChang
 import { CLASS_FARE_MAX, CLASS_FARE_MIN } from './classes';
 import { blockText, branchPolitics, makerPolitics, politicalNews, polity, routePolitics } from './politics';
 import { AIRLINE_AWARD_DEMAND, AIRLINE_AWARD_MONTHS, AWARD_INFO, yearAwards } from './awards';
+import { charterBlocker, charterPlaneIds, refreshCharters, tripsFor } from './charters';
 import { CHALLENGE, challengeDeadline, checkChallenge } from './challenges';
 import { CHECK_POLICIES, condOf, dueForCheck, inCheck, monthlyWear, restoredCond, usedCond } from './condition';
 import { FACILITY_INFO, FACILITY_REFUND, companyCheckCost, extraCheckSlots, facilityBlocker, facilityCost, wearMult } from './facilities';
@@ -651,6 +652,7 @@ export function sellBlocker(state: AirlineState, ci: number, planeId: number): s
   const c = state.companies[ci];
   const p = planeById(c, planeId);
   if (!p) return '없는 비행기예요';
+  if (charterPlaneIds(state, ci).has(p.id)) return '이번 달 전세기로 나가요';
   const amount = sellAmount(state, p);
   if (amount < 0 && c.cash < -amount) return `반납 위약금 ${fmtMoney(-amount)}이 모자라요`;
   return null;
@@ -663,6 +665,7 @@ export function assignBlocker(state: AirlineState, ci: number, planeId: number, 
   const r = routeById(c, routeId);
   if (!p) return '없는 비행기예요';
   if (!r) return '없는 노선이에요';
+  if (charterPlaneIds(state, ci).has(p.id)) return '이번 달 전세기로 나가요';
   const m = MODEL[p.model];
   const d = dist(r.a, r.b);
   const fit = bizModelFit(c, m);
@@ -1278,6 +1281,14 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
       return edit(state, ci, (c) => {
         c.fuel = { ...tankOf(c), auto: ratio };
       });
+    }
+    case 'charter': {
+      if (charterBlocker(state, ci, action.offer, action.plane)) return state;
+      const o = state.charters!.find((x) => x.id === action.offer)!;
+      const p = planeById(c0, action.plane)!;
+      let s = { ...state, charters: state.charters!.map((x) => (x.id === o.id ? { ...x, by: ci, plane: p.id, t: state.t } : x)) };
+      s = { ...s, events: [{ id: s.nextEventId, type: 'charter', company: ci, offer: o.id }], nextEventId: s.nextEventId + 1 };
+      return addLog(s, seat, `${c0.name}: ${o.icon} ${o.title} ${CITY[o.a].name}⇄${CITY[o.b].name} ${o.pax}명 전세기 맡기 (${MODEL[p.model].name} ${tripsFor(o, p)}번 왕복, 보수 ${fmtMoney(o.pay)})`);
     }
     case 'checkPlane': {
       const p = planeById(c0, action.plane);
@@ -1981,6 +1992,7 @@ function startMonth(state: AirlineState, t: number, rng: Rng): AirlineState {
     s = addNews(s, ev.news);
   }
   s = refreshMarket(s, rng);
+  s = refreshCharters(s, rng);
 
   // 회사마다: 주문한 비행기 인도, 지난 효과 정리, 결정 사건, 새해 목표
   const year = yearOfM(t);

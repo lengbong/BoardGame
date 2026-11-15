@@ -174,6 +174,8 @@ export function isValidState(v: unknown): v is AirlineState {
   if (!Array.isArray(s.ledger) || !s.ledger.every(okReport)) return false;
   if (!Array.isArray(s.months) || !s.months.every((m) => isObj(m) && isInt(m.t) && Array.isArray(m.value) && m.value.length === n)) return false;
   if (!Array.isArray(s.years) || !s.years.every((y) => isObj(y) && isInt(y.year) && Array.isArray(y.companies))) return false;
+  // 전세기 의뢰 (예전 저장에는 없다)
+  if (s.charters !== undefined && !(Array.isArray(s.charters) && s.charters.every((o) => isObj(o) && isInt(o.id) && isCity(o.a) && isCity(o.b) && isInt(o.pax) && o.pax > 0 && isNum(o.pay) && typeof o.title === 'string' && typeof o.icon === 'string' && isInt(o.listed) && isInt(o.expires) && (o.by === undefined || isIndex(o.by, n)) && (o.plane === undefined || isInt(o.plane)) && (o.t === undefined || isInt(o.t))))) return false;
   // 연말 시상식 (예전 저장에는 없다)
   if (s.awards !== undefined && !(Array.isArray(s.awards) && s.awards.every((y) => isObj(y) && isInt(y.year) && Array.isArray(y.items) && y.items.every((a) => isObj(a) && AWARD_KINDS.includes(a.kind) && isIndex(a.company, n) && isNum(a.value) && typeof a.text === 'string')))) return false;
   if (!s.news.every((x) => isObj(x) && isInt(x.t))) return false;

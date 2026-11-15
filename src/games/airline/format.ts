@@ -9,6 +9,12 @@ export function signedMoney(v: number): string {
   return `${r > 0 ? '+' : '−'}${fmtMoney(Math.abs(r))}`;
 }
 
+/** 작은 돈까지 부호와 함께: '+4.8억', '−3,200만 원', '+120억' */
+export function signedFine(v: number): string {
+  if (Math.abs(v) < 0.00005) return '0억';
+  return `${v > 0 ? '+' : '−'}${fmtFine(Math.abs(v))}`;
+}
+
 /** '12.3만 명', '8,500명' */
 export function fmtPax(n: number): string {
   const r = Math.round(n);

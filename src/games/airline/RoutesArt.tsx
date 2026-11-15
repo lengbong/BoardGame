@@ -203,6 +203,102 @@ export function FareScale({ mine, rivals, min, max }: { mine: number; rivals: Fa
   );
 }
 
+// ------------------------------------------------------------------ 운임별 이익 막대
+
+export interface FareBar {
+  fare: number;
+  profit: number;
+  lf: number;
+}
+
+const fareLabel = (f: number) => (f === 0 ? '보통' : `${f > 0 ? '+' : ''}${f}%`);
+
+/**
+ * 운임마다 이번 달 이익 어림: 0 선 위는 흑자(파랑), 아래는 적자(주황).
+ * 지금 운임 막대만 진하게 + 아래 삼각형, 가장 남는 운임은 위에 별. 막대를 누르면 그 운임으로 바꾼다.
+ */
+export function FareProfitBars({ bars, current, best, onPick, format }: { bars: FareBar[]; current: number; best: number; onPick?: (fare: number) => void; format: (v: number) => string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const width = Math.max(220, useElementWidth(ref) || 320);
+  const height = 116;
+  const m = { l: 4, r: 4, t: 16, b: 30 };
+  const w = width - m.l - m.r;
+  const h = height - m.t - m.b;
+  const vals = bars.map((b) => b.profit);
+  const lo = Math.min(0, ...vals);
+  const hi = Math.max(0, ...vals);
+  const span = hi - lo || 1;
+  const y = (v: number) => m.t + ((hi - v) / span) * h;
+  const slot = w / Math.max(1, bars.length);
+  const bw = Math.max(4, Math.min(26, slot - 3));
+  const y0 = y(0);
+  const first = bars[0]?.fare ?? 0;
+  const last = bars[bars.length - 1]?.fare ?? 0;
+  const ticks = new Set([first, first / 2, 0, last / 2, last]);
+  const bar = (v: number, x: number) => {
+    const y1 = y(v);
+    const top = Math.min(y0, y1);
+    const ht = Math.max(1, Math.abs(y1 - y0));
+    const r = Math.min(3, bw / 2, ht);
+    // 0에서 먼 쪽 끝만 둥글게
+    if (v >= 0) return `M${x} ${top + ht}V${top + r}Q${x} ${top} ${x + r} ${top}H${x + bw - r}Q${x + bw} ${top} ${x + bw} ${top + r}V${top + ht}Z`;
+    return `M${x} ${top}V${top + ht - r}Q${x} ${top + ht} ${x + r} ${top + ht}H${x + bw - r}Q${x + bw} ${top + ht} ${x + bw} ${top + ht - r}V${top}Z`;
+  };
+  const star = (cx: number, cy: number, r: number) =>
+    Array.from({ length: 10 }, (_, k) => {
+      const a = (k * Math.PI) / 5 - Math.PI / 2;
+      const rr = k % 2 === 0 ? r : r * 0.45;
+      return `${k ? 'L' : 'M'}${(cx + rr * Math.cos(a)).toFixed(1)} ${(cy + rr * Math.sin(a)).toFixed(1)}`;
+    }).join('') + 'Z';
+  const cur = bars.find((b) => b.fare === current);
+  return (
+    <div className="al-chart al-fpb" ref={ref}>
+      <svg
+        width={width}
+        height={height}
+        role="img"
+        aria-label={`운임별 달 이익 어림: ${bars.map((b) => `${fareLabel(b.fare)} ${format(b.profit)}`).join(', ')}. 지금 ${fareLabel(current)}${cur ? ` ${format(cur.profit)}` : ''}, 가장 남는 운임 ${fareLabel(best)}`}
+      >
+        {bars.map((b, i) => {
+          const x = m.l + i * slot + (slot - bw) / 2;
+          const now = b.fare === current;
+          return (
+            <g key={b.fare} className={now ? 'al-fpb-now' : 'al-fpb-other'}>
+              <path d={bar(b.profit, x)} className={b.profit >= 0 ? 'al-bar-gain' : 'al-bar-loss'} />
+              {b.fare === best && <path d={star(x + bw / 2, m.t - 8, 6)} className="al-fpb-star" />}
+              {now && <path d={`M${x + bw / 2} ${m.t + h + 3}l-5 8h10z`} className="al-fs-me" />}
+              {ticks.has(b.fare) && (
+                <text
+                  x={i === 0 ? m.l : i === bars.length - 1 ? m.l + w : x + bw / 2}
+                  y={height - 4}
+                  textAnchor={i === 0 ? 'start' : i === bars.length - 1 ? 'end' : 'middle'}
+                  className={`al-tick${now ? ' al-tick-now' : ''}`}
+                >
+                  {fareLabel(b.fare)}
+                </text>
+              )}
+              <rect
+                x={m.l + i * slot}
+                y={0}
+                width={slot}
+                height={height}
+                fill="transparent"
+                className={onPick ? 'al-fpb-hit' : undefined}
+                onClick={onPick ? () => onPick(b.fare) : undefined}
+              >
+                <title>
+                  운임 {fareLabel(b.fare)}: 이익 {format(b.profit)} · 탑승률 {Math.round(b.lf * 100)}%
+                </title>
+              </rect>
+            </g>
+          );
+        })}
+        <line x1={m.l} x2={m.l + w} y1={y0} y2={y0} className="al-axis" />
+      </svg>
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------ 하루 시간대 시계
 
 export interface BandSlice {

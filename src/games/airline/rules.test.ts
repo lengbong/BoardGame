@@ -27,6 +27,8 @@ import {
   runQuarter,
   CRISIS_MONTHS,
   endT,
+  FARE_MAX,
+  FARE_MIN,
 } from './rules';
 import {
   MAX_DELIVERIES,
@@ -35,7 +37,9 @@ import {
   branchCost,
   companyValue,
   creditLimit,
+  estimateExisting,
   estimateRoute,
+  fareOutlook,
   leaseDeposit,
   maxFreq,
   maxFreqFor,
@@ -345,6 +349,20 @@ describe('운임·광고·서비스·대출·부대사업', () => {
     expect(s.companies[0].ads.eastasia).toBe(25);
     expect(applyAction(s, { type: 'setService', level: 6 })).toBe(s);
     expect(applyAction(s, { type: 'setAds', region: 'europe', amount: -1 })).toBe(s);
+  });
+
+  it('운임별 이익 어림: 칸마다 그 운임의 어림과 같고, 가장 남는 운임을 고른다', () => {
+    let s = withTokyoRoute();
+    const r = s.companies[0].routes[0];
+    const o = fareOutlook(s, 0, r, FARE_MIN, FARE_MAX);
+    expect(o.points.map((p) => p.fare)).toEqual([-30, -25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30]);
+    for (const p of o.points) expect(p.profit).toBeCloseTo(estimateExisting(s, 0, r, { fare: p.fare }).profit, 6);
+    expect(o.points.find((p) => p.fare === r.fare)!.profit).toBeCloseTo(estimateExisting(s, 0, r).profit, 6);
+    expect(o.points.find((p) => p.fare === o.best)!.profit).toBe(Math.max(...o.points.map((p) => p.profit)));
+    // 지금 운임을 바꿔도 칸마다 어림은 그대로 (내 운임은 라이벌 쪽 계산에 들어가지 않는다)
+    s = act(s, { type: 'setFare', route: r.id, fare: 20 });
+    const o2 = fareOutlook(s, 0, s.companies[0].routes[0], FARE_MIN, FARE_MAX);
+    o2.points.forEach((p, i) => expect(p.profit).toBeCloseTo(o.points[i].profit, 6));
   });
 
   it('대출은 한도까지, 갚을 때는 현금 안에서', () => {

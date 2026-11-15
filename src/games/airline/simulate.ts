@@ -919,6 +919,31 @@ export function estimateExisting(state: AirlineState, ci: number, route: Route, 
   return estimateRoute(state, ci, route.a, route.b, planes, override?.fare ?? route.fare, extra);
 }
 
+/** 운임 한 칸의 이번 달 어림 */
+export interface FarePoint {
+  fare: number;
+  profit: number;
+  lf: number;
+}
+
+/**
+ * 운임을 min~max 사이에서 step 칸마다 바꿔 본 이번 달 어림 (비행기·시간표는 지금 그대로, 라이벌도 지금 그대로).
+ * best: 가장 남는 운임 (이익이 같으면 ‘보통’에 가까운 쪽).
+ */
+export function fareOutlook(state: AirlineState, ci: number, route: Route, min: number, max: number, step = 5): { points: FarePoint[]; best: number } {
+  const points: FarePoint[] = [];
+  for (let fare = min; fare <= max; fare += step) {
+    const e = estimateExisting(state, ci, route, { fare });
+    points.push({ fare, profit: e.profit, lf: e.lf });
+  }
+  let best = points[0];
+  for (const p of points) {
+    const gap = p.profit - best.profit;
+    if (gap > 1e-9 || (Math.abs(gap) <= 1e-9 && Math.abs(p.fare) < Math.abs(best.fare))) best = p;
+  }
+  return { points, best: best?.fare ?? 0 };
+}
+
 /**
  * 비행기 한 대의 좌석 배치·기내식을 바꾸면 그 비행기가 나는 노선들의 분기 이익이 어떻게 될지 (지금 → 바꾼 뒤).
  * 기내식 비용·편안함과 고급 좌석 운임이 모두 들어간다 (평판 변화는 빼고).

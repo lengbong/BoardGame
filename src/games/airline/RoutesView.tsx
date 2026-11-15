@@ -7,7 +7,7 @@ import { SEAT_SHAPES } from './Art';
 import { PlaneImage } from './PlaneImage';
 import { cabinSeats } from './cabin';
 import { AIRPORT_INFO, CITIES, CITY, REGIONS, REGION_INFO, airportClass, dist, pairKey } from './cities';
-import { fareText, fmtMoney, fmtPax, km, pct, signedMoney } from './format';
+import { fareText, fmtMoney, fmtPax, km, pct, signedFine, signedMoney } from './format';
 import { FARE_MAX, FARE_MIN, applyAction, assignBlocker, bestFreq, buyBlocker, depositFor, maxRangeNow, routeBlocker, routeOnPair, usedBlocker } from './rules';
 import {
   WEEK_HOURS,
@@ -16,6 +16,7 @@ import {
   draftsOf,
   estimateExisting,
   estimateRoute,
+  fareOutlook,
   legFreq,
   legHours,
   leaseRent,
@@ -40,7 +41,7 @@ import { TimetableCard } from './TimetableCard';
 import { ActButton, CoName, LoadMeter, Meter, Stepper } from './ui';
 import { FinIcon, ProgressRing } from './FinanceArt';
 import { MoreInfo, StaffIcon } from './StaffArt';
-import { FareScale, RouteArc, RouteGlyph, RouteIcon, RouteMoney, RoutesEmptyArt, SplitBar } from './RoutesArt';
+import { FareProfitBars, FareScale, RouteArc, RouteGlyph, RouteIcon, RouteMoney, RoutesEmptyArt, SplitBar, type FareMark } from './RoutesArt';
 
 /** 탑승률 고리 색: 많이 비면 빨강, 알맞으면 초록, 꽉 차면 주황 */
 const lfTone = (lf: number) => (lf < 0.55 ? 'bad' : lf > 0.97 ? 'warn' : 'good');
@@ -392,53 +393,17 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
               </>
             )}
           </section>
-          <section className="al-card">
-            <h4 className="al-fin-title">
-              <FinIcon kind="tag" /> 운임 <small>{fareText(r.fare)}</small>
-            </h4>
-            {rivals.length > 0 && (
-              <FareScale
-                mine={r.fare}
-                min={FARE_MIN}
-                max={FARE_MAX}
-                rivals={rivals.map(({ c, i, rt }) => ({ key: String(i), fare: rt!.fare, color: coColors(c).main, name: c.name }))}
-              />
-            )}
-            <div className="al-fare">
-              <span>싸게</span>
-              <input
-                type="range"
-                min={FARE_MIN}
-                max={FARE_MAX}
-                step={5}
-                value={r.fare}
-                disabled={!canAct}
-                onChange={(e) => perform({ type: 'setFare', route: r.id, fare: Number(e.target.value) })}
-                aria-label="운임 조정"
-                data-testid="al-fare"
-              />
-              <span>비싸게</span>
-            </div>
-            <div className="al-fare-quick">
-              {[-15, 0, 15].map((f) => (
-                <button key={f} type="button" className={`al-chip${r.fare === f ? ' al-on' : ''}`} disabled={!canAct} onClick={() => perform({ type: 'setFare', route: r.id, fare: f })}>
-                  {fareText(f)}
-                </button>
-              ))}
-            </div>
-            {rivals.length > 0 && (
-              <p className="al-muted al-tip al-fs-legend">
-                <span>
-                  <i className="al-fs-key al-fs-key-me" /> 내 운임
-                </span>
-                <span>
-                  <i className="al-fs-key al-fs-key-rival" /> 라이벌 운임
-                </span>
-                <span>(점에 마우스를 올리면 회사 이름)</span>
-              </p>
-            )}
-            <MoreInfo>싸면 손님이 늘고(특히 관광객), 비싸면 한 명에게 더 받아요. 좌석이 꽉 차면 올려 보고, 많이 비면 내려 보세요.</MoreInfo>
-          </section>
+          <FareCard
+            key={`${viewer}-${r.id}-${state.t}`}
+            state={state}
+            viewer={viewer}
+            canAct={canAct}
+            perform={perform}
+            routeId={r.id}
+            est={est}
+            hasPlanes={planes.length > 0}
+            rivals={rivals.map(({ c, i, rt }) => ({ key: String(i), fare: rt!.fare, color: coColors(c).main, name: c.name }))}
+          />
           <TimetableCard state={state} viewer={viewer} canAct={canAct} perform={perform} route={r} />
         </div>
         <div className="al-editor-right">
@@ -559,6 +524,140 @@ function RouteEditor({ state, viewer, canAct, perform, apply, routeId, onFocus, 
   );
 }
 
+// ------------------------------------------------------------------ 운임 (바꾸면 바로 이익 어림)
+
+/** 별 (가장 남는 운임 표시, 막대 위 별과 같은 모양) */
+function BestStar() {
+  return (
+    <svg viewBox="0 0 12 12" width={12} height={12} aria-hidden="true" className="al-fpb-key">
+      <path d="M6 0.5L7.3 4.2L11.2 4.3L8.1 6.7L9.2 10.4L6 8.2L2.8 10.4L3.9 6.7L0.8 4.3L4.7 4.2Z" />
+    </svg>
+  );
+}
+
+/**
+ * 운임 카드: 슬라이더 바로 위에 예상 이익·탑승률과 운임별 이익 막대를 둔다.
+ * (모바일에서는 ‘이번 달 어림’ 카드가 한참 아래라, 운임을 바꾸며 결과를 한 화면에서 보도록)
+ */
+function FareCard({
+  state,
+  viewer,
+  canAct,
+  perform,
+  routeId,
+  est,
+  hasPlanes,
+  rivals,
+}: {
+  state: AirlineState;
+  viewer: number;
+  canAct: boolean;
+  perform: (a: AirlineAction) => void;
+  routeId: number;
+  est: RouteEstimate;
+  hasPlanes: boolean;
+  rivals: FareMark[];
+}) {
+  const r = state.companies[viewer].routes.find((x) => x.id === routeId)!;
+  // 이번 달 이 노선을 처음 볼 때의 운임: 바꾼 뒤 이익이 얼마나 달라졌는지 견주는 기준
+  const [startFare] = useState(r.fare);
+  const outlook = useMemo(() => (hasPlanes ? fareOutlook(state, viewer, r, FARE_MIN, FARE_MAX) : null), [state, viewer, r, hasPlanes]);
+  const before = useMemo(() => (hasPlanes && startFare !== r.fare ? estimateExisting(state, viewer, r, { fare: startFare }) : null), [state, viewer, r, hasPlanes, startFare]);
+  const setFare = (fare: number) => perform({ type: 'setFare', route: r.id, fare });
+  const bestPoint = outlook?.points.find((p) => p.fare === outlook.best);
+  const diff = before ? est.profit - before.profit : 0;
+
+  return (
+    <section className="al-card al-fare-card">
+      <h4 className="al-fin-title">
+        <FinIcon kind="tag" /> 운임 <small>{fareText(r.fare)}</small>
+      </h4>
+      {rivals.length > 0 && (
+        <>
+          <FareScale mine={r.fare} min={FARE_MIN} max={FARE_MAX} rivals={rivals} />
+          <p className="al-muted al-tip al-fs-legend">
+            <span>
+              <i className="al-fs-key al-fs-key-me" /> 내 운임
+            </span>
+            <span>
+              <i className="al-fs-key al-fs-key-rival" /> 라이벌 운임
+            </span>
+            <span>(점에 마우스를 올리면 회사 이름)</span>
+          </p>
+        </>
+      )}
+      {outlook ? (
+        <>
+          {/* 손가락이 슬라이더를 가려도 보이게 결과는 슬라이더 위에 */}
+          <div className="al-fare-est" data-testid="al-fare-est">
+            <span className="al-fe-main">
+              <small>
+                <b>{fareText(r.fare)}</b>일 때 이번 달 예상 이익
+              </small>
+              <b className={est.profit < 0 ? 'al-neg' : 'al-pos'} data-testid="al-fare-profit">
+                {signedFine(est.profit)}
+              </b>
+              {before ? (
+                <small className="al-fe-diff">
+                  바꾸기 전({fareText(startFare)})보다 <b className={diff < 0 ? 'al-neg' : 'al-pos'}>{signedFine(diff)}</b>
+                </small>
+              ) : (
+                <small className="al-fe-diff al-muted">운임을 바꾸면 바로 다시 어림해요</small>
+              )}
+            </span>
+            <span className="al-fe-lf">
+              <ProgressRing value={est.lf} tone={lfTone(est.lf)} size={46} label={`탑승률 ${pct(est.lf)}`} />
+              <small>탑승률</small>
+            </span>
+          </div>
+          <FareProfitBars bars={outlook.points} current={r.fare} best={outlook.best} format={signedFine} onPick={canAct ? setFare : undefined} />
+          {bestPoint && (
+            <p className="al-fpb-note">
+              <BestStar /> 가장 남는 운임 <b>{fareText(bestPoint.fare)}</b>
+              <span className="al-muted">· 이익 {signedFine(bestPoint.profit)}</span>
+              {bestPoint.fare === r.fare ? (
+                <span className="al-chip-static al-pos">지금 운임</span>
+              ) : (
+                <button type="button" className="al-chip" disabled={!canAct} onClick={() => setFare(bestPoint.fare)} data-testid="al-fare-best">
+                  이 운임으로
+                </button>
+              )}
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="al-muted">비행기를 넣으면 운임에 따라 이익이 얼마나 될지 여기서 바로 어림해 보여 줘요.</p>
+      )}
+      <div className="al-fare">
+        <span>싸게</span>
+        <input
+          type="range"
+          min={FARE_MIN}
+          max={FARE_MAX}
+          step={5}
+          value={r.fare}
+          disabled={!canAct}
+          onChange={(e) => setFare(Number(e.target.value))}
+          aria-label="운임 조정"
+          aria-valuetext={`${fareText(r.fare)}${outlook ? `, 예상 이익 ${signedFine(est.profit)}` : ''}`}
+          data-testid="al-fare"
+        />
+        <span>비싸게</span>
+      </div>
+      <div className="al-fare-quick">
+        {[-15, 0, 15].map((f) => (
+          <button key={f} type="button" className={`al-chip${r.fare === f ? ' al-on' : ''}`} disabled={!canAct} onClick={() => setFare(f)}>
+            {fareText(f)}
+          </button>
+        ))}
+      </div>
+      <MoreInfo>
+        싸면 손님이 늘고(특히 관광객), 비싸면 한 명에게 더 받아요. 좌석이 꽉 차면 올려 보고, 많이 비면 내려 보세요. 막대는 운임마다 이번 달 이익 어림이에요 (비행기·시간표·라이벌이 지금 그대로일 때). 막대를 눌러도 그 운임으로 바뀌어요.
+      </MoreInfo>
+    </section>
+  );
+}
+
 const COST_PARTS: { key: keyof RouteEstimate['cost']; name: string; cls: string }[] = [
   { key: 'fuel', name: '연료', cls: 'al-c-fuel' },
   { key: 'crew', name: '승무원·정비', cls: 'al-c-crew' },
@@ -590,7 +689,7 @@ export function EstimateCard({
       <div className="al-est-big">
         <span>예상 이익</span>
         <b className={est.profit < 0 ? 'al-neg' : 'al-pos'} data-testid="al-est-profit">
-          {signedMoney(est.profit)}
+          {signedFine(est.profit)}
         </b>
       </div>
       <div className="al-est-rings">

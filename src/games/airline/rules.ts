@@ -10,6 +10,7 @@ import { autoAirline, gameHub, pickColors } from './brand';
 import { AIRPORT_INFO, CITIES, CITY, REGIONS, REGION_INFO, airportClass, citySize, dist, pairKey } from './cities';
 import { WEATHER_INFO, type WeatherCause } from './calendar';
 import { FIXED_EVENTS, FIXED_ICON, fixedEventsAt, historicOil, historyAt, rollRandomEvent } from './events';
+import { FUEL_SELL_RATE, TANK_LEVELS, addFuel, autoBuyTons, buyFuelBlocker, fuelCost, sellFuelBlocker, tankBlocker, tankOf } from './fuel';
 import { addMonth, closeQuarter, freshAcc, goalMet, gradeYear, newGoals } from './goals';
 import { MAX_PLANES, MAX_ROUTES } from './limits';
 import { REAL_AIRLINE, airlinesAt } from './realAirlines';
@@ -785,6 +786,7 @@ function cloneCompany(c: Company): Company {
     acc: { ...c.acc },
     reviews: [...c.reviews],
     staff: { pilot: { ...c.staff.pilot, pipe: [...c.staff.pilot.pipe] }, cabin: { ...c.staff.cabin, pipe: [...c.staff.cabin.pipe] }, tech: { ...c.staff.tech, pipe: [...c.staff.tech.pipe] }, ground: { ...c.staff.ground, pipe: [...c.staff.ground.pipe] } },
+    ...(c.fuel ? { fuel: { ...c.fuel } } : {}),
   };
 }
 
@@ -1162,6 +1164,49 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
       });
       return addLog(s, seat, `${c0.name}: ${CITY[action.city].name} ${BUSINESS_INFO[action.kind].name} 팔기 (+${fmtMoney(refund)})`);
     }
+    case 'buildTank': {
+      if (tankBlocker(state, ci)) return state;
+      const level = tankOf(c0).level + 1;
+      const info = TANK_LEVELS[level];
+      const s = edit(state, ci, (c, s) => {
+        c.cash -= info.cost;
+        c.fuel = { ...tankOf(c), level };
+        pushEvent(s, { type: 'fuel', company: ci, tons: 0, what: 'tank' });
+      });
+      return addLog(s, seat, `${c0.name}: ${withJosa(info.name, '을/를')} 지었어요 (${info.cap.toLocaleString('ko-KR')}톤, −${fmtMoney(info.cost)})`);
+    }
+    case 'buyFuel': {
+      const tons = Math.floor(action.tons);
+      if (buyFuelBlocker(state, ci, tons)) return state;
+      const cost = fuelCost(state.oil, tons);
+      const s = edit(state, ci, (c, s) => {
+        c.cash -= cost;
+        c.fuel = addFuel(tankOf(c), tons, s.oil);
+        pushEvent(s, { type: 'fuel', company: ci, tons, what: 'buy' });
+      });
+      return addLog(s, seat, `${c0.name}: 연료 ${tons.toLocaleString('ko-KR')}톤 사 두기 (유가 ${state.oil.toFixed(2)}, −${fmtFine(cost)})`);
+    }
+    case 'sellFuel': {
+      const tons = Math.floor(action.tons);
+      if (sellFuelBlocker(state, ci, tons)) return state;
+      const got = fuelCost(state.oil, tons) * FUEL_SELL_RATE;
+      const s = edit(state, ci, (c, s) => {
+        c.cash += got;
+        const t = tankOf(c);
+        const stock = Math.max(0, Math.round((t.stock - tons) * 10) / 10);
+        c.fuel = { ...t, stock, avg: stock > 0 ? t.avg : 0 };
+        pushEvent(s, { type: 'fuel', company: ci, tons, what: 'sell' });
+      });
+      return addLog(s, seat, `${c0.name}: 사 둔 연료 ${tons.toLocaleString('ko-KR')}톤 팔기 (+${fmtFine(got)})`);
+    }
+    case 'setFuelAuto': {
+      const ratio = action.ratio === null ? null : Math.round(action.ratio * 100) / 100;
+      if (ratio !== null && !(ratio >= 0.5 && ratio <= 1.2)) return state;
+      if (tankOf(c0).level === 0 || tankOf(c0).auto === ratio) return state;
+      return edit(state, ci, (c) => {
+        c.fuel = { ...tankOf(c), auto: ratio };
+      });
+    }
     case 'choose':
       return applyChoice(state, ci, action.option);
     case 'propose':
@@ -1449,6 +1494,11 @@ export function runMonth(state: AirlineState, rng: Rng = Math.random): AirlineSt
       const effect = adTarget(c, region, scale);
       c.awareness[region] = Math.round((c.awareness[region] * 0.887 + effect * 0.113) * 1000) / 1000;
     }
+    // 탱크에서 쓴 연료를 덜어 낸다
+    if (c.fuel && (rep.tankUsed ?? 0) > 0) {
+      const stock = Math.max(0, Math.round((c.fuel.stock - rep.tankUsed!) * 10) / 10);
+      c.fuel = { ...c.fuel, stock, avg: stock > 0 ? c.fuel.avg : 0 };
+    }
     c.stats.pax += Math.round(rep.pax);
     c.acc = addMonth(c.acc, rep);
     // 조직 만족도: 임금·초과 근무·성장·훈련원 쪽으로 천천히. 파업이 끝나면 조금 풀린다
@@ -1605,6 +1655,7 @@ function shutDown(state: AirlineState, ci: number, t: number): AirlineState {
   c.ads = emptyRegions();
   c.partner = null;
   c.choice = null;
+  delete c.fuel;
   s = addNews(s, {
     icon: '🛑',
     title: `${c.name} 운항 중단`,
@@ -1786,10 +1837,21 @@ function startMonth(state: AirlineState, t: number, rng: Rng): AirlineState {
   const year = yearOfM(t);
   const companies = s.companies.map(cloneCompany);
   s = { ...s, companies };
+  const oilAim = oilTarget(s);
   companies.forEach((c, ci) => {
     if (c.out) return;
     c.taken = 0;
     c.mods = c.mods.filter((m) => m.until > t);
+    // 연료 자동으로 사기: 유가가 정해 둔 만큼 싸면 탱크를 채운다
+    const lastRep = s.report?.companies[ci];
+    const lastCosts = lastRep ? lastRep.fuel + lastRep.crew + lastRep.airport + lastRep.service + lastRep.sales + lastRep.lease + lastRep.fleet + lastRep.branch + lastRep.ads + lastRep.interest + lastRep.staff + lastRep.disrupt : 0;
+    const autoTons = autoBuyTons(c, s.oil, oilAim, lastCosts);
+    if (autoTons > 0) {
+      const cost = fuelCost(s.oil, autoTons);
+      c.cash -= cost;
+      c.fuel = addFuel(tankOf(c), autoTons, s.oil);
+      s = addLog(s, c.seat, `⛽ ${c.name}: 유가 ${s.oil.toFixed(2)}에 연료 ${autoTons.toLocaleString('ko-KR')}톤 자동으로 사 두기 (−${fmtFine(cost)})`);
+    }
     // 나라 관계가 막힌 노선은 운항을 멈춘다
     if (historyOn(s)) {
       const blocked = c.routes.map((r) => ({ r, why: routePolitics(c.hub, r.a, r.b, yearOfM(t)) })).filter((x) => x.why);

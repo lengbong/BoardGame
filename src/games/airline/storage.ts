@@ -6,6 +6,7 @@ import { MEDIA } from './ads';
 import { BUSINESS_KINDS } from './business';
 import { cabinBlocker, defaultCabin } from './cabin';
 import { CHALLENGE } from './challenges';
+import { MAX_TANK } from './fuel';
 import { CITY, REGIONS } from './cities';
 import { REAL_AIRLINE } from './realAirlines';
 import { STAFF_GROUPS, emptyStaff, staffNeed } from './staff';
@@ -127,6 +128,8 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
   // 실제 항공사·색 (예전 판 저장에는 없을 수 있다)
   if (k.airline !== undefined && k.airline !== null && typeof k.airline !== 'string') return false;
   if (k.color !== undefined && k.color !== null && !(typeof k.color === 'string' && /^#[0-9a-f]{6}$/i.test(k.color))) return false;
+  // 연료 탱크 (예전 저장에는 없다)
+  if (k.fuel !== undefined && !(isObj(k.fuel) && isInt(k.fuel.level) && k.fuel.level >= 0 && k.fuel.level <= MAX_TANK && isNum(k.fuel.stock) && k.fuel.stock >= 0 && isNum(k.fuel.avg) && k.fuel.avg >= 0 && (k.fuel.auto === null || isNum(k.fuel.auto)))) return false;
   if (!isObj(k.ads) || !isObj(k.awareness) || !REGIONS.every((r) => isNum(k.ads[r]) && isNum(k.awareness[r]))) return false;
   // 광고 매체·캠페인 (예전 판 저장에는 없을 수 있다)
   if (k.adMedia !== undefined && !(isObj(k.adMedia) && REGIONS.every((r) => MEDIA.includes(k.adMedia![r])))) return false;

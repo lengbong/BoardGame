@@ -2,6 +2,7 @@ import { MODEL, availableModels, leadTime } from './aircraft';
 import { MAX_ROUTES } from './limits';
 import { CAMPAIGN_INFO, MEDIA_INFO, mediaOf } from './ads';
 import { cabinPresets, sameCabin } from './cabin';
+import { TANK_LEVELS, tankBlocker, tankOf, tonPrice } from './fuel';
 import { makerPolitics, routePolitics } from './politics';
 import { ACADEMY_COST, STAFF_GROUPS, hireCost, hireTime, staffNeed, staffPipe } from './staff';
 import { aiChoose, allianceScore } from './choices';
@@ -222,6 +223,7 @@ export class Planner {
       this.setMeals();
       this.buildBusinesses();
       this.setOps();
+      this.manageFuel();
       this.tuneTimes();
       this.maybePropose();
       this.manageLoans(false);
@@ -306,6 +308,22 @@ export class Planner {
     if (reserve !== c.crewReserve) this.act({ type: 'setCrewReserve', level: reserve });
   }
 
+  /**
+   * 연료 탱크: 한 달에 쓰는 연료의 두 달 치(치열 석 달, 느긋 한 달 반)쯤 담을 크기까지 키우고,
+   * 유가가 '보통 값'보다 꽤 싸면 저절로 채우게 해 둔다 (치열할수록 덜 싸도 산다).
+   */
+  private manageFuel(): void {
+    const tons = this.s.report?.companies[this.ci]?.fuelTons ?? 0;
+    if (tons <= 0) return;
+    const months = this.style === 'fierce' ? 3 : this.style === 'relaxed' ? 1.5 : 2;
+    const t = tankOf(this.c);
+    const next = TANK_LEVELS[t.level + 1];
+    // 노선을 늘리는 쪽이 훨씬 많이 버니, 돈이 아주 넉넉할 때만 짓는다
+    if (next && TANK_LEVELS[t.level].cap < tons * months && !tankBlocker(this.s, this.ci) && this.c.cash - next.cost > this.reserve() * 8 + 400) this.act({ type: 'buildTank' });
+    const want = this.style === 'fierce' ? 0.95 : this.style === 'relaxed' ? 0.85 : 0.9;
+    if (tankOf(this.c).level > 0 && tankOf(this.c).auto !== want) this.act({ type: 'setFuelAuto', ratio: want });
+  }
+
   // ---------------------------------------------------------------- 결정 사건
 
   private decide(): void {
@@ -340,6 +358,9 @@ export class Planner {
       if (r.stats && r.stats.profit < 0) this.act({ type: 'closeRoute', route: r.id });
     }
     for (const o of [...this.c.orders]) if (this.c.cash < 0) this.act({ type: 'cancelOrder', order: o.id });
+    // 사 둔 연료를 팔아 급한 돈을 마련한다
+    const stock = tankOf(this.c).stock;
+    if (this.c.cash < 0 && stock >= 1) this.act({ type: 'sellFuel', tons: Math.floor(Math.min(stock, (-this.c.cash + 20) / (tonPrice(this.s.oil) * 0.9))) || Math.floor(stock) });
     for (const p of idlePlanes(this.c)) this.act({ type: 'sell', plane: p.id });
     if (this.c.cash < 50) {
       const need = Math.min(this.creditLeft(), 50 - this.c.cash);

@@ -4,7 +4,8 @@ import { ACADEMY_COST, STAFF_GROUPS, STAFF_INFO, hireCost, hireTime, staffCap, s
 import { weather } from './calendar';
 import { CITY, REGIONS, airportClass, dist } from './cities';
 import { goalProgress } from './goals';
-import { CRISIS_MONTHS, MAX_ROUTES, applyAction, bestFreq, buyBlocker, creditLimit, fmtFine, fmtMoney, idlePlanes, planeById, routeById, usedBlocker } from './rules';
+import { CRISIS_MONTHS, MAX_ROUTES, applyAction, bestFreq, buyBlocker, creditLimit, fmtFine, fmtMoney, idlePlanes, oilTarget, planeById, routeById, usedBlocker } from './rules';
+import { FUEL_TON, TANK_LEVELS, tankBlocker, tankCap, tankOf, tankSpace, tonPrice } from './fuel';
 import {
   MAINT_COST,
   MAINT_NAMES,
@@ -563,6 +564,41 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
       apply: (s) => afterAct(s, ci, { type: 'setAds', region, amount }),
       weight: 70,
     });
+  }
+
+  // 8-1. 연료 탱크: 연료를 많이 쓰면 탱크를, 탱크가 있고 유가가 싸면 채우기를
+  const fuelRep = state.report?.companies[ci];
+  const tons = fuelRep?.fuelTons ?? 0;
+  if (fuelRep && tons > 0 && fuelRep.fuel >= 15) {
+    const tank = tankOf(c);
+    const aim = oilTarget(state);
+    const first = TANK_LEVELS[1];
+    if (tank.level === 0 && !tankBlocker(state, ci) && c.cash > first.cost * 4 + 50) {
+      out.push({
+        key: 'tank',
+        icon: '⛽',
+        title: '연료 탱크 짓기',
+        detail: `지난달 연료비가 ${fmtMoney(fuelRep.fuel)}였어요. ${first.name}(${first.cap.toLocaleString('ko-KR')}톤, ${fmtMoney(first.cost)})를 지으면 유가가 쌀 때 사 두었다가 비쌀 때 써요.`,
+        label: '탱크 짓기',
+        apply: (s2) => afterAct(s2, ci, { type: 'buildTank' }),
+        weight: 110,
+      });
+    } else if (tank.level > 0 && state.oil <= aim * 0.95 && tankSpace(c) >= Math.min(tankCap(c) * 0.3, tons * 0.5)) {
+      const buy = Math.floor(Math.min(tankSpace(c), (c.cash - 50) / tonPrice(state.oil)));
+      if (buy >= 1) {
+        const save = (aim - state.oil) * FUEL_TON * buy;
+        out.push({
+          key: 'fuelbuy',
+          icon: '⛽',
+          title: `유가가 보통보다 ${Math.round((1 - state.oil / aim) * 100)}% 싸요: 연료 채우기`,
+          detail: `지금 ${buy.toLocaleString('ko-KR')}톤(${fmtFine(buy * tonPrice(state.oil))})을 사 두면 보통 값에 견주어 약 ${fmtFine(save)}을 아껴요.`,
+          gain: save,
+          label: '채우기',
+          apply: (s2) => afterAct(s2, ci, { type: 'buyFuel', tons: buy }),
+          weight: 120 + save,
+        });
+      }
+    }
   }
 
   // 9. 연간 목표 알림 (11·12월)

@@ -203,6 +203,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
         else if (e.type === 'order' || e.type === 'cabin') alSound.stamp();
         else if (e.type === 'choice') alSound.bell();
         else if (e.type === 'alliance') e.ok ? alSound.chime() : alSound.nope();
+        else if (e.type === 'fuel') e.what === 'sell' ? alSound.coins() : e.what === 'tank' ? alSound.bell() : alSound.pay();
       }
     }
     for (const e of game.events) {

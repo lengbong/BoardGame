@@ -6,12 +6,13 @@ import { ACADEMY_COST, STAFF_GROUPS, STAFF_INFO, hireCost, hireTime, staffCap, s
 import { weather } from './calendar';
 import { CITY, REGIONS, airportClass, dist, pairKey } from './cities';
 import { goalProgress } from './goals';
-import { CRISIS_MONTHS, MAX_ROUTES, applyAction, assignBlocker, bestFreq, buyBlocker, checkBlocker, creditLimit, fmtFine, fmtMoney, idlePlanes, oilTarget, planeById, routeById, usedBlocker } from './rules';
+import { CRISIS_MONTHS, FARE_MAX, FARE_MIN, MAX_ROUTES, applyAction, assignBlocker, bestFreq, buyBlocker, checkBlocker, creditLimit, fmtFine, fmtMoney, idlePlanes, oilTarget, planeById, routeById, usedBlocker } from './rules';
 import { FUEL_TON, TANK_LEVELS, tankBlocker, tankCap, tankOf, tankSpace, tonPrice } from './fuel';
 import { condOf, inCheck, restoredCond } from './condition';
 import { companyCheckCost, facilityBlocker, facilityCost } from './facilities';
 import { charterBlocker, charterPlaneIds, charterProfit, openCharters } from './charters';
 import { withJosa } from '../../lib/korean';
+import { truceFloorFor } from './relations';
 import {
   MAINT_COST,
   MAINT_NAMES,
@@ -30,7 +31,8 @@ import {
 } from './simulate';
 import { monthOf, yearOf } from './time';
 import type { Candidate } from './ai';
-import type { AirlineState, CharterOffer, Company, Plane } from './types';
+import type { RouteEstimate } from './simulate';
+import type { AirlineState, CharterOffer, Company, Plane, Route } from './types';
 
 /**
  * 경영 비서: 지난달 숫자를 보고 할 만한 일을 3~5개 골라 준다.
@@ -71,6 +73,10 @@ const NEW_ROUTE_MIN = 3;
 const SPARE_ROUTE_MIN = 5;
 /** 남는 비행시간을 쓸 곳은 이만큼의 기종까지만 찾아본다 (기종마다 가장 많이 남는 비행기 한 대) */
 const SPARE_LOOK = 6;
+/** 운임을 바꿔 달 이익이 이만큼(억) 넘게 늘어야 권한다 (조금 나은 운임으로 달마다 이리저리 바꾸라고 하지 않게) */
+const FARE_TIP_MIN = 1;
+/** 운임은 이 칸(%)마다 따져 본다 (노선 화면의 운임 막대·슬라이더와 같은 칸) */
+const FARE_STEP = 5;
 
 /** 새 노선에 지점·보증금을 쓰고도 남겨 둘 현금 (이보다 적어지면 돈이 모자라다고 보고 권하지 않는다) */
 function openReserve(state: AirlineState, ci: number): number {
@@ -285,8 +291,13 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     }
   }
 
-  // 4. 노선마다: 운임·횟수·닫기
+  // 4. 노선마다: 운임·횟수·닫기.
+  // 운임은 한 번 누르면 가장 남는 운임으로 바로 간다. 예전에는 10%씩만 올려서, 같은 달에는 지난달 탑승률을
+  // 그대로 보고 또 올리라고 해 +10% → +20% → +30%로 세 번 눌러야 했다.
+  // 탑승률이 60~95%인 노선도 운임을 올리거나 내려 더 남으면 권한다 (너무 올려 손님이 줄었으면 내리라고)
   const fullRoutes: { route: number; model: string; gain: number }[] = [];
+  /** 꽉 찼는데 운임을 더 올려도 크게 나아지지 않는 노선: 좌석을 늘릴 곳 */
+  const fareTopIds = new Set<number>();
   for (const r of c.routes) {
     const st = r.stats;
     if (!st || c.planes.every((p) => legFreq(p, r.id) === 0)) continue;
@@ -304,13 +315,17 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
       });
       continue;
     }
-    if (st.lf > 0.95) {
-      const up = Math.min(30, r.fare + 10);
-      const e = estimateExisting(state, ci, r, { fare: up });
-      const gainFare = e.profit - now.profit;
+    const full = st.lf > 0.95;
+    const low = st.lf < 0.6;
+    // 꽉 찬 노선은 내려 봐야 손님이 더 탈 자리가 없어 올리는 쪽만, 많이 빈 노선은 내리는 쪽부터 따져 본다
+    const best = bestFareOf(state, ci, r, now, full ? [1] : low ? [-1, 1] : [1, -1]);
+    const gainFare = best.profit - now.profit;
+    const fareTip = best.fare !== r.fare && gainFare > FARE_TIP_MIN ? fareAdvice(state, ci, r, st.lf, best.fare, gainFare) : null;
+    if (full) {
       // 비행기를 하나 더 리스하면?
       const lease = bestLeaseFor(state, ci, r.id);
-      if (lease && lease.gain > 0.3 && up === r.fare) fullRoutes.push({ route: r.id, model: lease.model, gain: lease.gain });
+      if (!fareTip) fareTopIds.add(r.id);
+      if (lease && lease.gain > 0.3 && !fareTip) fullRoutes.push({ route: r.id, model: lease.model, gain: lease.gain });
       if (lease && lease.gain > gainFare && lease.gain > 3) {
         out.push({
           key: `add-${r.id}`,
@@ -322,23 +337,11 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
           apply: (s) => leaseAndAssign(s, ci, lease.model, r.id, lease.freq),
           weight: 300 + lease.gain,
         });
-      } else if (gainFare > 1 && up !== r.fare) {
+      } else if (fareTip) {
         if (lease && lease.gain > 0.3) fullRoutes.push({ route: r.id, model: lease.model, gain: lease.gain });
-        out.push({
-          key: `fareup-${r.id}`,
-          icon: '💹',
-          title: `${routeName(c, r.id)} 운임 올리기`,
-          detail: `좌석이 꽉 찼어요 (${Math.round(st.lf * 100)}%). 운임을 ${signed(up)}%로 올리면 달 이익 약 +${fmtMoney(gainFare)}.`,
-          gain: gainFare,
-          label: `운임 ${signed(up)}%`,
-          apply: (s) => afterAct(s, ci, { type: 'setFare', route: r.id, fare: up }),
-          weight: 150 + gainFare * 2,
-        });
+        out.push(fareTip);
       }
-    } else if (st.lf < 0.6) {
-      const down = Math.max(-30, r.fare - 10);
-      const e = estimateExisting(state, ci, r, { fare: down });
-      const gainFare = e.profit - now.profit;
+    } else if (low) {
       // 횟수를 줄이면? (가장 많이 나는 비행기 하나를 줄여 본다)
       const planes = c.planes.filter((p) => legFreq(p, r.id) > 0).sort((x, y) => legFreq(y, r.id) - legFreq(x, r.id));
       const p = planes[0];
@@ -360,26 +363,15 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
           apply: (s) => afterAct(s, ci, { type: 'assign', plane: p.id, route: r.id, freq: less }),
           weight: 150 + gainFreq * 2,
         });
-      } else if (gainFare > 1 && down !== r.fare) {
-        out.push({
-          key: `faredown-${r.id}`,
-          icon: '🏷️',
-          title: `${routeName(c, r.id)} 운임 내리기`,
-          detail: `탑승률이 ${Math.round(st.lf * 100)}%예요. 운임을 ${signed(down)}%로 내리면 손님이 늘어 달 이익 약 +${fmtMoney(gainFare)}.`,
-          gain: gainFare,
-          label: `운임 ${signed(down)}%`,
-          apply: (s) => afterAct(s, ci, { type: 'setFare', route: r.id, fare: down }),
-          weight: 145 + gainFare * 2,
-        });
-      }
-    }
+      } else if (fareTip) out.push(fareTip);
+    } else if (fareTip) out.push(fareTip);
   }
 
-  // 4¼. 꽉 찬 노선의 작은 비행기를 더 큰 리스기로 바꾸기 (노선 수 한도에 닿아도 자랄 수 있게)
+  // 4¼. 꽉 찬 노선의 작은 비행기를 더 큰 리스기로 바꾸기 (노선 수 한도에 닿아도 자랄 수 있게).
+  // 운임을 올려 더 벌 수 있는 동안은 운임부터 올리라고 한다
   {
-    const fullIds = new Set(c.routes.filter((r) => r.stats && r.stats.lf > 0.95 && r.fare >= 20).map((r) => r.id));
     const small = c.planes
-      .filter((p) => p.legs.length === 1 && fullIds.has(p.legs[0].route))
+      .filter((p) => p.legs.length === 1 && fareTopIds.has(p.legs[0].route))
       .sort((x, y) => MODEL[x.model].seats - MODEL[y.model].seats)
       .slice(0, 3);
     for (const p of small) {
@@ -904,6 +896,57 @@ function whyNoRoute(state: AirlineState, ci: number, cand: Candidate | undefined
 
 function signed(v: number): string {
   return v > 0 ? `+${v}` : `${v}`;
+}
+
+/** 운임 한 칸을 짧게: '보통', '+30%', '-15%' */
+function farePct(v: number): string {
+  return v === 0 ? '보통' : `${signed(v)}%`;
+}
+
+/**
+ * 지금 운임에서 dirs 쪽으로 FARE_STEP씩 바꿔 보며 이번 달 이익이 가장 큰 운임을 찾는다.
+ * 한 칸 옮겨 이익이 늘어나는 쪽이 있으면 그쪽 끝(±30%)까지 모두 따져 보고, 다른 쪽은 보지 않는다
+ * (운임에 따른 이익은 봉우리가 하나라, 노선 화면의 ‘가장 남는 운임’과 같은 곳에 닿는다).
+ * 휴전한 노선은 지키기로 한 바닥 아래로는 내려 보지 않는다 (그런 운임은 규칙이 막는다).
+ */
+function bestFareOf(state: AirlineState, ci: number, r: Route, now: RouteEstimate, dirs: readonly (1 | -1)[]): { fare: number; profit: number } {
+  let best = { fare: r.fare, profit: now.profit };
+  const floor = truceFloorFor(state, ci, r);
+  for (const dir of dirs) {
+    // 운임이 칸 사이에 있으면 그쪽으로 가장 가까운 칸부터
+    const first = dir > 0 ? Math.floor(r.fare / FARE_STEP) * FARE_STEP + FARE_STEP : Math.ceil(r.fare / FARE_STEP) * FARE_STEP - FARE_STEP;
+    for (let f = first; f >= FARE_MIN && f <= FARE_MAX; f += dir * FARE_STEP) {
+      if (dir < 0 && floor !== null && f < floor) break;
+      const profit = estimateExisting(state, ci, r, { fare: f }).profit;
+      if (profit > best.profit + 1e-9) best = { fare: f, profit };
+      // 첫 칸부터 나아지지 않으면 이쪽은 그만 본다
+      else if (f === first) break;
+    }
+    if (best.fare !== r.fare) break;
+  }
+  return best;
+}
+
+/** 운임 올리기·내리기 권유 (한 번 누르면 가장 남는 운임으로 바로 바꾼다) */
+function fareAdvice(state: AirlineState, ci: number, r: Route, lf: number, to: number, gain: number): Advice {
+  const c = state.companies[ci];
+  const up = to > r.fare;
+  const lfText = Math.round(lf * 100);
+  const change = `운임을 ${farePct(r.fare)}에서 ${to === 0 ? '보통으로' : `${signed(to)}%로`} ${up ? '올리면' : '내리면'}`;
+  return {
+    key: `${up ? 'fareup' : 'faredown'}-${r.id}`,
+    icon: up ? '💹' : '🏷️',
+    title: `${routeName(c, r.id)} 운임 ${up ? '올리기' : '내리기'}`,
+    detail: up
+      ? lf > 0.95
+        ? `좌석이 꽉 찼어요 (${lfText}%). ${change} 달 이익 약 +${fmtMoney(gain)}.`
+        : `탑승률이 ${lfText}%예요. ${change} 손님은 조금 줄어도 달 이익 약 +${fmtMoney(gain)}.`
+      : `탑승률이 ${lfText}%예요. ${change} 손님이 늘어 달 이익 약 +${fmtMoney(gain)}.`,
+    gain,
+    label: `운임 ${farePct(to)}`,
+    apply: (s) => afterAct(s, ci, { type: 'setFare', route: r.id, fare: to }),
+    weight: (up ? 150 : 145) + gain * 2,
+  };
 }
 
 /** 행동 하나를 해 본다 (안 되면 그대로) */

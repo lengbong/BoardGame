@@ -7,12 +7,13 @@ import { advise, applyAdvice, isRouteAdvice } from './advisor';
 import { Planner, aiTurn, planTurn, suggestRoutes } from './ai';
 import { SCENARIO_IDS, allianceScore, makeChoice } from './choices';
 import { goalMet, gradeYear, newGoals } from './goals';
-import { CRISIS_MONTHS, MAX_PLANES, actor, applyAction, choiceBlocker, createGame, hubCandidates, proposeBlocker, routeOnPair, runMonth } from './rules';
-import { MAX_DELIVERIES, computeQuarter, networks } from './simulate';
+import { CRISIS_MONTHS, FARE_MAX, FARE_MIN, MAX_PLANES, actor, applyAction, choiceBlocker, createGame, hubCandidates, proposeBlocker, routeOnPair, runMonth } from './rules';
+import { MAX_DELIVERIES, computeQuarter, fareOutlook, networks } from './simulate';
+import { emptyBook } from './relations';
 import { allianceOf } from './alliances';
 import { isValidState, parseSaved } from './storage';
 import { colorDistance, coColors, gameHub, mapInk, pickColors, usableColor } from './brand';
-import { CITY } from './cities';
+import { CITY, pairKey } from './cities';
 import { REAL_AIRLINE, airlinesAt } from './realAirlines';
 import { monthOf, qOf, yearOfM } from './time';
 import type { AirlineOptions, AirlineSetup, AirlineState, Company, SeatKind } from './types';
@@ -741,5 +742,66 @@ describe('경영 비서: 비행기가 많아도 빨리', () => {
     expect(new Set(looked).size).toBeLessThanOrEqual(2);
     const spare = tips.find((t) => t.key.startsWith('spare-'));
     if (spare) expect(looked).toContain(Number(spare.key.slice('spare-'.length)));
+  });
+});
+
+describe('경영 비서: 운임', () => {
+  const stats = (lf: number) => ({ lf, pax: 1000, revenue: 10, profit: 1, lossStreak: 0, share: 1, xfer: 0, xferRev: 0, onTime: 0.9, cancel: 0, hist: [] });
+  const fareTips = (s: AirlineState, rid: number) => advise(s, 0, 30).filter((a) => a.key === `fareup-${rid}` || a.key === `faredown-${rid}`);
+  const fareOf = (s: AirlineState, rid: number) => s.companies[0].routes.find((r) => r.id === rid)!.fare;
+
+  /** 0번 회사가 서울–시드니에 A330을 주 7회, 비싸게 +30%로 띄우고 라이벌(1번)이 주 28회 띄운다. 지난달 탑승률 80% */
+  function crowded(): { s: AirlineState; rid: number } {
+    const s = twoHumans();
+    const rid = addRoute(s, 0, 'seoul', 'sydney', 'a330-300', 7);
+    addRoute(s, 1, 'seoul', 'sydney', 'a330-300', 28);
+    const r = s.companies[0].routes.find((x) => x.id === rid)!;
+    r.fare = 30;
+    r.stats = stats(0.8);
+    return { s, rid };
+  }
+
+  it('꽉 찬 노선의 운임 올리기는 한 번에 가장 남는 운임으로 가고, 같은 달에 또 올리라고 하지 않는다', () => {
+    const s = twoHumans();
+    const rid = addRoute(s, 0, 'seoul', 'tokyo', 'b737-800', 7);
+    addRoute(s, 1, 'seoul', 'tokyo', 'a330-300', 14);
+    addRoute(s, 1, 'seoul', 'tokyo', 'b737-800', 14);
+    const r = s.companies[0].routes.find((x) => x.id === rid)!;
+    r.stats = stats(1);
+    const best = fareOutlook(s, 0, r, FARE_MIN, FARE_MAX).best;
+    // 예전에는 10%씩만 올려서 같은 달에 +10% → +20% → +30%로 세 번 눌러야 했다
+    expect(best).toBeGreaterThan(r.fare + 10);
+    const tips = fareTips(s, rid);
+    expect(tips.map((a) => a.key)).toEqual([`fareup-${rid}`]);
+    expect(tips[0].label).toBe(`운임 +${best}%`);
+    const t = tips[0].apply!(s);
+    expect(fareOf(t, rid)).toBe(best);
+    // 지난달 탑승률(100%)은 그대로지만 이미 가장 남는 운임이라 더 권하지 않는다
+    expect(fareTips(t, rid)).toEqual([]);
+  });
+
+  it('탑승률이 60~95%여도 운임을 내려 더 남으면 가장 남는 운임으로 한 번에 내리라고 한다', () => {
+    const { s, rid } = crowded();
+    const r = s.companies[0].routes.find((x) => x.id === rid)!;
+    const best = fareOutlook(s, 0, r, FARE_MIN, FARE_MAX).best;
+    expect(best).toBeLessThan(r.fare - 10);
+    const tips = fareTips(s, rid);
+    expect(tips.map((a) => a.key)).toEqual([`faredown-${rid}`]);
+    expect(tips[0].title).toContain('운임 내리기');
+    expect(tips[0].label).toBe(`운임 ${best}%`);
+    expect(tips[0].detail).toContain(`+30%에서 ${best}%로 내리면`);
+    const t = tips[0].apply!(s);
+    expect(fareOf(t, rid)).toBe(best);
+    expect(fareTips(t, rid)).toEqual([]);
+  });
+
+  it('라이벌과 휴전한 노선은 지키기로 한 바닥 아래로 내리라고 하지 않는다', () => {
+    const { s, rid } = crowded();
+    s.rivals = emptyBook(s);
+    s.rivals.truces.push({ a: 1, b: 0, key: pairKey('seoul', 'sydney'), since: s.t, until: s.t + 6, floorA: 0, floorB: -10 });
+    const tips = fareTips(s, rid);
+    expect(tips.map((a) => a.label)).toEqual(['운임 -10%']);
+    const t = tips[0].apply!(s);
+    expect(fareOf(t, rid)).toBe(-10);
   });
 });

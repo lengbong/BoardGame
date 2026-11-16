@@ -71,10 +71,17 @@ export interface EventOutcome {
   slot?: { city: string; add: number };
 }
 
+/** 무작위 '기름값이 크게 올랐어요'는 유가가 보통 값의 이 배수보다 낮을 때만 (오름이 겹쳐 치솟지 않게) */
+export const OIL_SPIKE_LIMIT = 1.5;
+/** 보통 값과 상관없이 이 유가 위에서는 더 오르지 않는다 */
+export const OIL_SPIKE_MAX = 2.4;
+
 interface EventContext {
   /** 지금 달 */
   t: number;
   oil: number;
+  /** 그 시대 보통 유가 (없으면 1) */
+  oilNormal?: number;
   rate: number;
   slotBoost: Record<string, number>;
   /** 이미 걸려 있는 효과 (같은 효과가 겹치지 않게) */
@@ -115,7 +122,7 @@ const fmtOil = (v: number) => v.toFixed(2);
 export function rollRandomEvent(ctx: EventContext, rng: Rng): EventOutcome | null {
   const year = yearOfM(ctx.t);
   const kinds = (Object.keys(EVENT_WEIGHTS) as EventKind[]).filter((k) => {
-    if (k === 'oilUp') return ctx.oil < 2.4;
+    if (k === 'oilUp') return ctx.oil < Math.min(OIL_SPIKE_MAX, (ctx.oilNormal ?? 1) * OIL_SPIKE_LIMIT);
     if (k === 'oilDown') return ctx.oil > 0.7;
     if (k === 'rateUp') return ctx.rate < 11;
     if (k === 'rateDown') return ctx.rate > 3.5;

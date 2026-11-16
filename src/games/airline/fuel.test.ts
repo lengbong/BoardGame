@@ -4,7 +4,8 @@ import { MODEL } from './aircraft';
 import { aiManage } from './ai';
 import { advise } from './advisor';
 import { defaultCabin } from './cabin';
-import { FUEL_PASS, FUEL_SELL_RATE, FUEL_TON, MAX_TANK, PAX_BURN, TANK_LEVELS, autoBuyTons, burnFuel, buyFuelBlocker, fuelSurcharge, fuelSurchargeKm, normalOil, surchargeText, tankBlocker, tankOf } from './fuel';
+import { OIL_SPIKE_LIMIT, rollRandomEvent } from './events';
+import { FUEL_PASS, FUEL_SELL_RATE, FUEL_TON, MAX_TANK, PAX_BURN, TANK_LEVELS, autoBuyTons, burnFuel, buyFuelBlocker, fuelSurcharge, fuelSurchargeKm, normalOil, oilStep, surchargeText, tankBlocker, tankOf } from './fuel';
 import { actor, applyAction, createGame, runMonth } from './rules';
 import { FUEL_PRICE, baseFare, companyValue, computeMonth, marketFare } from './simulate';
 import { isValidState, parseSaved } from './storage';
@@ -232,5 +233,36 @@ describe('유류할증', () => {
       expect(moreFare, a + b).toBeLessThan(moreFuel);
       expect(moreFare / moreFuel, a + b).toBeGreaterThan(0.3);
     }
+  });
+});
+
+describe('유가 흐름', () => {
+  it('보통보다 비싸면 싼 때보다 빨리 보통 값 쪽으로 돌아간다', () => {
+    const down = 2 - oilStep(2, 1.2, 0);
+    const up = oilStep(0.6, 1.2, 0) - 0.6;
+    expect(down).toBeGreaterThan(0);
+    expect(up).toBeGreaterThan(0);
+    // 같은 거리(0.8, 0.6)에 견주어 내려오는 몫이 더 크다
+    expect(down / 0.8).toBeGreaterThan(up / 0.6);
+    // 2.86에서 보통 1.2: 한 해 반 안에 2.0 아래로
+    let oil = 2.86;
+    for (let m = 0; m < 18; m++) oil = oilStep(oil, 1.2, 0);
+    expect(oil).toBeLessThan(2);
+    // 0.5~3을 벗어나지 않는다
+    expect(oilStep(3, 1.2, 0.5)).toBeLessThanOrEqual(3);
+    expect(oilStep(0.5, 1.2, -0.5)).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it("무작위 '기름값이 크게 올랐어요'는 유가가 보통 값의 1.5배보다 낮을 때만 일어난다", () => {
+    const ctx = (oil: number) => ({ t: 12 * 2027, oil, oilNormal: 1.2, rate: 5, slotBoost: {}, effects: [], activeCities: [] });
+    const ups = (oil: number) => {
+      let n = 0;
+      for (let k = 0; k < 400; k++) if ((rollRandomEvent(ctx(oil), seededRandom(k))?.oil ?? 1) > 1) n++;
+      return n;
+    };
+    expect(ups(1.2)).toBeGreaterThan(10);
+    expect(ups(1.2 * OIL_SPIKE_LIMIT - 0.01)).toBeGreaterThan(10);
+    expect(ups(1.2 * OIL_SPIKE_LIMIT)).toBe(0);
+    expect(ups(2.2)).toBe(0);
   });
 });

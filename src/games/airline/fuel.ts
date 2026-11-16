@@ -20,6 +20,16 @@ export function normalOil(state: Pick<AirlineState, 't' | 'options' | 'challenge
   return state.options.history !== false ? historicOil(yearOfM(state.t)) : 1;
 }
 
+/** 달마다 유가가 보통 값 쪽으로 돌아가는 몫: 보통보다 비싸면 빨리(오른 만큼의 절반이 한 해쯤에), 싸면 천천히 */
+export const OIL_REVERT_UP = 0.06;
+export const OIL_REVERT_DOWN = 0.035;
+
+/** 다음 달 유가: 보통 값 쪽으로 조금 돌아가고 noise만큼 흔들린다 (0.5~3) */
+export function oilStep(oil: number, normal: number, noise: number): number {
+  const k = oil > normal ? OIL_REVERT_UP : OIL_REVERT_DOWN;
+  return Math.round(Math.max(0.5, Math.min(3, oil + (normal - oil) * k + noise)) * 100) / 100;
+}
+
 /** 손님 한 명이 1km 가는 데 드는 연료 (kg): 업계 평균 어림 (2027년 판 전체가 0.023쯤) */
 export const PAX_BURN = 0.023;
 /** 유가가 오른 만큼의 연료비 가운데 유류할증으로 손님에게 넘기는 몫 */

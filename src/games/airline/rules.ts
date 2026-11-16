@@ -20,7 +20,7 @@ import { autoAirline, gameHub, pickColors } from './brand';
 import { AIRPORT_INFO, CITIES, CITY, REGIONS, REGION_INFO, airportClass, citySize, dist, pairKey } from './cities';
 import { WEATHER_INFO, type WeatherCause } from './calendar';
 import { FIXED_EVENTS, FIXED_ICON, fixedEventsAt, historicOil, historyAt, rollRandomEvent } from './events';
-import { FUEL_SELL_RATE, TANK_LEVELS, addFuel, autoBuyTons, buyFuelBlocker, fuelCost, normalOil, sellFuelBlocker, tankBlocker, tankOf } from './fuel';
+import { FUEL_SELL_RATE, TANK_LEVELS, addFuel, autoBuyTons, buyFuelBlocker, fuelCost, normalOil, oilStep, sellFuelBlocker, tankBlocker, tankOf } from './fuel';
 import { addMonth, closeQuarter, freshAcc, goalMet, gradeYear, newGoals } from './goals';
 import { MAX_PLANES, MAX_ROUTES } from './limits';
 import { REAL_AIRLINE, airlinesAt } from './realAirlines';
@@ -2563,10 +2563,10 @@ function handOver(s: AirlineState, c: Company, fresh: Plane, old: Plane, year: n
 function startMonth(state: AirlineState, t: number, rng: Rng): AirlineState {
   const q = qOfM(t);
   let s: AirlineState = { ...state, t, q, effects: state.effects.filter((e) => e.until > t) };
-  // 유가는 달마다 조금씩 흔들리며 보통 값 쪽으로 천천히 돌아간다 (기름값 폭풍 과제는 높게)
+  // 유가는 달마다 조금씩 흔들리며 보통 값 쪽으로 돌아간다 — 비쌀 때는 더 빨리 (기름값 폭풍 과제는 높게, fuel.ts)
   const target = oilTarget(s);
   const noise = (rng() - 0.5) * 0.035;
-  s.oil = Math.round(Math.max(0.5, Math.min(3, s.oil + (target - s.oil) * 0.035 + noise)) * 100) / 100;
+  s.oil = oilStep(s.oil, target, noise);
   if (s.challenge?.id === 'oilstorm' && t === mOf(1973, 10)) {
     s.oil = 1.9;
     s = addNews(s, { icon: '⛽', title: '기름값 폭풍!', text: '기름값이 갑자기 거의 두 배로 뛰었어요. 연료를 많이 먹는 비행기는 큰 손해를 봐요.', tone: 'bad' });
@@ -2613,7 +2613,7 @@ function startMonth(state: AirlineState, t: number, rng: Rng): AirlineState {
   const activeCities = [...new Set(s.companies.flatMap((c) => c.routes.flatMap((r) => [r.a, r.b])))];
   const rolls = rng() < 0.16 ? (rng() < 0.15 ? 2 : 1) : 0;
   for (let k = 0; k < rolls; k++) {
-    const ev = rollRandomEvent({ t, oil: s.oil, rate: s.rate, slotBoost: s.slotBoost, effects: s.effects, activeCities }, rng);
+    const ev = rollRandomEvent({ t, oil: s.oil, oilNormal: target, rate: s.rate, slotBoost: s.slotBoost, effects: s.effects, activeCities }, rng);
     if (!ev) continue;
     if (ev.oil) s = { ...s, oil: Math.round(Math.max(0.5, Math.min(3, s.oil * ev.oil)) * 100) / 100 };
     if (ev.rate) s = { ...s, rate: Math.round(Math.max(2, Math.min(14, s.rate + ev.rate)) * 10) / 10 };

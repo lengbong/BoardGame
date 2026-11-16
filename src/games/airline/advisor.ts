@@ -69,6 +69,8 @@ const IDLE_MIN_GAIN = 1;
 const NEW_ROUTE_MIN = 3;
 /** 예비기 몫의 쉬는 비행기라도 새 노선에서 쉴 때보다 이만큼(억) 넘게 더 벌면 예비기보다 노선 열기를 권한다 */
 const SPARE_ROUTE_MIN = 5;
+/** 남는 비행시간을 쓸 곳은 이만큼의 기종까지만 찾아본다 (기종마다 가장 많이 남는 비행기 한 대) */
+const SPARE_LOOK = 6;
 
 /** 새 노선에 지점·보증금을 쓰고도 남겨 둘 현금 (이보다 적어지면 돈이 모자라다고 보고 권하지 않는다) */
 function openReserve(state: AirlineState, ci: number): number {
@@ -139,9 +141,11 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   const chartered = charterPlaneIds(state, ci);
   const idle = idlePlanes(c).filter((p) => !chartered.has(p.id));
   // 쉬는 비행기마다 이미 있는 노선 가운데 띄울 만한 곳은 한 번만 따진다 (리스료·보험료를 뺀, 쉴 때보다 더 버는 돈)
+  // 따져 보기만 하는 계획표는 하나만 써서, 노선마다 지금 이익·남은 슬롯 셈을 비행기마다 되풀이하지 않는다
+  const look = planner(state, ci);
   const bestLegs = new Map<number, BestLeg>();
   const legOf = (id: number): BestLeg => {
-    if (!bestLegs.has(id)) bestLegs.set(id, planner(state, ci).bestExistingLeg(id, true));
+    if (!bestLegs.has(id)) bestLegs.set(id, look.bestExistingLeg(id, true));
     return bestLegs.get(id)!;
   };
   // 쉬는 비행기로 열 만한 새 노선도 한 번만 따진다. 지점을 낼 돈이 모자라는 노선은 권하지 않는다
@@ -250,25 +254,35 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     });
   }
 
-  // 3. 비행시간이 많이 남는 비행기
-  let spareDone = 0;
-  for (const p of c.planes) {
-    if (spareDone >= 1 || p.legs.length === 0) continue;
-    const spare = WEEK_HOURS - planeHours(c, p);
-    if (spare < 20) continue;
-    const best = planner(state, ci).bestExistingLeg(p.id, true);
-    if (!best || best.gain < 2) continue;
-    spareDone++;
-    out.push({
-      key: `spare-${p.id}`,
-      icon: '⏱️',
-      title: `${MODEL[p.model].name}의 남는 ${Math.round(spare)}시간 쓰기`,
-      detail: `한 주에 ${Math.round(spare)}시간이 비어요. ${routeName(c, best.route)}도 주 ${best.freq}회 날면 달 이익 약 +${fmtMoney(best.gain)}.`,
-      gain: best.gain,
-      label: '노선 보태기',
-      apply: (s) => afterAct(s, ci, { type: 'assign', plane: p.id, route: best.route, freq: best.freq }),
-      weight: 400 + best.gain,
-    });
+  // 3. 비행시간이 많이 남는 비행기.
+  // 기종마다 가장 많이 남는 비행기 한 대만, 남는 시간이 많은 기종부터 SPARE_LOOK 기종까지 따진다.
+  // 같은 기종에서 남는 시간이 더 적은 비행기가 더 벌 곳은 드물고, 비행기가 수백 대면 한 대씩 모든 노선에 대 보느라
+  // 경영 비서 단추를 누를 때마다 화면이 0.3초쯤 멈췄다
+  {
+    const byModel = new Map<string, { p: Plane; spare: number }>();
+    for (const p of c.planes) {
+      if (p.legs.length === 0) continue;
+      const spare = WEEK_HOURS - planeHours(c, p);
+      if (spare < 20) continue;
+      const cur = byModel.get(p.model);
+      if (!cur || spare > cur.spare) byModel.set(p.model, { p, spare });
+    }
+    const looks = [...byModel.values()].sort((x, y) => y.spare - x.spare).slice(0, SPARE_LOOK);
+    for (const { p, spare } of looks) {
+      const best = legOf(p.id);
+      if (!best || best.gain < 2) continue;
+      out.push({
+        key: `spare-${p.id}`,
+        icon: '⏱️',
+        title: `${MODEL[p.model].name}의 남는 ${Math.round(spare)}시간 쓰기`,
+        detail: `한 주에 ${Math.round(spare)}시간이 비어요. ${routeName(c, best.route)}도 주 ${best.freq}회 날면 달 이익 약 +${fmtMoney(best.gain)}.`,
+        gain: best.gain,
+        label: '노선 보태기',
+        apply: (s) => afterAct(s, ci, { type: 'assign', plane: p.id, route: best.route, freq: best.freq }),
+        weight: 400 + best.gain,
+      });
+      break;
+    }
   }
 
   // 4. 노선마다: 운임·횟수·닫기

@@ -597,7 +597,8 @@ export class Planner {
       if (legFreq(p, r.id) > 0) continue;
       // 좌석이 남는 노선에 더 띄워 봐야 소용없다
       if (r.stats && r.stats.lf < 0.8 && this.c.planes.some((x) => legFreq(x, r.id) > 0)) continue;
-      const f = bestFreq(this.s, this.ci, p.id, r.id);
+      // 남은 슬롯은 같은 상태면 한 번만 센다 (이 비행기는 아직 이 노선을 날지 않는다)
+      const f = bestFreq(this.s, this.ci, p.id, r.id, (city) => this.slotsLeft(city));
       if (f <= 0) continue;
       const before = this.estimate(r.id);
       const opts = this.normal ? [...new Set([f, Math.max(1, Math.round(f * 0.6))])] : [f];

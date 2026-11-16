@@ -874,8 +874,12 @@ export function assignBlocker(state: AirlineState, ci: number, planeId: number, 
   return rightsAssignBlocker(state, ci, p, r, freq);
 }
 
-/** 이 비행기를 이 노선에 띄울 때 고를 수 있는 가장 큰 횟수 (못 띄우면 0) */
-export function bestFreq(state: AirlineState, ci: number, planeId: number, routeId: number): number {
+/**
+ * 이 비행기를 이 노선에 띄울 때 고를 수 있는 가장 큰 횟수 (못 띄우면 0).
+ * slotsLeft: 공항마다 남은 슬롯을 미리 세어 둔 값 (이 비행기가 아직 이 노선을 날지 않을 때만 쓴다).
+ * 노선이 수백 개면 노선마다 회사 비행기 전부의 운항을 다시 세느라 느려서, 여러 노선을 견줄 때 넘겨준다
+ */
+export function bestFreq(state: AirlineState, ci: number, planeId: number, routeId: number, slotsLeft?: (city: string) => number): number {
   const c = state.companies[ci];
   const p = planeById(c, planeId);
   const r = routeById(c, routeId);
@@ -886,7 +890,8 @@ export function bestFreq(state: AirlineState, ci: number, planeId: number, route
   if (airportClass(CITY[r.a], year) < m.runway || airportClass(CITY[r.b], year) < m.runway) return 0;
   let f = maxFreqFor(c, p, routeId);
   if (f < 1) return 0;
-  for (const city of [r.a, r.b]) f = Math.min(f, slotCapacity(state, ci, city) - slotsUsed(c, city, { plane: p.id, route: routeId }));
+  const counted = slotsLeft && legFreq(p, routeId) === 0;
+  for (const city of [r.a, r.b]) f = Math.min(f, counted ? slotsLeft(city) : slotCapacity(state, ci, city) - slotsUsed(c, city, { plane: p.id, route: routeId }));
   f = Math.min(f, rightsRoom(state, ci, p, r));
   return f >= 1 ? f : 0;
 }

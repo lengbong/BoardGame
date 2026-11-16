@@ -715,3 +715,31 @@ describe('지도 노선 색', () => {
     expect(mapInk('#4cc9ff')).toBe('#69ffff');
   });
 });
+
+describe('경영 비서: 비행기가 많아도 빨리', () => {
+  it('남는 비행시간을 쓸 곳은 기종마다 가장 많이 남는 비행기 한 대만 찾아본다', () => {
+    const s = twoHumans();
+    const cities = ['tokyo', 'osaka', 'beijing', 'shanghai', 'hongkong', 'taipei', 'bangkok', 'singapore', 'manila', 'jakarta', 'busan', 'jeju', 'hochiminh', 'guam', 'kualalumpur', 'delhi'];
+    // 두 기종 비행기 16대가 저마다 노선 하나를 주 2회만 날아 비행시간이 많이 남는다
+    cities.forEach((city, i) => addRoute(s, 0, 'seoul', city, i % 2 ? 'a330-300' : 'b737-800', 2));
+    // 노선마다 자리가 남아 (탑승률 50%) 더 띄울 곳이 없다: 예전에는 이럴 때 16대를 모두 찾아봤다
+    for (const r of s.companies[0].routes) r.stats = { lf: 0.5, pax: 1000, revenue: 10, profit: 1, lossStreak: 0, share: 1, xfer: 0, xferRev: 0, onTime: 0.9, cancel: 0, hist: [] };
+    const proto = Planner.prototype;
+    const orig = proto.bestExistingLeg;
+    const looked: number[] = [];
+    proto.bestExistingLeg = function (this: Planner, id: number, marginal: boolean) {
+      looked.push(id);
+      return orig.call(this, id, marginal);
+    };
+    let tips: ReturnType<typeof advise>;
+    try {
+      tips = advise(s, 0, 20);
+    } finally {
+      proto.bestExistingLeg = orig;
+    }
+    // 예전에는 남는 시간이 있는 비행기를 한 대씩 모든 노선에 대 봐서, 비행기가 수백 대면 단추를 누를 때마다 멈췄다
+    expect(new Set(looked).size).toBeLessThanOrEqual(2);
+    const spare = tips.find((t) => t.key.startsWith('spare-'));
+    if (spare) expect(looked).toContain(Number(spare.key.slice('spare-'.length)));
+  });
+});

@@ -170,7 +170,8 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   const bigRoute = (id: number): boolean => routesOf(id).some((x) => affordable(x) && x.profit >= SPARE_ROUTE_MIN);
   const keep = spareKeep(state, c, idle, legOf, bigRoute);
   const keepIds = new Set(keep.map((p) => p.id));
-  const free = idle.filter((p) => !keepIds.has(p.id));
+  // 낡은 쉬는 비행기(18년+)는 예비기로 세지 않고, 띄우거나 리스기와 바꾸라고도 하지 않는다: 아래 ‘쉬는 낡은 비행기 정리’에서 팔라고 한다
+  const free = idle.filter((p) => !keepIds.has(p.id) && !isOld(state, p));
   // 쉬는 내 비행기가 노선을 넘겨받을 수 있는 리스기가 있으면, 팔지 말고 리스기를 돌려주는 게 낫다 (아래 ‘리스기 바꾸기’)
   const swaps = swapPairs(state, ci, free);
   // 나머지 쉬는 비행기는 이미 있는 노선에 보태거나 새 노선을 연다. 리스료·보험료는 쉬어도 나가니
@@ -421,7 +422,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     const price = orderPrice(state, m, c);
     const lead = leadTime(m, yearOf(state.q));
     const waiting = adding.length;
-    if (!idleOwnOf(c, m.id, keepIds) && lead <= 12 && waiting < 2 + Math.floor(c.planes.length / 8) && c.cash - price > costs * 2 + 150 && !buyBlocker(state, ci, m.id, false)) {
+    if (!idleOwnOf(state, c, m.id, keepIds) && lead <= 12 && waiting < 2 + Math.floor(c.planes.length / 8) && c.cash - price > costs * 2 + 150 && !buyBlocker(state, ci, m.id, false)) {
       out.push({
         key: `orderfull-${m.id}-${f.route}`,
         icon: '🛒',
@@ -466,22 +467,24 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     });
   }
 
-  // 5½. 쉬는 낡은 비행기: 예비기 몫은 남기고 판다 (리스기는 돌려준다). 따로 띄우기·팔기를 권한 비행기와 리스기 바꾸기에 쓸 비행기는 빼고
+  // 5½. 쉬는 낡은 비행기: 예비기로 세지 않고 모두 판다 (리스기는 돌려준다). 예비기는 젊은 내 비행기로만 둔다
   {
     const skip = new Set<number>([...idleShown, ...keepIds, ...swaps.map((x) => x.own)]);
     const plan = idleOldPlan(state, ci, skip);
-    // 예비기는 경영 비서가 고른 몫(keep)을 그대로 쓴다: 예비기로 둘 비행기는 idleOldPlan에서도 남는다
-    const its = plan.items.filter((x) => !keepIds.has(x.plane));
+    const its = plan.items;
     if (its.length > 0) {
       const leasedN = its.filter((x) => planeById(c, x.plane)?.leased).length;
       const names = its.map((x) => MODEL[x.from].name).filter((n, i, a) => a.indexOf(n) === i);
+      const short = plan.need - plan.spare;
       out.push({
         key: its.length === 1 ? `idleold-${its[0].plane}` : 'idleold-many',
         icon: '🧹',
         title: its.length === 1 ? `쉬는 낡은 ${MODEL[its[0].from].name} ${leasedN ? '돌려주기' : '팔기'}` : `쉬는 낡은 비행기 ${its.length}대 정리`,
-        detail: `노선에 넣지 않은 오래된 ${names.slice(0, 3).join('·')}${names.length > 3 ? ' 등' : ''}${plan.need > 0 ? `이에요. 예비기 몫(${plan.need}대)은 젊은 비행기로 남기고` : '이에요.'} ${
+        detail: `노선에 넣지 않은 오래된 ${names.slice(0, 3).join('·')}${names.length > 3 ? ' 등' : ''}이에요. 낡은 비행기는 예비기로 두지 않아요. ${
           leasedN === its.length ? '돌려주면' : leasedN > 0 ? `팔고 리스기 ${leasedN}대는 돌려주면` : '팔면'
-        } 현금 ${fmtMoney(its.reduce((a, x) => a + x.cash, 0))}이 생기고, 리스료·보험료가 달 ${fmtMoney(its.reduce((a, x) => a + x.gain, 0))} 줄어요.`,
+        } 현금 ${fmtMoney(its.reduce((a, x) => a + x.cash, 0))}이 생기고, 리스료·보험료가 달 ${fmtMoney(its.reduce((a, x) => a + x.gain, 0))} 줄어요.${
+          short > 0 ? ` 예비기는 젊은 내 비행기(주문·중고)로 ${short}대 더 두면 결항이 줄어요.` : ''
+        }`,
         gain: its.reduce((a, x) => a + x.gain, 0),
         label: its.length === 1 ? (leasedN ? '돌려주기' : '팔기') : '모두 정리',
         apply: (s2) => renewApply(s2, ci, its),
@@ -685,7 +688,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     if (leased.length >= 2 && c.orders.filter((o) => o.replaces === undefined).length < 3) {
       const count = new Map<string, number>();
       for (const p of leased) count.set(p.model, (count.get(p.model) ?? 0) + 1);
-      const top = [...count.entries()].filter(([model]) => !idleOwnOf(c, model, keepIds)).sort((x, y) => y[1] - x[1])[0];
+      const top = [...count.entries()].filter(([model]) => !idleOwnOf(state, c, model, keepIds)).sort((x, y) => y[1] - x[1])[0];
       const model = top?.[0];
       const m = model ? MODEL[model] : undefined;
       const price = m ? orderPrice(state, m, c) : 0;
@@ -1087,6 +1090,7 @@ const SPARE_FLEET = 12;
 /**
  * 예비기로 둘 쉬는 내 비행기. 날고 있는 비행기가 많으면 8%쯤(적어도 한 대)을 둔다 (spareCover가 그만큼에서 다 찬다).
  * 리스기는 쉬어도 리스료가 나가니 예비기로 두지 않는다 (띄울 곳이 없으면 돌려주라고 권한다).
+ * 낡은 비행기(18년+)도 예비기로 두지 않는다 (‘쉬는 낡은 비행기 정리’에서 팔라고 한다).
  * 이미 있는 노선에 띄워 달 IDLE_MIN_GAIN 넘게 더 버는 비행기는 띄우는 게 나으니 빼고, 젊은 비행기부터 고른다.
  * 새 노선은 크게(SPARE_ROUTE_MIN 넘게) 벌 때만 예비기보다 먼저다 (작게 버는 노선보다는 결항을 줄이는 예비기가 낫다). 점검 중인 비행기는 예비기가 못 된다.
  */
@@ -1095,7 +1099,7 @@ function spareKeep(state: AirlineState, c: Company, idle: Plane[], legOf: (id: n
   if (flying < SPARE_FLEET) return [];
   const need = Math.max(1, Math.round(flying * 0.08));
   const cands = idle
-    .filter((p) => !p.leased && !inCheck(p, state.t))
+    .filter((p) => !p.leased && !inCheck(p, state.t) && !isOld(state, p))
     .sort((x, y) => planeAge(state, x) - planeAge(state, y))
     .slice(0, need + 3);
   const out: Plane[] = [];
@@ -1116,10 +1120,10 @@ function spareNote(keep: Plane[], model: string): string {
   return sp ? ` 쉬는 ${withJosa(MODEL[sp.model].name, '은/는')} 예비기로 그대로 둬요.` : '';
 }
 
-/** 이 기종과 같은 계열의 쉬는 내 비행기가 있는지 (전세기로 나간 비행기도: 다음 달엔 쉰다). skip: 예비기로 둔 비행기 */
-function idleOwnOf(c: Company, model: string, skip: ReadonlySet<number>): boolean {
+/** 이 기종과 같은 계열의 쉬는 내 비행기가 있는지 (전세기로 나간 비행기도: 다음 달엔 쉰다). skip: 예비기로 둔 비행기. 팔라고 할 낡은 비행기는 세지 않는다 */
+function idleOwnOf(state: AirlineState, c: Company, model: string, skip: ReadonlySet<number>): boolean {
   const fam = MODEL[model]?.family;
-  return idlePlanes(c).some((p) => !p.leased && !skip.has(p.id) && MODEL[p.model].family === fam);
+  return idlePlanes(c).some((p) => !p.leased && !skip.has(p.id) && !isOld(state, p) && MODEL[p.model].family === fam);
 }
 
 /**

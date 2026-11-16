@@ -151,7 +151,7 @@ describe('낡은 비행기 바꾸기: 주문해 두면 오면 바꾼다', () => 
 });
 
 describe('쉬는 낡은 비행기 정리', () => {
-  it('예비기 몫은 젊은 내 비행기부터 남기고, 나머지 낡은 비행기는 판다 (리스기는 돌려준다)', () => {
+  it('낡은 비행기는 예비기로 세지 않고 모두 판다 (리스기는 돌려준다). 젊은 내 비행기는 예비기로 남는다', () => {
     const s = game();
     // 날고 있는 비행기 13대 → 예비기 몫 1대
     for (let i = 0; i < 13; i++) addPlane(s, ...ROUTES[i % ROUTES.length], 'a320', 2);
@@ -161,6 +161,7 @@ describe('쉬는 낡은 비행기 정리', () => {
     const oldLease = addPlane(s, 'seoul', 'tokyo', 'b737-200', 0, { age: 21, rent: 10 });
     const plan = idleOldPlan(s, 0);
     expect(plan.need).toBe(1);
+    expect(plan.spare).toBe(1);
     expect(plan.old).toBe(3);
     expect(plan.items.map((x) => x.plane).sort()).toEqual([oldA, oldB, oldLease].sort());
     expect(plan.items.some((x) => x.plane === young)).toBe(false);
@@ -168,14 +169,31 @@ describe('쉬는 낡은 비행기 정리', () => {
     expect(after.planes.filter((p) => p.legs.length === 0).map((p) => p.id)).toEqual([young]);
   });
 
-  it('젊은 쉬는 비행기가 없으면 낡은 비행기 가운데 젊은 것을 예비기로 남긴다', () => {
+  it('젊은 쉬는 비행기가 없어 예비기가 모자라도 낡은 비행기는 예비기로 남기지 않는다', () => {
     const s = game();
     for (let i = 0; i < 13; i++) addPlane(s, ...ROUTES[i % ROUTES.length], 'a320', 2);
     const a = addPlane(s, 'seoul', 'tokyo', 'b737-200', 0, { age: 19 });
     const b = addPlane(s, 'seoul', 'tokyo', 'b737-200', 0, { age: 26 });
-    const plan = idleOldPlan(s, 0);
-    expect(plan.items.map((x) => x.plane)).toEqual([b]);
     expect(isOld(s, s.companies[0].planes.find((p) => p.id === a)!)).toBe(true);
+    const plan = idleOldPlan(s, 0);
+    expect(plan.items.map((x) => x.plane).sort()).toEqual([a, b].sort());
+    expect(plan.need).toBe(1);
+    expect(plan.spare).toBe(0);
+    // 경영 비서도 낡은 비행기를 예비기로 두라고 하지 않고, 예비기가 모자라다고 알려 준다
+    const tips = advise(s, 0, 20);
+    expect(tips.some((t) => t.key === 'keepspare')).toBe(false);
+    const group = tips.find((t) => t.key === 'idleold-many');
+    expect(group?.detail).toContain('예비기는 젊은 내 비행기');
+  });
+
+  it('보내 주신 판처럼 쉬는 비행기가 예비기 몫(8%)보다 적어도 쉬는 낡은 비행기는 판다', () => {
+    const s = game();
+    // 날고 있는 비행기 100대 → 예비기 몫 8대, 쉬는 비행기는 낡은 것 5대뿐
+    for (let i = 0; i < 100; i++) addPlane(s, ...ROUTES[i % ROUTES.length], 'a320', 1);
+    const old = [0, 1, 2, 3, 4].map(() => addPlane(s, 'seoul', 'tokyo', 'b737-200', 0, { age: 22 }));
+    const plan = idleOldPlan(s, 0);
+    expect(plan.need).toBe(8);
+    expect(plan.items.map((x) => x.plane).sort()).toEqual([...old].sort());
   });
 });
 
@@ -191,19 +209,18 @@ describe('경영 비서: 낡은·닳은 비행기를 묶어 권하고 한꺼번�
     expect(res.state.companies[0].planes.some((p) => p.model === 'b737-200')).toBe(false);
   });
 
-  it('쉬는 낡은 비행기는 따로 권한 것 말고 묶어서 정리하라고 한다', () => {
+  it('쉬는 낡은 비행기는 띄우거나 따로 팔라고 하지 않고, 한 줄로 묶어 모두 정리하라고 한다', () => {
     const s = game();
     addPlane(s, 'seoul', 'tokyo', 'a320', 14);
-    // 띄울 곳이 없는 아주 먼 곳의 낡은 비행기들 (같은 기종은 한 번만 따져 팔기를 권한다)
     const ids = [0, 1, 2, 3].map(() => addPlane(s, 'seoul', 'tokyo', 'b737-200', 0, { age: 24 }));
     const tips = advise(s, 0, 20);
-    const one = tips.filter((a) => ids.some((id) => a.key === `idle-sell-${id}` || a.key === `idle-${id}` || a.key.startsWith(`route-plane${id}-`)));
-    const group = tips.find((a) => a.key.startsWith('idleold-'));
-    expect(group, tips.map((a) => a.key).join(' ')).toBeTruthy();
+    const one = tips.filter((a) => ids.some((id) => a.key === `idle-sell-${id}` || a.key === `idle-${id}` || a.key === `swap-${id}` || a.key.startsWith(`route-plane${id}-`)));
+    expect(one.map((a) => a.key)).toEqual([]);
+    const group = tips.find((a) => a.key === 'idleold-many');
+    expect(group?.title, tips.map((a) => a.key).join(' ')).toBe('쉬는 낡은 비행기 4대 정리');
     const res = applyAdvice(group!, s);
     expect(res.why).toBeNull();
-    // 따로 권한 비행기만 남는다
-    expect(res.state.companies[0].planes.filter((p) => p.model === 'b737-200')).toHaveLength(one.length);
+    expect(res.state.companies[0].planes.filter((p) => p.model === 'b737-200')).toHaveLength(0);
   });
 
   it('아주 닳은 비행기가 여럿이면 한꺼번에 C점검을 권한다', () => {

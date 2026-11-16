@@ -15,7 +15,7 @@ import type { AirlineState, Company, Order, Plane } from './types';
  * - 열여덟 해가 넘은 비행기를 낡은 비행기로 본다. 많이 닳았거나(점검 시점 아래) 스물다섯 해가 넘으면 급하다.
  * - 바꾸는 방법은 비서가 고른다: 급하면 리스로 바로(한 달에 리스·중고 MAX_DELIVERIES대까지),
  *   돈이 넉넉하면 새 비행기를 주문해 둔다. 주문한 비행기가 오면 낡은 비행기의 노선을 넘겨받고 낡은 비행기는 판다 (rules.ts handOver).
- * - 노선에 넣지 않은 낡은 비행기는 예비기로 둘 몫(날고 있는 비행기의 8%)만 남기고 판다 (리스기는 돌려준다).
+ * - 노선에 넣지 않은 낡은 비행기는 예비기로 세지 않고 판다 (리스기는 돌려준다). 예비기(날고 있는 비행기의 8%)는 젊은 내 비행기로만 둔다.
  */
 
 /** 이만큼 나이를 먹으면 낡은 비행기 */
@@ -238,7 +238,7 @@ export interface IdleOldPlan {
   items: RenewItem[];
   /** 쉬는 낡은 비행기 */
   old: number;
-  /** 예비기로 남기는 쉬는 비행기 수 (젊은 내 비행기부터) */
+  /** 예비기로 남는 쉬는 젊은 내 비행기 수 (need보다 적으면 예비기가 모자라다) */
   spare: number;
   need: number;
   gain: number;
@@ -246,24 +246,19 @@ export interface IdleOldPlan {
 }
 
 /**
- * 노선에 넣지 않은 낡은 비행기 정리: 예비기 몫(날고 있는 비행기의 8%)은 젊은 내 비행기부터 남기고, 나머지 낡은 비행기는 판다.
- * 리스기는 쉬어도 리스료가 나가니 예비기로 남기지 않고 돌려준다. 전세기로 나가거나 점검 중인 비행기는 빼고, skip도 뺀다
+ * 노선에 넣지 않은 낡은 비행기 정리: 낡은 비행기(18년+)는 예비기로 세지 않고 모두 판다 (리스기는 돌려준다).
+ * 예비기 몫(날고 있는 비행기의 8%)은 젊은 내 비행기로만 채운다 (spare가 need보다 적으면 모자란 것).
+ * 전세기로 나가거나 점검 중인 비행기는 빼고, skip도 뺀다
  */
 export function idleOldPlan(state: AirlineState, ci: number, skip?: ReadonlySet<number>): IdleOldPlan {
   const c = state.companies[ci];
   const chartered = charterPlaneIds(state, ci);
   const idle = idlePlanes(c).filter((p) => !chartered.has(p.id) && !inCheck(p, state.t));
   const need = spareNeed(c);
-  const spares = new Set(
-    idle
-      .filter((p) => !p.leased)
-      .sort((x, y) => planeAge(state, x) - planeAge(state, y))
-      .slice(0, need)
-      .map((p) => p.id),
-  );
+  const spare = Math.min(need, idle.filter((p) => !p.leased && !isOld(state, p)).length);
   const old = idle.filter((p) => isOld(state, p));
-  const items = old.filter((p) => !spares.has(p.id) && !skip?.has(p.id)).map((p) => sellItem(state, p));
-  return { items, old: old.length, spare: spares.size, need, gain: sum(items, 'gain'), cash: sum(items, 'cash') };
+  const items = old.filter((p) => !skip?.has(p.id)).map((p) => sellItem(state, p));
+  return { items, old: old.length, spare, need, gain: sum(items, 'gain'), cash: sum(items, 'cash') };
 }
 
 // ------------------------------------------------------------------ 적용

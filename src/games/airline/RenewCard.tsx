@@ -149,7 +149,7 @@ export function RenewCard({
           ♻️ 비서에게 바꿀 계획 세우기
         </button>
         <small className="al-muted">
-          급하면(닳았거나 25년 넘음) 리스로 바로 (이번 달 {leftLease}/{MAX_DELIVERIES}대 남음), 돈이 넉넉하면 새 비행기를 주문해 두고, 쉬는 낡은 비행기는 예비기 몫만 남기고 팔아요.
+          급하면(닳았거나 25년 넘음) 리스로 바로 (이번 달 {leftLease}/{MAX_DELIVERIES}대 남음), 돈이 넉넉하면 새 비행기를 주문해 두고, 쉬는 낡은 비행기는 예비기로 세지 않고 팔아요.
         </small>
       </div>
       {done && done.state === state && (
@@ -170,7 +170,6 @@ export function RenewCard({
             <p className="al-muted">
               지금은 바꿀 만한 비행기가 없어요.{' '}
               {p.renew.old > 0 && `노선을 나는 낡은 비행기 ${p.renew.old}대는 바꿔도 달 이익이 ${RENEW_MIN}억 넘게 늘지 않거나, 돈·리스 한도가 모자라요.`}
-              {p.idle.old > 0 && ` 쉬는 낡은 비행기 ${p.idle.old}대는 예비기 몫(${p.idle.need}대)으로 남겨요.`}
             </p>
           ) : (
             <>
@@ -244,11 +243,14 @@ export function RenewCard({
               </div>
             </>
           )}
-          {(p.renew.kept > 0 || p.renew.more > 0 || p.idle.spare > 0) && items.length > 0 && (
+          {(p.renew.kept > 0 || p.renew.more > 0 || p.idle.need > 0) && items.length > 0 && (
             <small className="al-muted al-renew-note">
               {p.renew.kept > 0 && `낡은 비행기 ${p.renew.kept}대는 지금 바꿔도 남는 게 적거나 돈·리스 한도가 모자라 그대로 둬요. `}
               {p.renew.more > 0 && `${p.renew.more}대는 이번 것을 바꾼 뒤 다시 살펴볼게요. `}
-              {p.idle.need > 0 && `쉬는 비행기 가운데 예비기 몫 ${p.idle.need}대는 젊은 비행기부터 남겨요.`}
+              {p.idle.need > 0 &&
+                (p.idle.spare >= p.idle.need
+                  ? `예비기 ${p.idle.need}대는 쉬는 젊은 비행기로 남아요.`
+                  : `예비기는 젊은 비행기로만 둬요: ${p.idle.need}대 가운데 ${p.idle.spare}대뿐이라, 젊은 내 비행기(주문·중고)를 ${p.idle.need - p.idle.spare}대 더 두면 결항이 줄어요.`)}
             </small>
           )}
         </div>

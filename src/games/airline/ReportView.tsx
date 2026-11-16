@@ -10,6 +10,7 @@ import { axisMoney, fmtMoney, fmtPax, pct, signedMoney } from './format';
 import { GRADE_INFO } from './goals';
 import { existedAt, exitLabel } from './industry';
 import { rankings, shownCompanies } from './rules';
+import { normalOil, surchargeText } from './fuel';
 import { companyValue, pairDemand, regionsServed } from './simulate';
 import { staffTotal } from './staff';
 import { mLabel, mOf, mShort, monthOf, qLabel, qShort, quarterOf, yearOf, yearOfM } from './time';
@@ -187,7 +188,11 @@ function MonthView({ state, viewer }: { state: AirlineState; viewer: number }) {
       <div className="al-report-grid">
         <section className="al-card al-chart-card">
           <h4>
-            유가 지수 <small>1이 보통 · 지금 {state.oil.toFixed(2)}</small>
+            유가 지수{' '}
+            <small>
+              보통 {normalOil(state).toFixed(2)} · 지금 {state.oil.toFixed(2)}
+              {surchargeText(state) && ` · 유류할증 1,000km마다 +${surchargeText(state)}`}
+            </small>
           </h4>
           {state.months.length < 2 ? <p className="al-muted">첫 달이 끝나면 그려져요.</p> : <LineChart series={oil} labels={labels} tickAt={tickAt} format={(v) => v.toFixed(2)} axisFormat={stepFixed} height={170} zero={false} minSpan={0.2} ariaLabel="유가 지수가 달마다 어떻게 변했는지" />}
         </section>

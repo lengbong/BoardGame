@@ -1,7 +1,7 @@
 import { useId } from 'react';
 import './extras.css';
 import { FinIcon } from './FinanceArt';
-import { AUTO_OPTIONS, FUEL_SELL_RATE, MAX_TANK, TANK_LEVELS, buyFuelBlocker, fuelCost, sellFuelBlocker, tankBlocker, tankCap, tankOf, tankSpace } from './fuel';
+import { AUTO_OPTIONS, FUEL_PASS, FUEL_SELL_RATE, MAX_TANK, TANK_LEVELS, buyFuelBlocker, fuelCost, sellFuelBlocker, surchargeText, tankBlocker, tankCap, tankOf, tankSpace } from './fuel';
 import { fmtFine, fmtMoney } from './format';
 import { oilTarget } from './rules';
 import { MoreInfo } from './StaffArt';
@@ -128,6 +128,7 @@ export function FuelCard({ state, viewer, canAct, perform, next }: FuelCardProps
   const saved = rep?.tankSaved ?? 0;
   const used = rep?.tankUsed ?? 0;
   const half = Math.floor(tank.stock / 2);
+  const surcharge = surchargeText(state);
 
   return (
     <section className="al-card al-fuel-card" data-testid="al-fuel">
@@ -167,6 +168,11 @@ export function FuelCard({ state, viewer, canAct, perform, next }: FuelCardProps
       <p className={`al-fuel-verdict al-fuel-${tone}`}>
         {Math.abs(ratio - 1) < 0.02 ? '지금 유가는 보통 값쯤이에요' : `지금 유가는 보통 값보다 ${Math.round(Math.abs(ratio - 1) * 100)}% ${ratio < 1 ? '싸요 — 사 두기 좋은 때예요' : '비싸요 — 사 둔 연료를 쓸 때예요'}`}
       </p>
+      {surcharge && (
+        <p className="al-muted al-fuel-sur" data-testid="al-fuel-surcharge">
+          ⛽ 유류할증: 모든 항공사 표에 1,000km마다 <b>+{surcharge}</b> — 늘어난 연료비의 {Math.round(FUEL_PASS * 100)}%쯤만 메워요
+        </p>
+      )}
       {tank.level > 0 && (
         <>
           <div className="al-loan-row">
@@ -226,7 +232,7 @@ export function FuelCard({ state, viewer, canAct, perform, next }: FuelCardProps
       )}
       <MoreInfo>
         탱크가 있으면 비행기가 먼저 사 둔 연료를 산 값 그대로 쓰고, 모자라면 그달 값으로 사요. 유가는 달마다 오르내리며 ‘보통 값’ 쪽으로 천천히 돌아가요. 실제 역사를 켜 두면 1973·1979년 석유 파동이나 2008년처럼 갑자기
-        뛰기도 해요. 사 둔 연료는 회사 가치에 들어가고, 되팔면 그달 값의 {Math.round(FUEL_SELL_RATE * 100)}%만 받아요. 연료 헤지 계약이 있으면 탱크 연료를 먼저 쓰고 나머지를 고정 값으로 사요.
+        뛰기도 해요. 사 둔 연료는 회사 가치에 들어가고, 되팔면 그달 값의 {Math.round(FUEL_SELL_RATE * 100)}%만 받아요. 연료 헤지 계약이 있으면 탱크 연료를 먼저 쓰고 나머지를 고정 값으로 사요. 유가가 보통 값보다 높으면 모든 항공사 표에 거리만큼 유류할증이 붙어 늘어난 연료비의 {Math.round(FUEL_PASS * 100)}%쯤을 손님이 내요 — 나머지는 회사 몫이라, 연료를 덜 먹는 비행기와 사 둔 연료가 여전히 힘이 돼요.
       </MoreInfo>
     </section>
   );

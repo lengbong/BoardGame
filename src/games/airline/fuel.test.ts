@@ -4,9 +4,9 @@ import { MODEL } from './aircraft';
 import { aiManage } from './ai';
 import { advise } from './advisor';
 import { defaultCabin } from './cabin';
-import { FUEL_SELL_RATE, FUEL_TON, MAX_TANK, TANK_LEVELS, autoBuyTons, burnFuel, buyFuelBlocker, tankBlocker, tankOf } from './fuel';
+import { FUEL_PASS, FUEL_SELL_RATE, FUEL_TON, MAX_TANK, PAX_BURN, TANK_LEVELS, autoBuyTons, burnFuel, buyFuelBlocker, fuelSurcharge, fuelSurchargeKm, normalOil, surchargeText, tankBlocker, tankOf } from './fuel';
 import { actor, applyAction, createGame, runMonth } from './rules';
-import { FUEL_PRICE, companyValue, computeMonth } from './simulate';
+import { FUEL_PRICE, baseFare, companyValue, computeMonth, marketFare } from './simulate';
 import { isValidState, parseSaved } from './storage';
 import { defaultTimes } from './timetable';
 import type { AirlineAction, AirlineSetup, AirlineState, SeatKind } from './types';
@@ -188,5 +188,49 @@ describe('연료 탱크', () => {
     const buy = advise(s, 0, 20).find((a) => a.key === 'fuelbuy');
     expect(buy?.apply).toBeTruthy();
     expect(tankOf(buy!.apply!(s).companies[0]).stock).toBeGreaterThan(0);
+  });
+});
+
+describe('유류할증', () => {
+  it('유가가 보통 값보다 높을 때만, 오른 만큼과 거리에 비례해 붙는다', () => {
+    const s = game();
+    // 2003년의 보통 값은 1
+    expect(normalOil(s)).toBe(1);
+    expect(fuelSurcharge({ ...s, oil: 0.8 }, 1000)).toBe(0);
+    expect(fuelSurcharge({ ...s, oil: 1 }, 1000)).toBe(0);
+    expect(surchargeText({ ...s, oil: 1 })).toBeNull();
+    // 손님 한 명 1km 연료 × 오른 유가 × 1kg 값(만 원)의 60%
+    const perKm = FUEL_PASS * 1 * PAX_BURN * FUEL_PRICE;
+    expect(fuelSurchargeKm({ ...s, oil: 2 })).toBeCloseTo(perKm, 8);
+    expect(fuelSurcharge({ ...s, oil: 2 }, 5000)).toBeCloseTo(5 * fuelSurcharge({ ...s, oil: 2 }, 1000), 8);
+    expect(fuelSurcharge({ ...s, oil: 3 }, 1000)).toBeCloseTo(2 * fuelSurcharge({ ...s, oil: 2 }, 1000), 8);
+    expect(surchargeText({ ...s, oil: 2 })).toBe(`${(perKm * 1000).toFixed(1)}만 원`);
+    // 손님이 내는 값 = 기본 운임 + 유류할증
+    expect(marketFare({ ...s, oil: 2 }, 3000)).toBeCloseTo(baseFare(3000, s.q) + perKm * 3000, 8);
+    // 보통 값이 높은 시대(2010년대 1.35)에는 그보다 오른 만큼만
+    const later = { ...s, t: s.t + 12 * 8 };
+    expect(normalOil(later)).toBe(1.35);
+    expect(fuelSurcharge({ ...later, oil: 1.35 }, 1000)).toBe(0);
+    // 실제 역사를 끄면 보통 값은 언제나 1
+    expect(normalOil({ ...later, options: { ...later.options, history: false } })).toBe(1);
+  });
+
+  it('달 계산: 손님 수는 그대로이고, 운임 수입이 늘어 늘어난 연료비의 일부만 메운다 (짧은 노선도 긴 노선도)', () => {
+    for (const [a, b, model] of [
+      ['seoul', 'tokyo', 'b737-800'],
+      ['seoul', 'london', 'b787-9'],
+    ] as const) {
+      const s = game();
+      addRoute(s, 0, a, b, model, 7);
+      const low = computeMonth({ ...s, oil: 1 }, seededRandom(9)).reports[0];
+      const high = computeMonth({ ...s, oil: 2 }, seededRandom(9)).reports[0];
+      expect(high.pax, a + b).toBeCloseTo(low.pax, 6);
+      const moreFare = high.ticket - low.ticket;
+      const moreFuel = high.fuel - low.fuel;
+      expect(moreFare, a + b).toBeGreaterThan(0);
+      // 기름값이 뛰면 이익은 줄어든다 (다 메우지는 못한다)
+      expect(moreFare, a + b).toBeLessThan(moreFuel);
+      expect(moreFare / moreFuel, a + b).toBeGreaterThan(0.3);
+    }
   });
 });

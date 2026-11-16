@@ -176,3 +176,9 @@
 .al-mc-cargo {
   font-weight: 700;
 }
+
+/* 유류할증 안내 (등급별 운임 카드) */
+.al-fares-sur {
+  margin: 2px 0 8px;
+  font-size: 13px;
+}

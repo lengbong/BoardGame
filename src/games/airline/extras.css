@@ -542,3 +542,9 @@
 .al-bulk-main small {
   font-size: 11.5px;
 }
+
+/* 유류할증 안내 (연료 탱크 카드) */
+.al-fuel-sur {
+  margin: 0 0 8px;
+  font-size: 13px;
+}

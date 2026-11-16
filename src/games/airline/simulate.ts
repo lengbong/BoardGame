@@ -20,7 +20,7 @@ import { bizMonthMult, leisureMonthMult, weather } from './calendar';
 import { AIRPORT_INFO, CITY, FEE_INFO, REGIONS, airportClass, citySize, dist, pairIndex, pairKey } from './cities';
 import { effectMults, fixedEventMult, priceMult, worldMult } from './events';
 import { condOf, condRisk, fleetCond, inCheck } from './condition';
-import { FUEL_TON, burnFuel, tankWorth } from './fuel';
+import { FUEL_TON, burnFuel, fuelSurcharge, tankWorth } from './fuel';
 import { JOINT_BONUS, MILES_PER_MEMBER, allianceGroups, alliesOf } from './alliances';
 import { LOUNGE_BIZ, LOUNGE_XFER, TERMINAL_XFER_HOURS, companyCheckCost, facilitiesUpkeep, facilitiesWorth, hasFacility, loungeBiz, loungeRep, terminalSlots } from './facilities';
 import { STAFF_SHARE, overtime, payroll, staffCap, staffNeed, strikeChance } from './staff';
@@ -152,6 +152,11 @@ export function fareFactor(q: number): number {
 /** 편도 평균 운임 (만 원, 운임 조정 0%) */
 export function baseFare(d: number, q: number): number {
   return 0.0551 * d ** 0.8 * fareFactor(q);
+}
+
+/** 기본 운임 + 유류할증 (만 원, 유가가 보통보다 높을 때, fuel.ts): 화물 운임과 한 장 값 보기에 쓴다 */
+export function marketFare(state: Pick<AirlineState, 'q' | 't' | 'oil' | 'options' | 'challenge'>, d: number): number {
+  return baseFare(d, state.q) + fuelSurcharge(state, d);
 }
 
 /** 한 번 나는 데 걸리는 시간 (지상 시간 포함) */
@@ -722,16 +727,19 @@ export function splitMarketFull(state: AirlineState, a: string, b: string, offer
   }
   const total = gotB.reduce((s, x) => s + x, 0) + gotL.reduce((s, x) => s + x, 0);
   const fare = baseFare(d, state.q);
+  // 유가가 보통보다 높으면 손님 한 명마다 거리만큼 유류할증이 똑같이 붙는다 (등급·운임 조정과 상관없이, fuel.ts)
+  const surcharge = fuelSurcharge(state, d);
+  const extra = (pax: number) => (pax * surcharge * 2) / 10000;
   // 화물: 배 아래 짐칸(저가항공 빼고)과 화물기
   const cargoOffers = offers.map((o) => cargoOfferOf(o.planes, bizModelOf(state.companies[o.company]), o.fareK ?? 0));
   const cargoGot = cargoOffers.some((x) => x.cap > 0) ? splitCargo(cargoDemand(state, a, b) * oilCargoMult(state.oil ?? 1), cargoOffers) : null;
-  const rate = cargoGot ? baseFare(Math.max(CARGO_MIN_D, d), state.q) * RATE_K : 0;
+  const rate = cargoGot ? marketFare(state, Math.max(CARGO_MIN_D, d)) * RATE_K : 0;
   const money = (units: number) => (units * fare * 2) / 10000;
   const results = offers.map((o, i) => {
     const x = attrs[i];
     const k = cls[i];
     const u = classUnits(k, d, o.fareF ?? 0, o.fareC ?? 0, (1 + o.fare / 100) * x.premium);
-    const rev = { f: money(u.f), c: money(u.c), y: money(u.y) };
+    const rev = { f: money(u.f) + extra(k.f), c: money(u.c) + extra(k.c), y: money(u.y) + extra(k.yB + k.yL) };
     const cargoT = cargoGot ? cargoGot[i] : 0;
     const cargoRev = cargoT > 0 ? (cargoT * rate * (1 + (o.fareK ?? 0) / 100) * 2) / 10000 : 0;
     // 저가항공 부가 수입: 짐·좌석 지정·기내 판매 (요즘일수록 많다)
@@ -1295,9 +1303,10 @@ function assignTransfers(state: AirlineState, runs: RouteRun[], unserved: Map<nu
       if (got < 0.5) return;
       const gb = Math.min(wantB, got);
       const gl = got - gb;
-      const rev = ((gb * BIZ_PREMIUM + gl) * baseFare(dAB, state.q) * attrs[k].fare * 2) / 10000;
       const d1 = dist(cn.r1.route.a, cn.r1.route.b);
       const d2 = dist(cn.r2.route.a, cn.r2.route.b);
+      // 유류할증은 실제로 나는 두 구간 거리만큼
+      const rev = ((gb * BIZ_PREMIUM + gl) * baseFare(dAB, state.q) * attrs[k].fare * 2 + got * fuelSurcharge(state, d1 + d2) * 2) / 10000;
       cn.r1.xfer += got;
       cn.r2.xfer += got;
       cn.r1.xferRev += (rev * d1) / (d1 + d2);

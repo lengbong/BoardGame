@@ -1,3 +1,5 @@
+import { historicOil } from './events';
+import { mOf, yearOfM } from './time';
 import type { AirlineState, Company, FuelTank } from './types';
 
 /**
@@ -8,6 +10,44 @@ import type { AirlineState, Company, FuelTank } from './types';
 
 /** 유가 지수 1일 때 연료 1톤 값 (억) = simulate.ts의 FUEL_PRICE(1kg에 0.13만 원) × 1000kg (테스트가 둘이 같은지 본다) */
 export const FUEL_TON = 0.013;
+
+/**
+ * 그 시대의 '보통' 유가 지수: 달마다 유가가 이 값 쪽으로 천천히 돌아간다.
+ * 운임은 이 값일 때에 맞춰져 있어서, 유가가 이보다 높으면 유류할증이 붙는다.
+ */
+export function normalOil(state: Pick<AirlineState, 't' | 'options' | 'challenge'>): number {
+  if (state.challenge?.id === 'oilstorm' && state.t >= mOf(1973, 10)) return 1.9;
+  return state.options.history !== false ? historicOil(yearOfM(state.t)) : 1;
+}
+
+/** 손님 한 명이 1km 가는 데 드는 연료 (kg): 업계 평균 어림 (2027년 판 전체가 0.023쯤) */
+export const PAX_BURN = 0.023;
+/** 유가가 오른 만큼의 연료비 가운데 유류할증으로 손님에게 넘기는 몫 */
+export const FUEL_PASS = 0.6;
+
+/**
+ * 유류할증 (손님 한 명이 1km 갈 때 더 내는 값, 만 원): 유가가 보통 값보다 높으면 모든 항공사 표에 똑같이,
+ * 실제 유류할증처럼 거리만큼 붙는다. 업계 평균 연료로 늘어난 연료비의 60%쯤이라 기름값이 뛰면 여전히 손해지만
+ * 버틸 수는 있고, 연료를 덜 먹는 비행기·꽉 찬 비행기일수록 덜 손해 본다.
+ * 유가 고정 계약과 상관없이 시장 유가로 정한다.
+ */
+export function fuelSurchargeKm(state: Pick<AirlineState, 't' | 'oil' | 'options' | 'challenge'>): number {
+  const normal = normalOil(state);
+  const oil = state.oil ?? normal;
+  if (!(normal > 0) || oil <= normal) return 0;
+  // FUEL_TON(억/톤) × 10 = 1kg 값 (만 원)
+  return FUEL_PASS * (oil - normal) * PAX_BURN * FUEL_TON * 10;
+}
+
+/** 1,000km마다 붙는 유류할증 글 ('3.2만 원'), 붙지 않으면 null */
+export function surchargeText(state: Pick<AirlineState, 't' | 'oil' | 'options' | 'challenge'>): string | null {
+  const v = fuelSurchargeKm(state) * 1000;
+  if (v < 0.05) return null;
+  return `${v < 10 ? v.toFixed(1) : Math.round(v).toLocaleString('ko-KR')}만 원`;
+}
+
+/** 표 한 장에 붙는 유류할증 (만 원, 편도 d km) */
+export const fuelSurcharge = (state: Pick<AirlineState, 't' | 'oil' | 'options' | 'challenge'>, d: number): number => fuelSurchargeKm(state) * d;
 
 /** 사 둔 연료를 되팔 때는 그달 값의 이만큼만 받는다 */
 export const FUEL_SELL_RATE = 0.9;

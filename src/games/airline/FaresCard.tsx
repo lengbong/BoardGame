@@ -4,8 +4,9 @@ import { BIZ_INFO, bizModelOf } from './bizmodel';
 import { CARGO_MIN_D, RATE_K } from './cargo';
 import { classFareMult } from './classes';
 import { FARE_RANGE, applyFares, recommendFares, type FareAdvice, type FareKey } from './fares';
+import { fuelSurchargeKm } from './fuel';
 import { fareText, fmtMoney, fmtPax, manwon, pct, signedMoney } from './format';
-import { baseFare, routeFares, type RouteEstimate } from './simulate';
+import { baseFare, marketFare, routeFares, type RouteEstimate } from './simulate';
 import { dist } from './cities';
 import { FinIcon } from './FinanceArt';
 import { MoreInfo } from './StaffArt';
@@ -37,6 +38,8 @@ export function FaresCard({ state, viewer, canAct, perform, apply, route, est }:
   const me = state.companies[viewer];
   const model = bizModelOf(me);
   const d = dist(route.a, route.b);
+  // 한 장 값은 유류할증(등급과 상관없이 같은 값)을 더한, 손님이 실제로 내는 값
+  const surcharge = fuelSurchargeKm(state) * d;
   const base = baseFare(d, state.q);
   const mult = classFareMult(d);
   const fares = routeFares(route);
@@ -45,11 +48,11 @@ export function FaresCard({ state, viewer, canAct, perform, apply, route, est }:
   const last = route.stats;
   const rows: { key: FareKey; seats: number; pax: number; rev: number; price: number; unit: string; lastLf: number | null }[] = [];
   const lastLf = (k: 0 | 1 | 2) => (last?.cls && last.cls.seats[k] > 0 ? last.cls.pax[k] / last.cls.seats[k] : null);
-  if (est.cls.seats[0] > 0) rows.push({ key: 'f', seats: est.cls.seats[0], pax: est.cls.pax[0], rev: est.cls.rev[0], price: base * mult.f * (1 + fares.f / 100), unit: '석', lastLf: lastLf(0) });
-  if (est.cls.seats[1] > 0) rows.push({ key: 'c', seats: est.cls.seats[1], pax: est.cls.pax[1], rev: est.cls.rev[1], price: base * mult.c * (1 + fares.c / 100), unit: '석', lastLf: lastLf(1) });
-  if (est.cls.seats[2] > 0) rows.push({ key: 'y', seats: est.cls.seats[2], pax: est.cls.pax[2], rev: est.cls.rev[2], price: base * (1 + fares.y / 100), unit: '석', lastLf: lastLf(2) });
+  if (est.cls.seats[0] > 0) rows.push({ key: 'f', seats: est.cls.seats[0], pax: est.cls.pax[0], rev: est.cls.rev[0], price: base * mult.f * (1 + fares.f / 100) + surcharge, unit: '석', lastLf: lastLf(0) });
+  if (est.cls.seats[1] > 0) rows.push({ key: 'c', seats: est.cls.seats[1], pax: est.cls.pax[1], rev: est.cls.rev[1], price: base * mult.c * (1 + fares.c / 100) + surcharge, unit: '석', lastLf: lastLf(1) });
+  if (est.cls.seats[2] > 0) rows.push({ key: 'y', seats: est.cls.seats[2], pax: est.cls.pax[2], rev: est.cls.rev[2], price: base * (1 + fares.y / 100) + surcharge, unit: '석', lastLf: lastLf(2) });
   if (est.cargoCap > 0) {
-    const rate = baseFare(Math.max(CARGO_MIN_D, d), state.q) * RATE_K;
+    const rate = marketFare(state, Math.max(CARGO_MIN_D, d)) * RATE_K;
     rows.push({ key: 'k', seats: est.cargoCap, pax: est.cargoT, rev: est.cargoRev, price: rate * (1 + fares.k / 100), unit: '톤', lastLf: last?.cargo && last.cargo.cap > 0 ? last.cargo.t / last.cargo.cap : null });
   }
   const set = (k: FareKey, v: number) => perform(k === 'y' ? { type: 'setFare', route: route.id, fare: v } : { type: 'setFare', route: route.id, fare: v, cls: k });
@@ -60,6 +63,11 @@ export function FaresCard({ state, viewer, canAct, perform, apply, route, est }:
       <h4 className="al-fin-title">
         <FinIcon kind="ticket" /> 등급별 운임 <small>{model === 'full' ? '좌석 등급·화물마다 따로 정해요' : BIZ_INFO[model].name}</small>
       </h4>
+      {surcharge >= 0.5 && (
+        <p className="al-muted al-fares-sur" data-testid="al-fares-surcharge">
+          ⛽ 유가가 보통보다 높아 이 노선 표 한 장에 유류할증 <b>{manwon(surcharge)}</b>이 붙어요 (모든 항공사 같고, 한 장 값에 들어 있어요)
+        </p>
+      )}
       {rows.length === 0 ? (
         <p className="al-muted">비행기를 넣으면 등급마다 좌석·손님·수입을 보여 줘요.</p>
       ) : (
@@ -147,7 +155,7 @@ export function FaresCard({ state, viewer, canAct, perform, apply, route, est }:
       <MoreInfo label="등급별 운임은 어떻게 달라요?">
         고급 좌석을 찾는 손님은 사업 손님일수록, 멀리 갈수록, 요즘일수록 많아요. 비즈니스석은 1979년 무렵 생겼고, 그 전에는 고급 좌석 손님이 일등석을 찾아요. 일등석 손님은 값에 덜 민감하고 비즈니스석 손님은 조금 더
         민감해요. 너무 비싸면 일부는 아래 등급으로, 일부는 다른 회사로 가요. 자리가 모자라면 아래 등급으로 내려가고, 일반석이 차면 남은 고급 좌석에 일반석 값으로 앉아요. 화물은 넓은 동체 여객기 배 아래 짐칸과
-        화물기에 싣고 10~12월에 가장 많아요. 저가항공은 짐칸 화물을 받지 않아요.
+        화물기에 싣고 10~12월에 가장 많아요. 저가항공은 짐칸 화물을 받지 않아요. 유가가 보통보다 높으면 모든 항공사 표와 화물 운임에 거리만큼 유류할증이 똑같이 붙어요.
       </MoreInfo>
     </section>
   );

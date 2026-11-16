@@ -133,7 +133,7 @@ export function rollRandomEvent(ctx: EventContext, rng: Rng): EventOutcome | nul
       const to = ctx.oil * mult;
       return {
         oil: mult,
-        news: { icon: '⛽', title: '기름값이 크게 올랐어요', text: `유가 지수: ${fmtOil(ctx.oil)} → ${fmtOil(to)}. 연료를 많이 먹는 비행기일수록 손해가 커져요.`, tone: 'bad' },
+        news: { icon: '⛽', title: '기름값이 크게 올랐어요', text: `유가 지수: ${fmtOil(ctx.oil)} → ${fmtOil(to)}. 운임에 유류할증이 붙지만 늘어난 연료비를 다 메우지는 못해요. 연료를 많이 먹는 비행기일수록 손해가 커져요.`, tone: 'bad' },
       };
     }
     case 'oilDown': {

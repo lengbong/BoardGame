@@ -20,7 +20,7 @@ import { autoAirline, gameHub, pickColors } from './brand';
 import { AIRPORT_INFO, CITIES, CITY, REGIONS, REGION_INFO, airportClass, citySize, dist, pairKey } from './cities';
 import { WEATHER_INFO, type WeatherCause } from './calendar';
 import { FIXED_EVENTS, FIXED_ICON, fixedEventsAt, historicOil, historyAt, rollRandomEvent } from './events';
-import { FUEL_SELL_RATE, TANK_LEVELS, addFuel, autoBuyTons, buyFuelBlocker, fuelCost, sellFuelBlocker, tankBlocker, tankOf } from './fuel';
+import { FUEL_SELL_RATE, TANK_LEVELS, addFuel, autoBuyTons, buyFuelBlocker, fuelCost, normalOil, sellFuelBlocker, tankBlocker, tankOf } from './fuel';
 import { addMonth, closeQuarter, freshAcc, goalMet, gradeYear, newGoals } from './goals';
 import { MAX_PLANES, MAX_ROUTES } from './limits';
 import { REAL_AIRLINE, airlinesAt } from './realAirlines';
@@ -2750,9 +2750,9 @@ function startMonth(state: AirlineState, t: number, rng: Rng): AirlineState {
   return { ...s, order, turnPos: 0 };
 }
 
+/** 유가가 돌아가는 보통 값 (fuel.ts) */
 export function oilTarget(state: AirlineState): number {
-  if (state.challenge?.id === 'oilstorm' && state.t >= mOf(1973, 10)) return 1.9;
-  return historyOn(state) ? historicOil(yearOfM(state.t)) : 1;
+  return normalOil(state);
 }
 
 /** 해가 바뀔 때 뉴스: 새 기종, 생산 끝, 공항이 커짐, 올해 행사 */

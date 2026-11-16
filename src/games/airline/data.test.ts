@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MODELS, availableModels, isFictional } from './aircraft';
+import { MODEL, MODELS, availableModels, endingSoon, isFictional, productionYears } from './aircraft';
 import { CHALLENGES } from './challenges';
 import { CITIES, CITY, REGIONS, airportClass } from './cities';
 import { FIXED_EVENTS } from './events';
@@ -84,6 +84,23 @@ describe('기종', () => {
       expect(ms.some((m) => m.seats >= 100 && m.seats <= 200)).toBe(true);
       expect(Math.max(...ms.map((m) => m.range))).toBeGreaterThanOrEqual(9000);
     }
+  });
+
+  it('기종 카드는 2040년 뒤에 끝나는 기종도 단종 해를 보여 주고, 마지막 두 해에는 곧 단종이라고 알린다', () => {
+    const b787 = MODEL['b787-9'];
+    // 예전에는 2040년 뒤에 끝나는 기종을 모두 '~지금'으로 보여 줬다
+    expect(productionYears(b787, 2041)).toMatchObject({ years: `2014~${b787.end}`, left: `${b787.end - 2041}년 남음` });
+    expect(productionYears(b787, 2030).left).toBeNull();
+    expect(productionYears(b787, b787.end).left).toBe('올해까지');
+    expect(endingSoon(b787, b787.end - 2)).toBe(false);
+    expect(endingSoon(b787, b787.end - 1)).toBe(true);
+    expect(endingSoon(b787, b787.end)).toBe(true);
+    // 게임이 끝날 때까지 만드는 기종만 '~지금'이고, 곧 단종이라고 하지 않는다
+    const last = MODELS.find((m) => m.end >= 2100)!;
+    expect(productionYears(last, 2099)).toMatchObject({ years: `${last.intro}~지금`, left: null });
+    expect(endingSoon(last, 2099)).toBe(false);
+    // 옛 기종은 예전처럼 끝난 해를 보여 준다
+    expect(productionYears(MODEL.a320, 2018)).toMatchObject({ years: '1988~2019', left: '1년 남음' });
   });
 });
 

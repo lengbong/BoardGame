@@ -1,5 +1,5 @@
 import './v4.css';
-import { BODY_INFO, launchDiscount, leadTime } from './aircraft';
+import { BODY_INFO, endingSoon, launchDiscount, leadTime, productionYears } from './aircraft';
 import { bizModelOf } from './bizmodel';
 import { AIRPORT_INFO } from './cities';
 import { FREIGHTERS, availableFreighters } from './freighters';
@@ -38,6 +38,7 @@ export function FreighterShop({ state, viewer, canAct, perform }: { state: Airli
           const lead = leadTime(m, year);
           const launch = launchDiscount(m, year);
           const deposit = depositFor(state, viewer, m.id);
+          const made = productionYears(m, year);
           return (
             <li key={m.id} className="al-model-card" data-testid={`al-model-${m.id}`}>
               <div className="al-mc-art">
@@ -52,7 +53,7 @@ export function FreighterShop({ state, viewer, canAct, perform }: { state: Airli
               <div className="al-mc-tags">
                 <span className="al-flag al-flag-blue al-mc-cargo">📦 {m.cargo}톤</span>
                 {launch > 0 && <span className="al-flag al-flag-good">첫 손님 할인 −{Math.round(launch * 100)}%</span>}
-                {m.end <= year + 1 && m.end < 2040 && <span className="al-flag al-flag-warn">곧 단종</span>}
+                {endingSoon(m, year) && <span className="al-flag al-flag-warn">곧 단종</span>}
               </div>
               <SpecBars
                 rows={[
@@ -64,8 +65,9 @@ export function FreighterShop({ state, viewer, canAct, perform }: { state: Airli
                 <li title="이 비행기가 내릴 수 있는 가장 작은 공항">
                   <FleetIcon kind="runway" size={14} /> {AIRPORT_INFO[m.runway].name} 이상
                 </li>
-                <li title="만든 해">
-                  <FleetIcon kind="calendar" size={14} /> {m.intro}~{m.end >= 2040 ? '지금' : m.end}
+                <li title={made.title}>
+                  <FleetIcon kind="calendar" size={14} /> {made.years}
+                  {made.left && <small className="al-muted"> · {made.left}</small>}
                 </li>
                 <li title={`주문하면 ${mLabel(state.t + lead)}에 받아요`}>
                   <FleetIcon kind="box" size={14} /> 주문하면 {lead}달 뒤 <small className="al-muted">({mShort(state.t + lead)})</small>

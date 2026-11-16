@@ -1,5 +1,6 @@
 import type { BodyType, ModelDef } from './types';
 import { FREIGHTERS } from './freighters';
+import { LAST_YEAR } from './world';
 
 /**
  * 실제 기종 목록. 좌석(흔한 2등급 배치)·항속 거리·속도·처음 운항한 해·생산을 마친 해는 대략 맞춘 근삿값이고,
@@ -268,6 +269,26 @@ export function availableModels(year: number): ModelDef[] {
 
 export function isAvailable(model: ModelDef, year: number): boolean {
   return model.intro <= year && year <= model.end;
+}
+
+/** 올해나 내년이 마지막으로 주문할 수 있는 해인지 (게임이 끝날 때까지 만드는 기종은 아니다) */
+export function endingSoon(model: Pick<ModelDef, 'end'>, year: number): boolean {
+  return model.end < LAST_YEAR && model.end <= year + 1;
+}
+
+/**
+ * 기종 카드의 ‘만든 해’: '2014~2045'와 단종이 다섯 해 안이면 남은 해 ('4년 남음', '올해까지').
+ * 게임이 끝날 때까지 만드는 기종만 '~지금'. (예전에는 2040년 뒤에 끝나는 기종을 모두 '~지금'으로 보여서
+ * 2041년에도 787-9가 언제 단종되는지 알 수 없었다)
+ */
+export function productionYears(model: Pick<ModelDef, 'intro' | 'end'>, year: number): { years: string; left: string | null; title: string } {
+  if (model.end >= LAST_YEAR) return { years: `${model.intro}~지금`, left: null, title: `${model.intro}년부터 만들어요` };
+  const n = model.end - year;
+  return {
+    years: `${model.intro}~${model.end}`,
+    left: n <= 0 ? '올해까지' : n <= 5 ? `${n}년 남음` : null,
+    title: `${model.intro}년부터 ${model.end}년까지 만들어요 (${model.end}년 12월까지 주문·리스할 수 있어요)`,
+  };
 }
 
 /** 새로 주문하면 인도까지 걸리는 분기 수: 막 나온 인기 기종일수록 오래 기다린다 */

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import './fleet.css';
 import { coColors } from './brand';
-import { BODY_INFO, MODEL, MODELS, availableModels, commonalityMult, isFictional, launchDiscount, leadTime, sizeClass, type SizeClass } from './aircraft';
+import { BODY_INFO, MODEL, MODELS, availableModels, commonalityMult, endingSoon, isFictional, launchDiscount, leadTime, productionYears, sizeClass, type SizeClass } from './aircraft';
 import { EAST_MAKERS } from './politics';
 import { SEAT_SHAPES } from './Art';
 import { AIRPORT_INFO, CITY, dist } from './cities';
@@ -449,7 +449,8 @@ export function FleetView({ state, viewer, canAct, perform, apply, onEditRoute, 
           <ul className="al-cards">
             {models.map((m) => {
               const eff = BEST_FUEL / fuelPerSeat(m);
-              const ending = m.end <= year + 1 && m.end < 2040;
+              const ending = endingSoon(m, year);
+              const made = productionYears(m, year);
               const lead = leadTime(m, year);
               const launch = launchDiscount(m, year);
               const famNow = families.get(m.family) ?? 0;
@@ -493,8 +494,9 @@ export function FleetView({ state, viewer, canAct, perform, apply, onEditRoute, 
                     <li title="이 비행기가 내릴 수 있는 가장 작은 공항">
                       <FleetIcon kind="runway" size={14} /> {AIRPORT_INFO[m.runway].name} 이상
                     </li>
-                    <li title="만든 해">
-                      <FleetIcon kind="calendar" size={14} /> {m.intro}~{m.end >= 2040 ? '지금' : m.end}
+                    <li title={made.title}>
+                      <FleetIcon kind="calendar" size={14} /> {made.years}
+                      {made.left && <small className="al-muted"> · {made.left}</small>}
                     </li>
                     <li title={`주문하면 ${mLabel(state.t + lead)}에 받아요`}>
                       <FleetIcon kind="box" size={14} /> 주문하면 {lead}달 뒤 <small className="al-muted">({mShort(state.t + lead)})</small>

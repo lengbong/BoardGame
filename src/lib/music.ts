@@ -9,7 +9,7 @@ import { getAudioContext, noiseBuffer } from './sound';
  * WebAudio로 실시간 합성하므로 음원 파일이 필요 없다.
  *
  * 새 게임은 자기 폴더에 Song 객체를 만들어 startMusic(song)으로 틀 수 있다. (예: games/sudoku/song.ts)
- * 금관·현악·팀파니가 있는 큰 곡은 orchestra.ts의 Score로 쓰고 같은 startMusic으로 튼다. (예: games/airline/song.ts)
+ * 금관·현악·팀파니가 있는 큰 곡은 orchestra.ts의 Score로 쓰고 같은 startMusic으로 튼다.
  * 짧은 팡파르는 playJingle(score): 배경음악이 잠깐 멈췄다가 팡파르가 끝나면 다음 마디부터 이어진다.
  * 자주 나오는 팡파르는 playJingle(score, { duck: 0.25 }): 배경음악을 멈추지 않고 작게 깔아 둔다.
  */

@@ -6,7 +6,7 @@ import { ACADEMY_COST, STAFF_GROUPS, STAFF_INFO, hireCost, hireTime, staffCap, s
 import { weather } from './calendar';
 import { CITY, REGIONS, airportClass, dist, pairKey } from './cities';
 import { goalProgress } from './goals';
-import { CRISIS_MONTHS, FARE_MAX, FARE_MIN, MAX_ROUTES, applyAction, assignBlocker, bestFreq, buyBlocker, checkBlocker, creditLimit, fmtFine, fmtMoney, idlePlanes, oilTarget, planeById, routeById, usedBlocker } from './rules';
+import { CRISIS_MONTHS, FARE_MAX, FARE_MIN, MAX_HIRE, MAX_ROUTES, applyAction, assignBlocker, bestFreq, buyBlocker, checkBlocker, creditLimit, fmtFine, fmtMoney, idlePlanes, oilTarget, planeById, routeById, usedBlocker } from './rules';
 import { FUEL_TON, TANK_LEVELS, tankBlocker, tankCap, tankOf, tankSpace, tonPrice } from './fuel';
 import { condOf, inCheck, restoredCond } from './condition';
 import { companyCheckCost, facilityBlocker, facilityCost } from './facilities';
@@ -572,7 +572,7 @@ export function advise(state: AirlineState, ci: number, max = 5, already: readon
       if (need[g] <= 0 || supply >= target * 0.92) continue;
       const short = st.have < need[g];
       if (short && (g === 'pilot' || g === 'cabin')) urgent = true;
-      hires.push({ g, n: Math.min(400, Math.ceil(target * 1.05) - supply), fast: short && STAFF_INFO[g].fast < STAFF_INFO[g].hire });
+      hires.push({ g, n: Math.min(MAX_HIRE, Math.ceil(target * 1.05) - supply), fast: short && STAFF_INFO[g].fast < STAFF_INFO[g].hire });
     }
     if (hires.length > 0) {
       const cost = hires.reduce((sum, h) => sum + hireCost(state, c, h.g, h.n, h.fast), 0);

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { fmtFine, fmtMoney, pct } from './format';
-import { academyBlocker, fireBlocker, hireBlocker } from './rules';
+import { MAX_HIRE, academyBlocker, fireBlocker, hireBlocker } from './rules';
 import {
   ACADEMY_COST,
   ACADEMY_UPKEEP,
@@ -168,7 +168,9 @@ function GroupCard({
   const info = STAFF_INFO[group];
   const pipe = staffPipe(me, group);
   const gap = Math.max(0, Math.ceil(need * 1.05) - s.have - pipe);
-  const [n, setN] = useState(Math.max(1, gap));
+  // 처음에는 모자란 만큼 고르되, 한 번에 뽑을 수 있는 만큼까지만 (모자란 사람이 더 많으면 나눠 뽑는다)
+  const [pick, setN] = useState(Math.min(MAX_HIRE, Math.max(1, gap)));
+  const n = Math.min(MAX_HIRE, Math.max(1, pick));
   const [fast, setFast] = useState(false);
   const [fireN, setFireN] = useState(Math.max(1, Math.floor(Math.max(0, s.have - need * 1.1))));
   const months = hireTime(me, group, fast);
@@ -220,7 +222,7 @@ function GroupCard({
         </div>
       )}
       <div className="al-staff-hire">
-        <Stepper value={n} min={1} max={400} step={step} label={`${info.name} 뽑을 사람 수`} format={(v) => `${v}명`} onChange={setN} />
+        <Stepper value={n} min={1} max={MAX_HIRE} step={step} label={`${info.name} 뽑을 사람 수`} format={(v) => `${v}명`} onChange={setN} />
         <span className="al-staff-speed" role="radiogroup" aria-label="뽑는 빠르기">
           <button type="button" role="radio" aria-checked={!fast} className={`al-chip${!fast ? ' al-on' : ''}`} onClick={() => setFast(false)}>
             보통 {hireTime(me, group, false)}달
@@ -235,6 +237,12 @@ function GroupCard({
       </div>
       <p className="al-muted al-tip al-staff-start">
         <StaffIcon kind="calendar" size={15} /> 지금 뽑으면 <b>{mLabel(state.t + months)}</b>부터 일해요
+        {gap > MAX_HIRE && (
+          <>
+            {' '}
+            · 한 번에 {MAX_HIRE}명까지라, 모자란 만큼은 여러 번 나눠 뽑아요
+          </>
+        )}
       </p>
       <MoreInfo>훈련하는 동안은 임금의 절반이 나가요. {GROUP_TIP[group]}</MoreInfo>
       <label className="al-staff-pay">

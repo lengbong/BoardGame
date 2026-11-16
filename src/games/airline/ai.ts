@@ -32,6 +32,7 @@ import {
   historyOn,
   hireBlocker,
   idlePlanes,
+  MAX_HIRE,
   planeById,
   proposeBlocker,
   routeBlocker,
@@ -317,7 +318,7 @@ export class Planner {
       const buffer = { pilot: 0.15, cabin: 0.1, tech: 0.08, ground: 0.05 }[g];
       const target = Math.ceil(need[g] * (1 + buffer) + perPlane * (growth * (lead / 3) + dueSoon) + (g === 'pilot' ? 4 : 0));
       if (supply < target) {
-        const n = Math.min(400, target - supply);
+        const n = Math.min(MAX_HIRE, target - supply);
         const fast = st.have < need[g];
         if (n >= 1 && !hireBlocker(this.s, this.ci, g, n, fast) && c.cash - hireCost(this.s, c, g, n, fast) > 20) this.act({ type: 'hire', group: g, n, fast });
       } else if (this.normal && this.planning && c.planes.length >= 1 && this.s.t - this.s.startT >= 12 && st.have > target * 1.3 + 4 && st.pipe.length === 0) {

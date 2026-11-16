@@ -928,10 +928,13 @@ export function buildBlocker(state: AirlineState, ci: number, city: string, kind
   return null;
 }
 
+/** 한 번에 뽑을 수 있는 사람 수 */
+export const MAX_HIRE = 400;
+
 export function hireBlocker(state: AirlineState, ci: number, group: StaffGroup, n: number, fast: boolean): string | null {
   const c = state.companies[ci];
   if (!STAFF_GROUPS.includes(group)) return '없는 직원 그룹이에요';
-  if (!Number.isInteger(n) || n < 1 || n > 400) return '1~400명까지 뽑을 수 있어요';
+  if (!Number.isInteger(n) || n < 1 || n > MAX_HIRE) return `1~${MAX_HIRE}명까지 뽑을 수 있어요`;
   const cost = hireCost(state, c, group, n, fast);
   if (c.cash < cost) return `돈이 모자라요 (${fmtFine(cost)} 필요)`;
   return null;

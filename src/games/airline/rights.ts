@@ -478,6 +478,29 @@ export function myPairs(state: AirlineState, ci: number): RightsInfo[] {
   return [...keys].map((k) => rightsInfo(state, ci, k)).sort((x, y) => Number(Number.isFinite(y.allow)) - Number(Number.isFinite(x.allow)) || x.left - y.left || x.label.localeCompare(y.label, 'ko'));
 }
 
+/** 재무 화면 운수권 카드에 처음부터 보이는 줄 수 (다 쓴 곳·신청 중인 곳은 이보다 많아도 모두 보인다) */
+export const RIGHTS_SHOWN = 6;
+
+/**
+ * 운수권 카드 목록을 나눈다: 다 쓴 곳·신청 중인 곳은 늘 보이고, 나머지는 빠듯한 차례로 RIGHTS_SHOWN줄까지 채운다.
+ * 넘치는 곳은 '더 보기'로 접어 둔다. 접을 곳이 두 곳 이하면 단추가 줄만큼 자리를 먹으니 모두 보인다.
+ * 줄 차례는 그대로 둔다 (myPairs가 빠듯한 차례로 늘어놓는다).
+ */
+export function splitRightsList<T extends Pick<RightsInfo, 'left' | 'pending'>>(list: T[], shown = RIGHTS_SHOWN): { top: T[]; rest: T[] } {
+  const must = (x: T) => x.left <= 0 || x.pending !== null;
+  let room = Math.max(0, shown - list.filter(must).length);
+  const top: T[] = [];
+  const rest: T[] = [];
+  for (const x of list) {
+    if (must(x)) top.push(x);
+    else if (room > 0) {
+      top.push(x);
+      room--;
+    } else rest.push(x);
+  }
+  return rest.length <= 2 ? { top: list, rest: [] } : { top, rest };
+}
+
 /** 두 도시 사이에 운수권으로 더 띄울 수 있는 주간 왕복 (제한 없으면 Infinity). 컴퓨터가 노선 후보를 고를 때 */
 export function rightsLeftFor(state: AirlineState, ci: number, a: string, b: string): number {
   if (rightsMode(state) === 'off') return Infinity;

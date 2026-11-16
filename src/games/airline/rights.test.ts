@@ -16,6 +16,7 @@ import {
   rightsInfo,
   rightsInfoFor,
   rightsMode,
+  splitRightsList,
   tierOf,
 } from './rights';
 import { actor, applyAction, assignBlocker, bestFreq, createGame, routeBlocker } from './rules';
@@ -412,4 +413,33 @@ describe('컴퓨터와 운수권', () => {
     expect(isValidState(clone(s))).toBe(true);
     expect(worst).toBeLessThan(600);
   }, 60000);
+});
+
+describe('운수권 카드 목록 접기', () => {
+  const row = (name: string, left: number, pending = false) => ({ name, left, pending: pending ? { key: name, add: 14, due: 0, fee: 10 } : null });
+  const names = (xs: { name: string }[]) => xs.map((x) => x.name);
+
+  it('다 쓴 곳·신청 중인 곳은 여섯 줄을 넘어도 모두 보이고, 넉넉한 곳만 접힌다', () => {
+    const list = [
+      ...Array.from({ length: 7 }, (_, i) => row(`다씀${i}`, 0)),
+      row('신청', 9, true),
+      ...Array.from({ length: 5 }, (_, i) => row(`넉넉${i}`, 5 + i)),
+    ];
+    const { top, rest } = splitRightsList(list);
+    expect(names(top)).toEqual([...Array.from({ length: 7 }, (_, i) => `다씀${i}`), '신청']);
+    expect(names(rest)).toEqual(['넉넉0', '넉넉1', '넉넉2', '넉넉3', '넉넉4']);
+  });
+
+  it('급한 곳이 적으면 빠듯한 차례로 여섯 줄까지 채우고, 신청 중인 곳은 뒤에 있어도 보인다', () => {
+    const list = [row('a', 0), row('b', 1), row('c', 2), row('d', 3), row('e', 4), row('f', 5), row('g', 6), row('h', 7), row('i', 8, true), row('j', 9)];
+    const { top, rest } = splitRightsList(list);
+    expect(names(top)).toEqual(['a', 'b', 'c', 'd', 'e', 'i']);
+    expect(names(rest)).toEqual(['f', 'g', 'h', 'j']);
+  });
+
+  it('접을 곳이 두 곳 이하면 모두 보인다', () => {
+    const list = Array.from({ length: 8 }, (_, i) => row(`x${i}`, i + 1));
+    expect(splitRightsList(list)).toEqual({ top: list, rest: [] });
+    expect(splitRightsList(list.slice(0, 3))).toEqual({ top: list.slice(0, 3), rest: [] });
+  });
 });

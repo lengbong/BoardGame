@@ -1,3 +1,4 @@
+import { useId, useState } from 'react';
 import './rights.css';
 import { MoreInfo } from './StaffArt';
 import {
@@ -16,6 +17,7 @@ import {
   rightsInfoFor,
   money,
   rightsMode,
+  splitRightsList,
   type RightsInfo,
 } from './rights';
 import { mLabel, yearOf } from './time';
@@ -108,8 +110,39 @@ function eraText(state: AirlineState): string {
   return `${RIGHTS_TIERS[2].name}을 맺은 두 나라 사이는 횟수 제한이 없어요${year >= EUROPE_OPEN ? ' (유럽 나라끼리도)' : ''}. 아직 맺지 않은 나라는 ${RIGHTS_TIERS[1].name} 그대로예요.`;
 }
 
-/** 재무 화면의 운수권 카드: 우리가 나는 두 나라마다 남은 주간 횟수와 신청 */
+/** 운수권 카드의 한 줄: 두 나라 · 남은 횟수 막대 · 신청 버튼(또는 신청 중) */
+function RightsRow({ state, viewer, info, canAct, perform }: { state: AirlineState; viewer: number; info: RightsInfo; canAct: boolean; perform: (a: AirlineAction) => void }) {
+  const why = applyRightsBlocker(state, viewer, info.key);
+  const tight = info.left <= 0;
+  return (
+    <li className={tight ? 'al-rt-tight' : ''}>
+      <span className="al-rt-name">
+        <b>{info.label}</b>
+        <small className="al-muted">
+          {RIGHTS_TIERS[info.tier].icon} {RIGHTS_TIERS[info.tier].name}
+          {info.extra > 0 ? ` · 더 받은 주 ${info.extra}회` : ''}
+        </small>
+      </span>
+      <span className="al-rt-use">
+        {info.allow > 0 && <Meter value={info.used / info.allow} tone={tight ? 'bad' : info.left <= 3 ? 'warn' : 'blue'} label={`운수권 ${info.used}/${info.allow}회`} />}
+        <small className={tight ? 'al-neg' : ''}>{info.allow > 0 ? `${info.used}/${info.allow}회` : leftText(info)}</small>
+      </span>
+      {info.pending ? (
+        <small className="al-muted">⏳ 주 {info.pending.add}회 신청 중 · {mLabel(info.pending.due)}</small>
+      ) : (
+        <ActButton small blocker={canAct ? why : notMine} quiet onClick={() => perform({ type: 'applyRights', key: info.key })} title={why ?? applyTitle(state, viewer, info)}>
+          {applyLabel(state)}
+        </ActButton>
+      )}
+    </li>
+  );
+}
+
+/** 재무 화면의 운수권 카드: 우리가 나는 두 나라마다 남은 주간 횟수와 신청.
+ *  다 쓴 곳·신청 중인 곳과 빠듯한 몇 곳만 보이고, 넉넉한 나머지는 '더 보기'로 접어 둔다 (노선이 많으면 카드가 끝없이 길어져서) */
 export function RightsCard({ state, viewer, canAct, perform }: { state: AirlineState; viewer: number; canAct: boolean; perform: (a: AirlineAction) => void }) {
+  const [showAll, setShowAll] = useState(false);
+  const listId = useId();
   const mode = rightsMode(state);
   if (mode === 'off') {
     return (
@@ -124,6 +157,8 @@ export function RightsCard({ state, viewer, canAct, perform }: { state: AirlineS
   const pairs = myPairs(state, viewer);
   const limited = pairs.filter((x) => Number.isFinite(x.allow));
   const free = pairs.filter((x) => !Number.isFinite(x.allow));
+  const { top, rest } = splitRightsList(limited);
+  const row = (info: RightsInfo) => <RightsRow key={info.key} state={state} viewer={viewer} info={info} canAct={canAct} perform={perform} />;
   return (
     <section className="al-card al-rights" data-testid="al-rights">
       <h4 className="al-fin-title">
@@ -133,34 +168,17 @@ export function RightsCard({ state, viewer, canAct, perform }: { state: AirlineS
       {limited.length === 0 ? (
         <p className="al-muted">{pairs.length === 0 ? '아직 나라와 나라를 잇는 노선이 없어요.' : '지금 나는 국제선은 모두 횟수 제한 없이 날아요.'}</p>
       ) : (
-        <ul className="al-rt-list">
-          {limited.map((info) => {
-            const why = applyRightsBlocker(state, viewer, info.key);
-            const tight = info.left <= 0;
-            return (
-              <li key={info.key} className={tight ? 'al-rt-tight' : ''}>
-                <span className="al-rt-name">
-                  <b>{info.label}</b>
-                  <small className="al-muted">
-                    {RIGHTS_TIERS[info.tier].icon} {RIGHTS_TIERS[info.tier].name}
-                    {info.extra > 0 ? ` · 더 받은 주 ${info.extra}회` : ''}
-                  </small>
-                </span>
-                <span className="al-rt-use">
-                  {info.allow > 0 && <Meter value={info.used / info.allow} tone={tight ? 'bad' : info.left <= 3 ? 'warn' : 'blue'} label={`운수권 ${info.used}/${info.allow}회`} />}
-                  <small className={tight ? 'al-neg' : ''}>{info.allow > 0 ? `${info.used}/${info.allow}회` : leftText(info)}</small>
-                </span>
-                {info.pending ? (
-                  <small className="al-muted">⏳ 주 {info.pending.add}회 신청 중 · {mLabel(info.pending.due)}</small>
-                ) : (
-                  <ActButton small blocker={canAct ? why : notMine} quiet onClick={() => perform({ type: 'applyRights', key: info.key })} title={why ?? applyTitle(state, viewer, info)}>
-                    {applyLabel(state)}
-                  </ActButton>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          {/* 펼쳐도 보이던 줄은 제자리에 두고 나머지를 밑에 붙인다 */}
+          <ul className="al-rt-list" id={listId}>
+            {(showAll ? [...top, ...rest] : top).map(row)}
+          </ul>
+          {rest.length > 0 && (
+            <button type="button" className="al-more-btn al-rt-more" aria-expanded={showAll} aria-controls={listId} onClick={() => setShowAll(!showAll)} data-testid="al-rights-more">
+              {showAll ? '▴ 접기' : `▾ 나머지 ${rest.length}곳 더 보기 · 모두 주 ${Math.min(...rest.map((x) => x.left))}회 이상 남음`}
+            </button>
+          )}
+        </>
       )}
       {free.length > 0 && (
         <p className="al-rt-free">

@@ -48,6 +48,10 @@
 .al-rt-tight .al-rt-name b {
   color: var(--al-bad);
 }
+.al-rt-more {
+  margin-top: 4px;
+  padding-left: 6px;
+}
 .al-rt-free {
   display: flex;
   flex-wrap: wrap;

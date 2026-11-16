@@ -511,7 +511,7 @@ export function advise(state: AirlineState, ci: number, max = 5, already: readon
         key: `swaproute-${cand.a}-${cand.b}`,
         icon: '🔀',
         title: `노선 바꾸기: ${routeName(c, worst.id)} → ${cityName(cand.a)}–${cityName(cand.b)}`,
-        detail: `노선은 ${MAX_ROUTES}개까지예요. 지난달 ${fmtMoney(worst.stats?.profit ?? 0)}를 번 ${routeName(c, worst.id)}를 닫고 ${cityName(cand.a)}–${cityName(cand.b)}를 열면 달 이익 약 ${fmtMoney(cand.profit)} 어림${freed ? ` (그 노선의 ${MODEL[freed.model].name}를 옮겨요)` : ''}.`,
+        detail: `노선은 ${MAX_ROUTES}개까지예요. 지난달 ${fmtFine(worst.stats?.profit ?? 0)}을 번 ${routeName(c, worst.id)}를 닫고 ${cityName(cand.a)}–${cityName(cand.b)}를 열면 달 이익 약 ${fmtMoney(cand.profit)} 어림${freed ? ` (그 노선의 ${MODEL[freed.model].name}를 옮겨요)` : ''}.`,
         gain: cand.profit - (worst.stats?.profit ?? 0),
         label: '노선 바꾸기',
         apply: (s2) => {

@@ -674,7 +674,8 @@ export function depositFor(state: AirlineState, ci: number, modelId: string): nu
 // ------------------------------------------------------------------ 할 수 있는지 (못 하면 이유)
 
 export const fmtMoney = (v: number): string => {
-  const r = Math.round(v);
+  // 아주 작은 손해는 반올림하면 −0이 되어 '-0억'으로 보였다 (|| 0으로 −0을 0으로)
+  const r = Math.round(v) || 0;
   if (Math.abs(r) >= 10000) return `${(r / 10000).toFixed(Math.abs(r) >= 100000 ? 0 : 1).replace(/\.0$/, '')}조`;
   return `${r.toLocaleString('ko-KR')}억`;
 };
@@ -682,8 +683,8 @@ export const fmtMoney = (v: number): string => {
 /** 작은 돈까지 읽기 좋게: '1,040만 원', '2.4억', '120억' */
 export function fmtFine(v: number): string {
   const a = Math.abs(v);
-  if (a < 1) return `${Math.round(v * 10000).toLocaleString('ko-KR')}만 원`;
-  if (a < 10) return `${(Math.round(v * 10) / 10).toLocaleString('ko-KR')}억`;
+  if (a < 1) return `${(Math.round(v * 10000) || 0).toLocaleString('ko-KR')}만 원`;
+  if (a < 10) return `${(Math.round(v * 10) / 10 || 0).toLocaleString('ko-KR')}억`;
   return fmtMoney(v);
 }
 

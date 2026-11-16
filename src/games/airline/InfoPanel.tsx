@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { MODEL } from './aircraft';
-import { advise, applyAdvice, applyAdviceAll, batchable, topAdvice } from './advisor';
+import { advise, applyAdvice, applyAdviceAll, batchable, topAdvice, type Advice } from './advisor';
 import { BUSINESS_INFO, BUSINESS_KINDS } from './business';
 import { FacilityRow } from './FacilityCard';
 import { allianceOf, alliesOf } from './alliances';
@@ -527,6 +527,20 @@ const ADVICE_SHOW = 5;
 const ADVICE_MAX = 10;
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
 
+/** 이번 달에 한 경영 비서 권유: 그 자리에 '✓ 했어요'로 남기고, 다음 달 숫자가 나올 때까지 다시 권하지 않는다 */
+interface DoneTip {
+  key: string;
+  icon: string;
+  title: string;
+  detail: string;
+  /** 할 때 목록에서 몇 번째였는지 (그 자리에 남긴다) */
+  at: number;
+}
+
+/** 한 권유 기억 (탭을 옮겨 다시 그려도 남게 모듈에 둔다). 판·달·회사가 바뀌면 새로 */
+let doneMemo: { id: string; tips: DoneTip[] } | null = null;
+const NO_DONE: DoneTip[] = [];
+
 function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, onAuto, onSay }: Common) {
   // 적용이 안 된 권유와 그 까닭 (상태가 바뀌면 사라진다)
   const [fail, setFail] = useState<{ state: AirlineState; key: string; why: string } | null>(null);
@@ -538,9 +552,25 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
   // 한꺼번에 한 결과 (그 결과 상태일 때만 보인다)
   const [batch, setBatch] = useState<{ state: AirlineState; done: number; failed: { title: string; why: string }[] } | null>(null);
   const me = state.companies[viewer];
-  const all = useMemo(() => (canAct ? advise(state, viewer, ADVICE_MAX) : []), [state, viewer, canAct]);
-  const tips = useMemo(() => (more ? all : topAdvice(all, ADVICE_SHOW)), [all, more]);
+  const [, redraw] = useState(0);
+  const doneId = `${state.startT}:${state.t}:${viewer}:${me.name}`;
+  const done = doneMemo?.id === doneId ? doneMemo.tips : NO_DONE;
+  const all = useMemo(() => (canAct ? advise(state, viewer, ADVICE_MAX, done) : []), [state, viewer, canAct, done]);
+  // 한 만큼 새 권유 자리는 줄이되 둘은 남긴다 (한 줄이 쌓여 목록이 끝없이 길어지지 않게)
+  const tips = useMemo(() => (more ? all : topAdvice(all, Math.max(2, ADVICE_SHOW - done.length))), [all, more, done]);
   const hidden = all.length - tips.length;
+  // 한 줄은 할 때 자리에 끼워 넣는다
+  const rows = useMemo(() => {
+    const list: ({ done: false; t: Advice } | { done: true; d: DoneTip })[] = tips.map((t) => ({ done: false, t }));
+    if (canAct) for (const d of [...done].sort((x, y) => x.at - y.at)) list.splice(Math.min(d.at, list.length), 0, { done: true, d });
+    return list;
+  }, [tips, done, canAct]);
+  const markDone = (list: readonly Advice[]) => {
+    if (list.length === 0) return;
+    const add = list.map((t) => ({ key: t.key, icon: t.icon, title: t.title, detail: t.detail, at: Math.max(0, rows.findIndex((r) => !r.done && r.t.key === t.key)) }));
+    doneMemo = { id: doneId, tips: [...done, ...add] };
+    redraw((n) => n + 1);
+  };
   // 지금 적용할 수 없는 권유는 미리 해 보고 까닭을 적어 둔다 (버튼을 흐리게)
   const blockedWhy = useMemo(() => {
     const m = new Map<string, string>();
@@ -565,7 +595,10 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
   const runBatch = () => {
     const res = applyAdviceAll(chosen, state);
     const failed = res.failed.map((f) => ({ title: f.advice.title, why: f.why }));
-    if (res.done.length > 0) setState(res.state);
+    if (res.done.length > 0) {
+      markDone(res.done);
+      setState(res.state);
+    }
     setBatch({ state: res.state, done: res.done.length, failed });
     // 한 결과는 목록 위에 보여 준다. 하나도 못 했을 때만 알림으로도 알린다
     if (res.done.length === 0) onSay?.(`경영 비서: 하나도 못 했어요 — ${failed[0]?.why ?? '지금은 할 수 없어요'}`);
@@ -585,7 +618,7 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
         </h3>
         {!canAct ? (
           <p className="al-muted">내 차례가 되면 할 만한 일을 골라 드릴게요. 그동안 지도와 보고서를 둘러보세요.</p>
-        ) : tips.length === 0 ? (
+        ) : rows.length === 0 ? (
           <p className="al-muted">지금은 딱히 고칠 곳이 없어요. 지도에서 도시를 눌러 새 노선을 찾아보거나 차례를 마치세요.</p>
         ) : (
           <>
@@ -625,7 +658,29 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
               </div>
             )}
             <ul className="al-tips al-advice" data-testid="al-advice">
-              {tips.map((t) => {
+              {rows.map((row) => {
+                if (row.done) {
+                  const d = row.d;
+                  const ic = adviceIcon(d.key);
+                  return (
+                    <li key={`done-${d.key}`} className="al-tip-done" data-testid="al-advice-done">
+                      {showBatch && <span className="al-tip-pick" />}
+                      <span className="al-tip-icon al-mp-tip-icon" aria-hidden="true">
+                        {ic ? <AnyIconView icon={ic} size={22} /> : d.icon}
+                      </span>
+                      <div className="al-tip-text">
+                        <b>{d.title}</b>
+                        <small>{d.detail}</small>
+                      </div>
+                      <div className="al-tip-acts">
+                        <span className="al-tip-done-mark" title="이번 달에 했어요. 다음 달 숫자가 나오면 다시 살펴볼게요">
+                          ✓ 했어요
+                        </span>
+                      </div>
+                    </li>
+                  );
+                }
+                const t = row.t;
                 const canPick = showBatch && doable.includes(t);
                 return (
                   <li key={t.key} className={canPick && off.has(t.key) ? 'al-tip-off' : undefined}>
@@ -672,7 +727,10 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
                             if (res.why) {
                               setFail({ state, key: t.key, why: res.why });
                               onSay?.(`${t.label ?? '적용'}: ${res.why}`);
-                            } else setState(res.state);
+                            } else {
+                              markDone([t]);
+                              setState(res.state);
+                            }
                           }}
                           data-testid="al-advice-apply"
                         >

@@ -733,6 +733,22 @@
   display: flex;
   gap: 4px;
 }
+/* 경영 비서: 이번 달에 누른 권유 (다음 달까지 '✓ 했어요'로 남는다) */
+.al-tip-done .al-tip-icon,
+.al-tip-done .al-tip-text {
+  opacity: 0.55;
+}
+.al-tip-done-mark {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--al-good, var(--text-muted));
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 /* 공용 조각 */
 .al-act {

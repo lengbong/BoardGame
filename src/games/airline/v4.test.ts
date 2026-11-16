@@ -462,4 +462,28 @@ describe('경영 비서: 새 비행기 주문 권유', () => {
     }
     expect(checked).toBeGreaterThan(0);
   }, 60000);
+
+  it('이번 달에 누른 권유는 다시 권하지 않는다 (지난달 숫자로 같은 쪽을 또 권하지 않게)', () => {
+    const rng = seededRandom(101);
+    let s = createGame(setup(['ai-normal', 'ai-normal', 'ai-normal'], { era: 2003, years: 10, money: 'normal' }, ['newyork', 'paris', 'tokyo']), rng);
+    let checked = 0;
+    let repeatedWithoutSkip = 0;
+    for (let turn = 0; turn < 120 && s.phase === 'manage'; turn++) {
+      const ci = actor(s);
+      if (turn % 6 === 0) {
+        for (const tip of advise(s, ci, 99).filter((a) => a.apply && a.key !== 'auto' && a.key !== 'choice')) {
+          const r = applyAdvice(tip, s);
+          if (r.why) continue;
+          const same = (a: { key: string; title: string }) => a.key === tip.key || a.title === tip.title;
+          if (advise(r.state, ci, 99).some(same)) repeatedWithoutSkip++;
+          expect(advise(r.state, ci, 99, [tip]).some(same)).toBe(false);
+          checked++;
+        }
+      }
+      s = aiTurn(s, rng);
+    }
+    expect(checked).toBeGreaterThan(20);
+    // 빼지 않으면 같은 권유가 다시 나오는 일이 실제로 있다 (이 시험이 헛돌지 않는지)
+    expect(repeatedWithoutSkip).toBeGreaterThan(0);
+  }, 120000);
 });

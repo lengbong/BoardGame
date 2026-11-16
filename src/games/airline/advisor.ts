@@ -111,8 +111,12 @@ export function applyAdvice(a: Advice, s: AirlineState): { state: AirlineState; 
   return next === s ? { state: s, why: why ?? '지금은 할 수 없어요' } : { state: next, why: null };
 }
 
-/** 이 회사에게 지금 권할 일들 (많아야 5개) */
-export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
+/**
+ * 이 회사에게 지금 권할 일들 (많아야 5개).
+ * already: 이번 달에 이미 누른 권유 (열쇠나 제목이 같으면 빼고 고른다). 비서는 지난달 숫자로 고르니
+ * 누른 뒤에도 같은 쪽으로 한 걸음 더 권하기 쉬워서 (리스기 대신 주문해 두기를 누르면 또 주문, 임금·정비를 또 올리기…), 숫자가 새로 나오는 다음 달까지 기다린다.
+ */
+export function advise(state: AirlineState, ci: number, max = 5, already: readonly Pick<Advice, 'key' | 'title'>[] = []): Advice[] {
   const c = state.companies[ci];
   if (!c || c.out || state.phase !== 'manage') return [];
   const out: Advice[] = [];
@@ -931,9 +935,11 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     out.push({ key: 'noroute', icon: '🗺️', title: '지금은 권할 새 노선이 없어요', detail: noRouteWhy, weight: 20 });
   }
 
-  // 같은 노선 권고가 겹치지 않게 하고 무게 순으로
+  // 같은 노선 권고가 겹치지 않게 하고 무게 순으로 (이번 달에 이미 누른 권유는 뺀다)
   out.sort((x, y) => y.weight - x.weight);
-  const seen = new Set<string>();
+  const seen = new Set<string>(already.map((d) => d.title));
+  const doneKeys = new Set(already.map((d) => d.key));
+  if (doneKeys.size > 0) for (let i = out.length - 1; i >= 0; i--) if (doneKeys.has(out[i].key)) out.splice(i, 1);
   const picked: Advice[] = [];
   for (const a of out) {
     if (seen.has(a.title)) continue;

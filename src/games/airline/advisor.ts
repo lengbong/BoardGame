@@ -13,6 +13,7 @@ import { companyCheckCost, facilityBlocker, facilityCost } from './facilities';
 import { charterBlocker, charterPlaneIds, charterProfit, openCharters } from './charters';
 import { withJosa } from '../../lib/korean';
 import { truceFloorFor } from './relations';
+import { applyRenew, fleetRenewPlan, idleOldPlan, isOld, orderFor, type RenewItem } from './renew';
 import {
   MAINT_COST,
   MAINT_NAMES,
@@ -175,6 +176,8 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   // 나머지 쉬는 비행기는 이미 있는 노선에 보태거나 새 노선을 연다. 리스료·보험료는 쉬어도 나가니
   // 쉴 때보다 1억이라도 더 벌면 띄우고, 띄울 곳이 정말 없을 때만 팔기(돌려주기)를 권한다
   const idlePairs = new Set<string>();
+  // 띄우기·새 노선·팔기를 따로 권한 쉬는 비행기 (아래 ‘쉬는 낡은 비행기 정리’에서 빼고)
+  const idleShown = new Set<number>();
   {
     // 이미 다른 쉬는 비행기에게 권한 노선 (같은 노선을 두 번 권하지 않는다)
     const idleRoutes = new Set<number>();
@@ -200,6 +203,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
       const nrGain = nr ? nr.profit : -Infinity;
       if (ex && !exTaken && exGain >= IDLE_MIN_GAIN && exGain >= nrGain) {
         shown++;
+        idleShown.add(p.id);
         idleRoutes.add(ex.route);
         out.push({
           key: `idle-${p.id}`,
@@ -213,6 +217,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
         });
       } else if (nr && nrGain >= IDLE_MIN_GAIN) {
         shown++;
+        idleShown.add(p.id);
         idlePairs.add(pairKey(nr.a, nr.b));
         const rentNote = p.leased && p.rent > nrGain ? ` 리스기라 돌려주면 리스료(달 ${fmtMoney(p.rent)})가 안 나가니, 그쪽이 더 나을 수도 있어요.` : ' 쉬는 비행기도 리스료·보험료가 나가요.';
         out.push({
@@ -230,6 +235,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
         continue;
       } else {
         shown++;
+        idleShown.add(p.id);
         hopeless.add(kind);
         out.push({
           key: `idle-sell-${p.id}`,
@@ -371,7 +377,8 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   // 운임을 올려 더 벌 수 있는 동안은 운임부터 올리라고 한다
   {
     const small = c.planes
-      .filter((p) => p.legs.length === 1 && fareTopIds.has(p.legs[0].route))
+      // 낡은 비행기는 아래 ‘낡은 비행기 바꾸기’가 맡는다
+      .filter((p) => p.legs.length === 1 && fareTopIds.has(p.legs[0].route) && !isOld(state, p))
       .sort((x, y) => MODEL[x.model].seats - MODEL[y.model].seats)
       .slice(0, 3);
     for (const p of small) {
@@ -394,8 +401,10 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   // 4½. 꽉 찬 노선에 리스로는 남는 게 적으면 새 비행기를 주문해 두기 (리스보다 싸고, 오면 그 노선에 넣는다)
   // 이미 주문해 둔 비행기는 같은 기종을 바라는 꽉 찬 노선을 (남는 게 많은 곳부터) 하나씩 맡는다고 본다.
   // 그래야 주문하고 나서도 같은 노선에 또 주문하라는 권유가 그대로 남아 거듭 사게 되지 않는다
+  // 낡은 비행기를 바꾸려는 주문(replaces)은 자리를 늘리지 않으니 세지 않는다
+  const adding = c.orders.filter((o) => o.replaces === undefined);
   const coming = new Map<string, number>();
-  for (const o of c.orders) coming.set(o.model, (coming.get(o.model) ?? 0) + 1);
+  for (const o of adding) coming.set(o.model, (coming.get(o.model) ?? 0) + 1);
   const uncovered = [...fullRoutes]
     .sort((x, y) => y.gain - x.gain)
     .filter((x) => {
@@ -406,12 +415,12 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   if (uncovered.length > 0) {
     const f = uncovered[0];
     const m = MODEL[f.model];
-    const onWay = c.orders.filter((o) => o.model === m.id).length;
+    const onWay = adding.filter((o) => o.model === m.id).length;
     const rep2 = state.report?.companies[ci];
     const costs = rep2 ? rep2.fuel + rep2.crew + rep2.airport + rep2.service + rep2.sales + rep2.lease + rep2.fleet + rep2.branch + rep2.ads + rep2.interest + rep2.staff : 0;
     const price = orderPrice(state, m, c);
     const lead = leadTime(m, yearOf(state.q));
-    const waiting = c.orders.length;
+    const waiting = adding.length;
     if (!idleOwnOf(c, m.id, keepIds) && lead <= 12 && waiting < 2 + Math.floor(c.planes.length / 8) && c.cash - price > costs * 2 + 150 && !buyBlocker(state, ci, m.id, false)) {
       out.push({
         key: `orderfull-${m.id}-${f.route}`,
@@ -425,20 +434,58 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     }
   }
 
-  // 5. 낡은 비행기
-  const old = c.planes.filter((p) => p.legs.length > 0 && planeAge(state, p) >= 18).sort((x, y) => planeAge(state, y) - planeAge(state, x))[0];
-  if (old) {
-    const rep = replacementFor(state, ci, old.id);
-    if (rep && rep.gain > 2) {
+  // 5. 낡은 비행기: 노선을 나는 낡은 비행기를 비서가 고른 방법(급하면 리스, 돈이 넉넉하면 주문)으로 한꺼번에 바꾼다 (renew.ts)
+  //    비행기가 수백 대여도 굼뜨지 않게 급한 것·나이 많은 것부터 몇 대만 따져 본다 (나머지는 다음 달에, 또는 비행기 화면에서)
+  const renew = fleetRenewPlan(state, ci, { look: 8, max: 6 });
+  const renewIds = new Set(renew.items.map((x) => x.plane));
+  if (renew.items.length > 0) {
+    const its = renew.items;
+    const leases = its.filter((x) => x.how === 'lease');
+    const orders = its.filter((x) => x.how === 'order');
+    const one = its.length === 1 ? its[0] : null;
+    const urgent = its.some((x) => x.urgent);
+    const howText = [leases.length ? `리스로 바로 ${leases.length}대` : '', orders.length ? `새 비행기 주문 ${orders.length}대 (${fmtMoney(-orders.reduce((a, x) => a + x.cash, 0))}, 오면 노선을 넘겨받아요)` : '']
+      .filter(Boolean)
+      .join(' · ');
+    const rest = renew.old - its.length;
+    out.push({
+      key: one ? `renew-${one.plane}` : 'renew-many',
+      icon: '♻️',
+      title: one ? `낡은 ${MODEL[one.from].name} 바꾸기` : `낡은 비행기 ${its.length}대 바꾸기`,
+      detail: one
+        ? `${Math.round(one.age)}년 된 비행기(상태 ${Math.round(one.cond)}%)는 정비비·연료가 많이 들고 손님도 덜 좋아해요. ${
+            one.how === 'lease'
+              ? `${MODEL[one.to!].name} 리스로 바로 바꾸면 달 이익 약 +${fmtMoney(one.gain)}.`
+              : `${MODEL[one.to!].name}을(를) ${fmtMoney(-one.cash)}에 주문해 두면 ${one.lead}달 뒤에 와서 노선을 넘겨받고, 낡은 비행기는 팔아요. 그 뒤 달 이익 약 +${fmtMoney(one.gain)}.`
+          }${rest > 0 ? ` 낡은 비행기가 ${rest}대 더 있어요 (비행기 화면 ‘바꿀 비행기’).` : ''}`
+        : `${its.map((x) => MODEL[x.from].name).filter((n, i, a) => a.indexOf(n) === i).join('·')} 같은 오래된 비행기는 정비비·연료가 많이 들고 손님도 덜 좋아해요. ${howText}. 달 이익 약 +${fmtMoney(renew.gain)}${orders.length ? ' (주문한 비행기는 온 뒤)' : ''}.${rest > 0 ? ` 낡은 비행기가 ${rest}대 더 있어요 (비행기 화면 ‘바꿀 비행기’).` : ''}`,
+      gain: renew.gain,
+      label: one ? (one.how === 'lease' ? '리스기로 바꾸기' : '주문해 바꾸기') : '모두 바꾸기',
+      apply: (s2) => renewApply(s2, ci, its),
+      weight: (urgent ? 260 : 180) + renew.gain,
+    });
+  }
+
+  // 5½. 쉬는 낡은 비행기: 예비기 몫은 남기고 판다 (리스기는 돌려준다). 따로 띄우기·팔기를 권한 비행기와 리스기 바꾸기에 쓸 비행기는 빼고
+  {
+    const skip = new Set<number>([...idleShown, ...keepIds, ...swaps.map((x) => x.own)]);
+    const plan = idleOldPlan(state, ci, skip);
+    // 예비기는 경영 비서가 고른 몫(keep)을 그대로 쓴다: 예비기로 둘 비행기는 idleOldPlan에서도 남는다
+    const its = plan.items.filter((x) => !keepIds.has(x.plane));
+    if (its.length > 0) {
+      const leasedN = its.filter((x) => planeById(c, x.plane)?.leased).length;
+      const names = its.map((x) => MODEL[x.from].name).filter((n, i, a) => a.indexOf(n) === i);
       out.push({
-        key: `renew-${old.id}`,
-        icon: '🔧',
-        title: `낡은 ${MODEL[old.model].name} 바꾸기`,
-        detail: `${Math.round(planeAge(state, old))}년 된 비행기는 정비비·연료가 많이 들고 손님도 덜 좋아해요. ${MODEL[rep.model].name} 리스로 바꾸면 달 이익 약 +${fmtMoney(rep.gain)}. 미리 새 비행기를 주문해 두면 더 싸요.`,
-        gain: rep.gain,
-        label: '리스기로 바꾸기',
-        apply: (s) => replacePlane(s, ci, old.id, rep.model),
-        weight: 180 + rep.gain,
+        key: its.length === 1 ? `idleold-${its[0].plane}` : 'idleold-many',
+        icon: '🧹',
+        title: its.length === 1 ? `쉬는 낡은 ${MODEL[its[0].from].name} ${leasedN ? '돌려주기' : '팔기'}` : `쉬는 낡은 비행기 ${its.length}대 정리`,
+        detail: `노선에 넣지 않은 오래된 ${names.slice(0, 3).join('·')}${names.length > 3 ? ' 등' : ''}${plan.need > 0 ? `이에요. 예비기 몫(${plan.need}대)은 젊은 비행기로 남기고` : '이에요.'} ${
+          leasedN === its.length ? '돌려주면' : leasedN > 0 ? `팔고 리스기 ${leasedN}대는 돌려주면` : '팔면'
+        } 현금 ${fmtMoney(its.reduce((a, x) => a + x.cash, 0))}이 생기고, 리스료·보험료가 달 ${fmtMoney(its.reduce((a, x) => a + x.gain, 0))} 줄어요.`,
+        gain: its.reduce((a, x) => a + x.gain, 0),
+        label: its.length === 1 ? (leasedN ? '돌려주기' : '팔기') : '모두 정리',
+        apply: (s2) => renewApply(s2, ci, its),
+        weight: 280 + its.length,
       });
     }
   }
@@ -511,7 +558,8 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
       const lead = hireTime(c, g, false);
       const perPlane = c.planes.length > 0 ? need[g] / flyingN : { pilot: 11, cabin: 20, tech: 6, ground: 4 }[g];
       const buffer = { pilot: 0.15, cabin: 0.1, tech: 0.08, ground: 0.05 }[g];
-      const dueSoon = c.orders.filter((o) => o.due <= state.t + lead).length;
+      // 낡은 비행기를 바꾸려는 주문은 비행기 수가 그대로라 일손도 그대로다
+      const dueSoon = c.orders.filter((o) => o.replaces === undefined && o.due <= state.t + lead).length;
       const target = Math.ceil(need[g] * (1 + buffer) + perPlane * (lead / 3 + dueSoon) + (g === 'pilot' ? 2 : 0));
       // 조금 모자란 것은 기다렸다가 한꺼번에 (자주 누르지 않게)
       if (need[g] <= 0 || supply >= target * 0.92) continue;
@@ -634,7 +682,7 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     const leased = c.planes.filter((p) => p.leased);
     const rep2 = state.report?.companies[ci];
     const costs = rep2 ? rep2.fuel + rep2.crew + rep2.airport + rep2.service + rep2.sales + rep2.lease + rep2.fleet + rep2.branch + rep2.ads + rep2.interest + rep2.staff : 0;
-    if (leased.length >= 2 && c.orders.length < 3) {
+    if (leased.length >= 2 && c.orders.filter((o) => o.replaces === undefined).length < 3) {
       const count = new Map<string, number>();
       for (const p of leased) count.set(p.model, (count.get(p.model) ?? 0) + 1);
       const top = [...count.entries()].filter(([model]) => !idleOwnOf(c, model, keepIds)).sort((x, y) => y[1] - x[1])[0];
@@ -756,18 +804,46 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     }
   }
 
-  // 8-0. 기체 상태: 아주 닳은 비행기는 점검 시점과 상관없이 점검을 권한다
-  const worn = c.planes.filter((p) => p.legs.length > 0 && !inCheck(p, state.t) && condOf(p) < 28).sort((a, b) => condOf(a) - condOf(b))[0];
-  if (worn && !checkBlocker(state, ci, worn.id)) {
-    out.push({
-      key: `check-${worn.id}`,
-      icon: '🔧',
-      title: `${MODEL[worn.model].name} 기체 상태 ${Math.round(condOf(worn))}%: C점검 보내기`,
-      detail: `많이 닳아 고장·지연·결항이 잦아요. 이번 달 정비고에 넣으면 약 ${fmtMoney(companyCheckCost(c, worn))}이 들고 그달은 쉬지만${spareCover(c) > 0 ? ' (예비기가 대신 날아요)' : ''}, 상태가 ${restoredCond(planeAge(state, worn))}%로 돌아와요.`,
-      label: 'C점검',
-      apply: (s2) => afterAct(s2, ci, { type: 'checkPlane', plane: worn.id, on: true }),
-      weight: 165,
-    });
+  // 8-0. 기체 상태: 아주 닳은 비행기는 점검 시점과 상관없이 점검을 권한다 (여러 대면 한꺼번에, 위에서 바꾸기로 한 비행기는 빼고)
+  {
+    const worn = c.planes
+      .filter((p) => p.legs.length > 0 && !inCheck(p, state.t) && condOf(p) < 28 && !renewIds.has(p.id) && !orderFor(c, p.id) && !checkBlocker(state, ci, p.id))
+      .sort((a, b) => condOf(a) - condOf(b));
+    // 돈이 모자라지 않을 만큼만 (한 번에 열 대까지)
+    const pick: Plane[] = [];
+    let cost = 0;
+    for (const p of worn) {
+      const k = companyCheckCost(c, p);
+      if (pick.length >= 10 || cost + k > c.cash - 30) break;
+      pick.push(p);
+      cost += k;
+    }
+    if (pick.length === 1) {
+      const w = pick[0];
+      out.push({
+        key: `check-${w.id}`,
+        icon: '🔧',
+        title: `${MODEL[w.model].name} 기체 상태 ${Math.round(condOf(w))}%: C점검 보내기`,
+        detail: `많이 닳아 고장·지연·결항이 잦아요. 이번 달 정비고에 넣으면 약 ${fmtMoney(cost)}이 들고 그달은 쉬지만${spareCover(c) > 0 ? ' (예비기가 대신 날아요)' : ''}, 상태가 ${restoredCond(planeAge(state, w))}%로 돌아와요.${isOld(state, w) ? ' 낡은 비행기라 점검해도 덜 돌아오니, 바꾸는 것도 생각해 보세요.' : ''}`,
+        label: 'C점검',
+        apply: (s2) => afterAct(s2, ci, { type: 'checkPlane', plane: w.id, on: true }),
+        weight: 165,
+      });
+    } else if (pick.length > 1) {
+      out.push({
+        key: 'check-many',
+        icon: '🔧',
+        title: `많이 닳은 비행기 ${pick.length}대 C점검 보내기`,
+        detail: `${pick.map((p) => `${MODEL[p.model].name} ${Math.round(condOf(p))}%`).slice(0, 4).join(' · ')}${pick.length > 4 ? ' …' : ''} — 고장·지연·결항이 잦아요. 이번 달 정비고에 넣으면 모두 약 ${fmtMoney(cost)}이 들고 그달은 쉬지만${spareCover(c) > 0 ? ' (예비기가 대신 날아요)' : ''}, 상태가 돌아와요.`,
+        label: '모두 C점검',
+        apply: (s2) => {
+          const pl = planner(s2, ci);
+          for (const p of pick) pl.act({ type: 'checkPlane', plane: p.id, on: true });
+          return pl.s;
+        },
+        weight: 165 + pick.length,
+      });
+    }
   }
 
   // 8-0-1. 공항 시설: 본사 슬롯이 거의 찼으면 전용 터미널, 아니면 자리 잡은 회사에 본사 라운지
@@ -880,6 +956,46 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   return picked;
 }
 
+/**
+ * 목록에서 앞의 n개만 (경영 비서 화면의 ‘더 보기’ 전). 새 노선 권유가 뒤에 있으면 advise와 같이 한 자리를 내준다 (결정할 일은 남긴다)
+ */
+export function topAdvice(list: readonly Advice[], n: number): Advice[] {
+  const head = list.slice(0, n);
+  if (list.length <= n || head.some(isRouteAdvice)) return head;
+  const route = list.slice(n).find(isRouteAdvice);
+  if (!route) return head;
+  for (let i = head.length - 1; i >= 0; i--) {
+    if (head[i].key === 'choice') continue;
+    head.splice(i, 1);
+    break;
+  }
+  return head.length < n ? [...head, route] : head;
+}
+
+/** 한꺼번에 할 수 있는 권유인지 (결정할 일·자동 진행·알려 주기만 하는 권유는 빼고) */
+export function batchable(a: Advice): boolean {
+  return !!a.apply && a.key !== 'choice' && a.key !== 'auto';
+}
+
+/**
+ * 고른 권유를 차례로 해 본다. 앞의 것을 하고 바뀐 상태에서 다음 것을 하니, 돈·리스 한도가 모자라거나 이미 없는 비행기면 그것만 건너뛴다
+ */
+export function applyAdviceAll(list: readonly Advice[], s: AirlineState): { state: AirlineState; done: Advice[]; failed: { advice: Advice; why: string }[] } {
+  let state = s;
+  const done: Advice[] = [];
+  const failed: { advice: Advice; why: string }[] = [];
+  for (const a of list) {
+    if (!batchable(a)) continue;
+    const res = applyAdvice(a, state);
+    if (res.why) failed.push({ advice: a, why: res.why });
+    else {
+      state = res.state;
+      done.push(a);
+    }
+  }
+  return { state, done, failed };
+}
+
 /** 새 노선을 권하지 못한 까닭 (경영 비서 목록에 한 줄로 보여 준다) */
 function whyNoRoute(state: AirlineState, ci: number, cand: Candidate | undefined, opts: { full?: boolean; reserve?: number } = {}): string {
   const c = state.companies[ci];
@@ -954,6 +1070,13 @@ function afterAct(s: AirlineState, ci: number, action: Parameters<Planner['act']
   const pl = planner(s, ci);
   pl.act(action);
   return pl.s;
+}
+
+/** 바꾸기·정리 계획을 차례로 해 본다. 하나도 못 하면 그대로 (첫 까닭을 알린다) */
+function renewApply(s: AirlineState, ci: number, items: readonly RenewItem[]): AirlineState {
+  const res = applyRenew(s, ci, items);
+  if (res.done.length === 0 && res.failed.length > 0) note(res.failed[0].why);
+  return res.done.length > 0 ? res.state : s;
 }
 
 type BestLeg = ReturnType<Planner['bestExistingLeg']>;

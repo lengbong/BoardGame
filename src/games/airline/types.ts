@@ -211,6 +211,8 @@ export interface Order {
   model: string;
   due: number;
   price: number;
+  /** 낡은 비행기를 바꾸려고 한 주문이면 그 비행기: 도착하면 그 노선을 넘겨받고, 낡은 비행기는 판다 (renew.ts) */
+  replaces?: number;
 }
 
 /** 중고 비행기 시장의 매물 */
@@ -907,8 +909,8 @@ export type AirlineAction =
   | { type: 'closeBranch'; city: string }
   | { type: 'openRoute'; a: string; b: string }
   | { type: 'closeRoute'; route: number }
-  /** 새 비행기 주문 (인도까지 1~4분기) */
-  | { type: 'buy'; model: string }
+  /** 새 비행기 주문 (인도까지 1~4분기). replaces: 도착하면 노선을 넘겨받고 팔 낡은 비행기 */
+  | { type: 'buy'; model: string; replaces?: number }
   | { type: 'cancelOrder'; order: number }
   | { type: 'lease'; model: string }
   | { type: 'buyUsed'; listing: number }

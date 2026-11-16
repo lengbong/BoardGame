@@ -2524,6 +2524,71 @@
 .al-advice .al-tip-text b {
   font-size: 14px;
 }
+/* 경영 비서: 골라서 한꺼번에 하기 */
+.al-advice-batch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 2px 0 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 13px;
+}
+.al-advice-batch .btn {
+  margin-left: auto;
+}
+.al-advice-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.al-advice-batch-sum small {
+  color: var(--text-muted);
+}
+.al-advice-all input,
+.al-tip-pick input,
+.al-renew-items input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.al-tip-pick {
+  flex: none;
+  width: 20px;
+  padding-top: 3px;
+}
+.al-tips li.al-tip-off .al-tip-text,
+.al-tips li.al-tip-off .al-tip-icon,
+.al-renew-items li.al-tip-off > span {
+  opacity: 0.5;
+}
+.al-advice-result {
+  margin: 0 0 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--al-good) 45%, transparent);
+  background: color-mix(in srgb, var(--al-good) 10%, transparent);
+  font-size: 13px;
+}
+.al-advice-result.al-has-fail {
+  border-color: color-mix(in srgb, var(--al-warn) 50%, transparent);
+  background: color-mix(in srgb, var(--al-warn) 10%, transparent);
+}
+.al-advice-result ul {
+  margin: 4px 0 0;
+  padding-left: 4px;
+  list-style: none;
+  color: var(--text-muted);
+}
+.al-advice-more {
+  margin-top: 4px;
+}
 .al-goals-mini {
   list-style: none;
   margin: 0 0 8px;

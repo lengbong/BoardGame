@@ -36,12 +36,16 @@ import { bizModelOf } from './bizmodel';
 import { availableFreighters } from './freighters';
 import { MoreInfo } from './StaffArt';
 import { ActButton } from './ui';
+import { FILTER_NAMES, RenewCard, RenewPanel, SORT_NAMES, planeFilter, sortPlanes, type PlaneFilter, type PlaneSort } from './RenewCard';
+import { isOld, isWorn, orderFor } from './renew';
 
 interface FleetViewProps {
   state: AirlineState;
   viewer: number;
   canAct: boolean;
   perform: (a: AirlineAction) => void;
+  /** 여러 행동을 한 번에 (낡은 비행기 바꾸기) */
+  apply: (fn: (s: AirlineState) => AirlineState) => void;
   onEditRoute: (routeId: number) => void;
   onGoRoutes: () => void;
 }
@@ -54,15 +58,19 @@ const BEST_FUEL = Math.min(...MODELS.map(fuelPerSeat));
 
 type Tab = 'hangar' | 'shop' | 'used' | 'day' | 'charter';
 
-export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRoutes }: FleetViewProps) {
+export function FleetView({ state, viewer, canAct, perform, apply, onEditRoute, onGoRoutes }: FleetViewProps) {
   const me = state.companies[viewer];
   const [tab, setTab] = useState<Tab>(me.planes.length === 0 && me.orders.length === 0 ? 'shop' : 'hangar');
   const [size, setSize] = useState<SizeClass | 'all' | 'cargo'>(bizModelOf(me) === 'cargo' ? 'cargo' : 'all');
   const [cabinFor, setCabinFor] = useState<number | null>(null);
+  const [renewFor, setRenewFor] = useState<number | null>(null);
+  const [filter, setFilter] = useState<PlaneFilter>('all');
+  const [sort, setSort] = useState<PlaneSort>('base');
   const year = yearOf(state.q);
   const color = coColors(me);
   const paint = { main: color.main, dark: color.dark, shape: SEAT_SHAPES[me.seat] };
-  const planes = [...me.planes].sort((a, b) => (a.legs.length === 0 ? 0 : 1) - (b.legs.length === 0 ? 0 : 1) || planeHours(me, a) - planeHours(me, b));
+  const planes = sortPlanes(me, me.planes.filter(planeFilter(state, me, filter)), sort);
+  const filterCount = (f: PlaneFilter) => me.planes.filter(planeFilter(state, me, f)).length;
   const models = size === 'cargo' ? [] : availableModels(year).filter((m) => size === 'all' || sizeClass(m) === size);
   const soon = MODELS.filter((m) => m.intro > year && m.intro <= year + 4);
   const delivered = deliveriesThisQuarter(state, viewer);
@@ -207,6 +215,18 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
               </MoreInfo>
             </section>
           )}
+          <RenewCard
+            state={state}
+            viewer={viewer}
+            canAct={canAct}
+            apply={apply}
+            filter={filter}
+            onFilter={(f) => {
+              setFilter(f);
+              if (f === 'old' || f === 'retired') setSort('age');
+              else if (f === 'worn') setSort('cond');
+            }}
+          />
           {me.orders.length > 0 && (
             <section className="al-orders" aria-label="주문 대기">
               <h4 className="al-fin-title">
@@ -228,6 +248,15 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                         <span className="al-fl-meta al-muted">
                           <FinIcon kind="coin" size={14} /> 낸 값 {fmtMoney(o.price)}
                         </span>
+                        {o.replaces !== undefined &&
+                          (() => {
+                            const was = me.planes.find((x) => x.id === o.replaces);
+                            return was ? (
+                              <span className="al-fl-meta al-renew-for" title="오면 이 비행기의 노선을 넘겨받고, 이 비행기는 팔아요">
+                                ♻️ {MODEL[was.model].name}({Math.floor(planeAge(state, was))}년) 대신
+                              </span>
+                            ) : null;
+                          })()}
                         <ActButton
                           small
                           blocker={canAct ? null : notMine}
@@ -253,6 +282,32 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
               해 보세요. 리스는 바로 쓸 수 있고, 주문은 싸지만 몇 달 기다려야 해요.
             </p>
           )}
+          {me.planes.length > 0 && (
+            <div className="al-fl-filter" data-testid="al-fl-filter">
+              <div className="al-sort" role="group" aria-label="거르기">
+                {(Object.keys(FILTER_NAMES) as PlaneFilter[]).map((f) => {
+                  const n = f === 'all' ? me.planes.length : filterCount(f);
+                  if (f !== 'all' && n === 0 && filter !== f) return null;
+                  return (
+                    <button key={f} type="button" className={`al-chip${filter === f ? ' al-on' : ''}`} onClick={() => setFilter(f)} aria-pressed={filter === f} data-testid={`al-fl-filter-${f}`}>
+                      {FILTER_NAMES[f]} {n}
+                    </button>
+                  );
+                })}
+              </div>
+              <label className="al-fl-sort">
+                줄 세우기{' '}
+                <select value={sort} onChange={(e) => setSort(e.target.value as PlaneSort)} data-testid="al-fl-sort">
+                  {(Object.keys(SORT_NAMES) as PlaneSort[]).map((k) => (
+                    <option key={k} value={k}>
+                      {SORT_NAMES[k]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+          {me.planes.length > 0 && planes.length === 0 && <p className="al-muted">이 조건에 맞는 비행기가 없어요.</p>}
           <ul className="al-plane-list">
             {planes.map((p) => {
               const m = MODEL[p.model];
@@ -262,6 +317,8 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
               const use = hours / WEEK_HOURS;
               const spare = WEEK_HOURS - hours;
               const amount = sellAmount(state, p);
+              const renewing = orderFor(me, p.id);
+              const canRenew = p.legs.length > 0 && !renewing && (isOld(state, p) || isWorn(me, p) || old);
               return (
                 <li key={p.id} className={p.legs.length ? '' : 'al-idle'}>
                   <span className="al-pl-art">
@@ -288,6 +345,12 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                         </>
                       )}
                       {old && <span className="al-flag al-flag-warn">단종</span>}
+                      {isOld(state, p) && <span className="al-flag al-flag-warn">낡음</span>}
+                      {renewing && (
+                        <span className="al-flag al-flag-blue" title="오면 이 비행기의 노선을 넘겨받고, 이 비행기는 팔아요">
+                          ♻️ {MODEL[renewing.model].name} 주문 · {mShort(renewing.due)} 도착
+                        </span>
+                      )}
                     </small>
                     <PlaneCondition state={state} c={me} p={p} />
                   </div>
@@ -327,6 +390,17 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                     )}
                   </div>
                   <div className="al-pl-act">
+                    {canRenew && (
+                      <button
+                        type="button"
+                        className={`btn btn-small${isOld(state, p) ? ' btn-primary' : ''}`}
+                        onClick={() => setRenewFor(renewFor === p.id ? null : p.id)}
+                        aria-expanded={renewFor === p.id}
+                        data-testid={`al-renew-open-${p.id}`}
+                      >
+                        ♻️ 바꾸기
+                      </button>
+                    )}
                     <CheckButton state={state} viewer={viewer} p={p} canAct={canAct} perform={perform} />
                     <ActButton
                       small
@@ -342,6 +416,7 @@ export function FleetView({ state, viewer, canAct, perform, onEditRoute, onGoRou
                     </ActButton>
                   </div>
                   {cabinFor === p.id && <CabinEditor state={state} viewer={viewer} plane={p} canAct={canAct} perform={perform} onClose={() => setCabinFor(null)} />}
+                  {renewFor === p.id && canRenew && <RenewPanel state={state} viewer={viewer} plane={p} canAct={canAct} apply={apply} onClose={() => setRenewFor(null)} />}
                 </li>
               );
             })}

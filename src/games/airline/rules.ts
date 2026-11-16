@@ -48,6 +48,7 @@ import {
   legFreq,
   leaseDeposit,
   leaseRent,
+  legHours,
   maxFreq,
   maxFreqFor,
   orderPrice,
@@ -1235,13 +1236,16 @@ export function applyAction(state: AirlineState, action: AirlineAction, rng: Rng
       const m = MODEL[action.model];
       const price = orderPrice(state, m, c0);
       const due = state.t + leadTime(m, yearNow(state));
+      // 낡은 비행기를 바꾸려는 주문: 그 비행기가 있고, 다른 주문이 아직 맡지 않았을 때만 적어 둔다
+      const old = action.replaces !== undefined ? planeById(c0, action.replaces) : undefined;
+      const replaces = old && !c0.orders.some((o) => o.replaces === old.id) ? old.id : undefined;
       const s = edit(state, ci, (c, s) => {
         c.cash -= price;
-        c.orders.push({ id: s.nextId, model: m.id, due, price });
+        c.orders.push(replaces !== undefined ? { id: s.nextId, model: m.id, due, price, replaces } : { id: s.nextId, model: m.id, due, price });
         s.nextId += 1;
         pushEvent(s, { type: 'order', company: ci, model: m.id, due });
       });
-      return addLog(s, seat, `${c0.name}: ${m.name} 주문 (−${fmtMoney(price)}, ${mLabel(due)} 인도)`);
+      return addLog(s, seat, `${c0.name}: ${m.name} 주문 (−${fmtMoney(price)}, ${mLabel(due)} 인도${old && replaces !== undefined ? `, ${MODEL[old.model].name} 대신` : ''})`);
     }
     case 'cancelOrder': {
       const o = c0.orders.find((x) => x.id === action.order);
@@ -2523,6 +2527,35 @@ export function refreshMarket(state: AirlineState, rng: Rng, first = false): Air
 }
 
 /** 다음 달을 연다: 시간·유가·사건·뉴스·인도·결정 사건·목표·순서 */
+/**
+ * 주문해 온 새 비행기(fresh)가 낡은 비행기(old)의 노선을 넘겨받고, 낡은 비행기는 판다 (리스기면 돌려준다). c는 고쳐도 되는 사본.
+ * 새 비행기가 닿지 못하거나 내리지 못하는 노선은 빼고, 한 주 비행시간 안에서 같은 횟수까지만 넘겨받는다
+ * (횟수가 늘지 않으니 슬롯·운수권도 넘지 않는다). 한 노선도 넘겨받지 못하면 그대로 두고 null, 넘겨받으면 판 값.
+ */
+function handOver(s: AirlineState, c: Company, fresh: Plane, old: Plane, year: number): number | null {
+  if (old.legs.length === 0 || fresh.legs.length > 0) return null;
+  const m = MODEL[fresh.model];
+  let hours = 0;
+  const legs: Plane['legs'] = [];
+  for (const l of old.legs) {
+    const r = c.routes.find((x) => x.id === l.route);
+    if (!r) continue;
+    const d = dist(r.a, r.b);
+    if (m.range < d || airportClass(CITY[r.a], year) < m.runway || airportClass(CITY[r.b], year) < m.runway) continue;
+    const per = 2 * legHours(m, d);
+    const f = Math.min(l.freq, Math.floor((WEEK_HOURS - hours) / per));
+    if (f < 1) continue;
+    legs.push({ route: l.route, freq: f });
+    hours += per * f;
+  }
+  if (legs.length === 0) return null;
+  const amount = sellAmount(s, old);
+  fresh.legs = legs;
+  c.cash += amount;
+  c.planes = c.planes.filter((p) => p.id !== old.id);
+  return amount;
+}
+
 function startMonth(state: AirlineState, t: number, rng: Rng): AirlineState {
   const q = qOfM(t);
   let s: AirlineState = { ...state, t, q, effects: state.effects.filter((e) => e.until > t) };
@@ -2641,20 +2674,33 @@ function startMonth(state: AirlineState, t: number, rng: Rng): AirlineState {
       if (ready > 0 || st.pipe.length) c.staff = { ...c.staff, [g]: { ...st, have: st.have + ready, pipe: st.pipe.filter((p) => p.ready > t) } };
     }
     const due = c.orders.filter((o) => o.due <= t);
+    const handed: string[] = [];
     for (const o of due) {
-      c.planes.push({ id: s.nextId, model: o.model, leased: false, rent: 0, deposit: 0, since: t, legs: [], cabin: cabinFor(c, MODEL[o.model]), meal: c.service, got: t, cond: 100 });
+      const fresh: Plane = { id: s.nextId, model: o.model, leased: false, rent: 0, deposit: 0, since: t, legs: [], cabin: cabinFor(c, MODEL[o.model]), meal: c.service, got: t, cond: 100 };
+      c.planes.push(fresh);
       s.nextId += 1;
       c.stats.bought += 1;
       c.acc.bought += 1;
+      // 낡은 비행기를 바꾸려고 한 주문: 새 비행기가 그 노선을 넘겨받고, 낡은 비행기는 판다 (리스기면 돌려준다)
+      const old = o.replaces !== undefined ? c.planes.find((p) => p.id === o.replaces) : undefined;
+      if (old) {
+        const amount = handOver(s, c, fresh, old, year);
+        const was = MODEL[old.model].name;
+        if (amount !== null) handed.push(`새 ${withJosa(MODEL[o.model].name, '이/가')} ${was}의 노선을 넘겨받고, ${withJosa(was, '은/는')} ${old.leased ? '돌려줬어요' : `팔았어요 (+${fmtMoney(amount)})`}`);
+      }
     }
     c.orders = c.orders.filter((o) => o.due > t);
+    if (handed.length && c.kind === 'human') {
+      s = addNews(s, { icon: '♻️', title: `${c.name}: 낡은 비행기 ${handed.length}대 바꿈`, text: `${handed.slice(0, 3).join('. ')}${handed.length > 3 ? ` 외 ${handed.length - 3}대` : ''}.`, tone: 'good', for: [ci] });
+    }
     // 사업 모델 바꾸기가 끝난 달 (bizmodel.ts)
     const changed = settleBizModel(companies, ci, t);
     if (changed) s = addNews(s, changed);
     // 저가항공이 되면 동맹에서 나온다
     if (changed && bizModelOf(c) === 'lcc' && allianceOf(s, ci)) s = leaveAlliance(s, ci);
-    if (due.length && c.kind === 'human') {
-      s = addNews(s, { icon: '📦', title: `${c.name}: 새 비행기 인도`, text: `주문한 ${due.map((o) => MODEL[o.model].name).join(', ')}이 도착했어요. 노선에 넣어 주세요.`, tone: 'good', for: [ci] });
+    const idleNew = due.length - handed.length;
+    if (idleNew > 0 && c.kind === 'human') {
+      s = addNews(s, { icon: '📦', title: `${c.name}: 새 비행기 인도`, text: `주문한 ${due.map((o) => MODEL[o.model].name).join(', ')}이 도착했어요. ${handed.length ? '쉬는 새 비행기는 ' : ''}노선에 넣어 주세요.`, tone: 'good', for: [ci] });
     }
     if (monthOf(t) === 1) {
       c.acc = freshAcc(s, ci, year, c.acc.pax);

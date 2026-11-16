@@ -138,7 +138,7 @@ function isValidCompany(c: unknown, nextId: number): c is Company {
     if (p.cond !== undefined && !(isNum(p.cond) && p.cond >= 0 && p.cond <= 100)) return false;
     if (p.check !== undefined && !isInt(p.check)) return false;
   }
-  if (!Array.isArray(k.orders) || !k.orders.every((o) => isObj(o) && isInt(o.id) && o.id < nextId && typeof o.model === 'string' && !!MODEL[o.model] && isInt(o.due) && isNum(o.price))) return false;
+  if (!Array.isArray(k.orders) || !k.orders.every((o) => isObj(o) && isInt(o.id) && o.id < nextId && typeof o.model === 'string' && !!MODEL[o.model] && isInt(o.due) && isNum(o.price) && (o.replaces === undefined || isInt(o.replaces)))) return false;
   if (!Array.isArray(k.mods) || !k.mods.every((m) => isObj(m) && isInt(m.id) && MOD_KINDS.includes(m.kind) && isNum(m.value) && isInt(m.until) && typeof m.label === 'string')) return false;
   if (k.choice !== null && !isValidChoice(k.choice)) return false;
   if (!isInt(k.nextChoiceT) || !isInt(k.lastProposal) || !isInt(k.taken)) return false;

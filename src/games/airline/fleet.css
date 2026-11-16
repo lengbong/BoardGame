@@ -349,3 +349,226 @@
 .al-fleet .al-pl-act .btn {
   white-space: nowrap;
 }
+
+/* 바꿀 비행기 (RenewCard) */
+.al-fleet .al-renew {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.al-renew-stats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.al-renew-stat {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.al-renew-stat:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.al-renew-stat small {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.al-renew-stat b {
+  font-size: 17px;
+}
+.al-renew-stat.al-warn b {
+  color: var(--al-warn);
+}
+.al-renew-stat.al-bad b {
+  color: var(--al-bad);
+}
+.al-renew-stat.al-on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.al-renew-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.al-renew-acts small {
+  flex: 1 1 260px;
+  font-size: 12px;
+}
+.al-renew-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+}
+.al-renew-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.al-renew-items li {
+  display: grid;
+  grid-template-columns: auto 92px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-bottom: 1px dashed var(--border);
+  font-size: 13px;
+}
+.al-renew-items li.al-renew-group {
+  display: block;
+  padding: 6px 6px 2px;
+  border-bottom: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.al-renew-how {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 6px;
+  text-align: center;
+  white-space: nowrap;
+}
+.al-how-lease {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+.al-how-order {
+  background: color-mix(in srgb, var(--al-blue) 18%, transparent);
+  color: var(--al-blue);
+}
+.al-how-sell {
+  background: color-mix(in srgb, var(--al-warn) 18%, transparent);
+  color: var(--al-warn);
+}
+.al-renew-what {
+  min-width: 0;
+}
+.al-renew-num {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  white-space: nowrap;
+}
+.al-renew-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  font-size: 13px;
+}
+.al-renew-note {
+  font-size: 12px;
+}
+.al-renew-for {
+  color: var(--al-blue);
+}
+.al-renew-opts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.al-renew-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+}
+.al-renew-opt.al-on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.al-renew-opt-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.al-renew-opt-head .al-flag {
+  margin-left: 2px;
+}
+/* 비행기 목록 거르기·줄 세우기 */
+.al-fl-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin: 4px 0 6px;
+}
+.al-fl-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.al-fl-sort select {
+  padding: 3px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+}
+@media (max-width: 1000px) {
+  .al-renew-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .al-renew-opts {
+    grid-template-columns: 1fr;
+  }
+  .al-renew-items li {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'pick how num'
+      'pick what num';
+    row-gap: 2px;
+  }
+  .al-renew-items li > input {
+    grid-area: pick;
+  }
+  .al-renew-items .al-renew-how {
+    grid-area: how;
+    justify-self: start;
+  }
+  .al-renew-items .al-renew-what {
+    grid-area: what;
+  }
+  .al-renew-items .al-renew-num {
+    grid-area: num;
+  }
+}
+.al-renew-panel .al-cabin-head .al-link {
+  flex: none;
+  white-space: nowrap;
+}

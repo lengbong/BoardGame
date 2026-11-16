@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { MODEL } from './aircraft';
-import { advise, applyAdvice } from './advisor';
+import { advise, applyAdvice, applyAdviceAll, batchable, topAdvice } from './advisor';
 import { BUSINESS_INFO, BUSINESS_KINDS } from './business';
 import { FacilityRow } from './FacilityCard';
 import { allianceOf, alliesOf } from './alliances';
@@ -522,11 +522,25 @@ function RoutePanel({ state, viewer, canAct, onEditRoute, onPlanRoute, onSelect,
 
 // ------------------------------------------------------------------ 아무것도 고르지 않았을 때
 
+/** 경영 비서가 처음에 보여 주는 권유 수 (‘더 보기’를 누르면 ADVICE_MAX까지) */
+const ADVICE_SHOW = 5;
+const ADVICE_MAX = 10;
+const EMPTY_KEYS: ReadonlySet<string> = new Set();
+
 function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, onAuto, onSay }: Common) {
   // 적용이 안 된 권유와 그 까닭 (상태가 바뀌면 사라진다)
   const [fail, setFail] = useState<{ state: AirlineState; key: string; why: string } | null>(null);
+  // 한꺼번에 하기에서 뺀 권유 (처음엔 모두 고른다). 달이 바뀌면 다시 모두 고른다
+  const [offAt, setOffAt] = useState<{ t: number; keys: ReadonlySet<string> }>(() => ({ t: state.t, keys: new Set() }));
+  const off = offAt.t === state.t ? offAt.keys : EMPTY_KEYS;
+  const setOff = (fn: (cur: ReadonlySet<string>) => ReadonlySet<string>) => setOffAt({ t: state.t, keys: fn(off) });
+  const [more, setMore] = useState(false);
+  // 한꺼번에 한 결과 (그 결과 상태일 때만 보인다)
+  const [batch, setBatch] = useState<{ state: AirlineState; done: number; failed: { title: string; why: string }[] } | null>(null);
   const me = state.companies[viewer];
-  const tips = useMemo(() => (canAct ? advise(state, viewer) : []), [state, viewer, canAct]);
+  const all = useMemo(() => (canAct ? advise(state, viewer, ADVICE_MAX) : []), [state, viewer, canAct]);
+  const tips = useMemo(() => (more ? all : topAdvice(all, ADVICE_SHOW)), [all, more]);
+  const hidden = all.length - tips.length;
   // 지금 적용할 수 없는 권유는 미리 해 보고 까닭을 적어 둔다 (버튼을 흐리게)
   const blockedWhy = useMemo(() => {
     const m = new Map<string, string>();
@@ -537,6 +551,25 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
     }
     return m;
   }, [tips, state]);
+  const doable = tips.filter((t) => batchable(t) && !blockedWhy.has(t.key));
+  const chosen = doable.filter((t) => !off.has(t.key));
+  const chosenGain = chosen.reduce((sum, t) => sum + Math.max(0, t.gain ?? 0), 0);
+  const showBatch = doable.length >= 2;
+  const toggle = (key: string) =>
+    setOff((cur) => {
+      const next = new Set(cur);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  const runBatch = () => {
+    const res = applyAdviceAll(chosen, state);
+    const failed = res.failed.map((f) => ({ title: f.advice.title, why: f.why }));
+    if (res.done.length > 0) setState(res.state);
+    setBatch({ state: res.state, done: res.done.length, failed });
+    // 한 결과는 목록 위에 보여 준다. 하나도 못 했을 때만 알림으로도 알린다
+    if (res.done.length === 0) onSay?.(`경영 비서: 하나도 못 했어요 — ${failed[0]?.why ?? '지금은 할 수 없어요'}`);
+  };
   const flying = me.planes.filter((p) => p.legs.length > 0);
   const use = flying.length ? flying.reduce((s, p) => s + planeHours(me, p), 0) / (flying.length * WEEK_HOURS) : 0;
   const first = state.q - state.startQ < 4;
@@ -555,58 +588,108 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
         ) : tips.length === 0 ? (
           <p className="al-muted">지금은 딱히 고칠 곳이 없어요. 지도에서 도시를 눌러 새 노선을 찾아보거나 차례를 마치세요.</p>
         ) : (
-          <ul className="al-tips al-advice" data-testid="al-advice">
-            {tips.map((t) => (
-              <li key={t.key}>
-                <span className="al-tip-icon al-mp-tip-icon" aria-hidden="true">
-                  {(() => {
-                    const ic = adviceIcon(t.key);
-                    return ic ? <AnyIconView icon={ic} size={22} /> : t.icon;
-                  })()}
+          <>
+            {showBatch && (
+              <div className="al-advice-batch" data-testid="al-advice-batch">
+                <label className="al-advice-all">
+                  <input
+                    type="checkbox"
+                    checked={chosen.length === doable.length}
+                    ref={(el) => {
+                      if (el) el.indeterminate = chosen.length > 0 && chosen.length < doable.length;
+                    }}
+                    onChange={() => setOff(() => (chosen.length === doable.length ? new Set(doable.map((t) => t.key)) : new Set()))}
+                  />
+                  모두 고르기
+                </label>
+                <span className="al-advice-batch-sum">
+                  {chosen.length}개 고름{chosenGain > 0 && <small> · 달 이익 약 +{fmtMoney(chosenGain)}</small>}
                 </span>
-                <div className="al-tip-text">
-                  <b>{t.title}</b>
-                  <small>{t.detail}</small>
-                  {(() => {
-                    const why = blockedWhy.get(t.key) ?? (fail && fail.state === state && fail.key === t.key ? fail.why : null);
-                    return why ? (
-                      <small className="al-tip-why" role="status" data-testid="al-advice-why">
-                        ⚠ 지금은 할 수 없어요: {why}
-                      </small>
-                    ) : null;
-                  })()}
-                </div>
-                <div className="al-tip-acts">
-                  {t.key === 'choice' ? (
-                    <button type="button" className="btn btn-small btn-primary" onClick={onOpenChoice}>
-                      고르기
-                    </button>
-                  ) : t.key === 'auto' && onAuto ? (
-                    <button type="button" className="btn btn-small" onClick={onAuto}>
-                      {t.label}
-                    </button>
-                  ) : t.apply ? (
-                    <button
-                      type="button"
-                      className="btn btn-small btn-primary"
-                      disabled={blockedWhy.has(t.key)}
-                      title={blockedWhy.get(t.key)}
-                      onClick={() => {
-                        const res = applyAdvice(t, state);
-                        if (res.why) {
-                          setFail({ state, key: t.key, why: res.why });
-                          onSay?.(`${t.label ?? '적용'}: ${res.why}`);
-                        } else setState(res.state);
-                      }}
-                      data-testid="al-advice-apply"
-                    >
-                      {t.label ?? '적용'}
-                    </button>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
+                <button type="button" className="btn btn-small btn-primary" disabled={chosen.length === 0} onClick={runBatch} data-testid="al-advice-batch-run">
+                  고른 {chosen.length}개 한꺼번에 하기
+                </button>
+              </div>
+            )}
+            {batch && batch.state === state && (
+              <div className={`al-advice-result${batch.failed.length ? ' al-has-fail' : ''}`} role="status" data-testid="al-advice-result">
+                <b>{batch.done > 0 ? `✓ ${batch.done}개를 했어요` : '하나도 못 했어요'}</b>
+                {batch.failed.length > 0 && (
+                  <ul>
+                    {batch.failed.map((f) => (
+                      <li key={f.title}>
+                        ⚠ {f.title}: {f.why}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            <ul className="al-tips al-advice" data-testid="al-advice">
+              {tips.map((t) => {
+                const canPick = showBatch && doable.includes(t);
+                return (
+                  <li key={t.key} className={canPick && off.has(t.key) ? 'al-tip-off' : undefined}>
+                    {showBatch && (
+                      <span className="al-tip-pick">
+                        {canPick && <input type="checkbox" checked={!off.has(t.key)} onChange={() => toggle(t.key)} aria-label={`${t.title} 고르기`} data-testid="al-advice-pick" />}
+                      </span>
+                    )}
+                    <span className="al-tip-icon al-mp-tip-icon" aria-hidden="true">
+                      {(() => {
+                        const ic = adviceIcon(t.key);
+                        return ic ? <AnyIconView icon={ic} size={22} /> : t.icon;
+                      })()}
+                    </span>
+                    <div className="al-tip-text">
+                      <b>{t.title}</b>
+                      <small>{t.detail}</small>
+                      {(() => {
+                        const why = blockedWhy.get(t.key) ?? (fail && fail.state === state && fail.key === t.key ? fail.why : null);
+                        return why ? (
+                          <small className="al-tip-why" role="status" data-testid="al-advice-why">
+                            ⚠ 지금은 할 수 없어요: {why}
+                          </small>
+                        ) : null;
+                      })()}
+                    </div>
+                    <div className="al-tip-acts">
+                      {t.key === 'choice' ? (
+                        <button type="button" className="btn btn-small btn-primary" onClick={onOpenChoice}>
+                          고르기
+                        </button>
+                      ) : t.key === 'auto' && onAuto ? (
+                        <button type="button" className="btn btn-small" onClick={onAuto}>
+                          {t.label}
+                        </button>
+                      ) : t.apply ? (
+                        <button
+                          type="button"
+                          className="btn btn-small btn-primary"
+                          disabled={blockedWhy.has(t.key)}
+                          title={blockedWhy.get(t.key)}
+                          onClick={() => {
+                            const res = applyAdvice(t, state);
+                            if (res.why) {
+                              setFail({ state, key: t.key, why: res.why });
+                              onSay?.(`${t.label ?? '적용'}: ${res.why}`);
+                            } else setState(res.state);
+                          }}
+                          data-testid="al-advice-apply"
+                        >
+                          {t.label ?? '적용'}
+                        </button>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            {(hidden > 0 || more) && (
+              <button type="button" className="al-link al-advice-more" onClick={() => setMore(!more)} aria-expanded={more} data-testid="al-advice-more">
+                {more ? '▴ 접기' : `▾ 할 만한 일 ${hidden}개 더 보기`}
+              </button>
+            )}
+          </>
         )}
         {canAct && first && (
           <p className="al-muted al-tip al-mp-note">

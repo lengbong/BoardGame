@@ -601,7 +601,7 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
         />
       </div>
     );
-  else if (tab === 'fleet') content = <FleetView state={game} viewer={viewer} canAct={canAct} perform={perform} onEditRoute={editRoute} onGoRoutes={() => setTab('routes')} />;
+  else if (tab === 'fleet') content = <FleetView state={game} viewer={viewer} canAct={canAct} perform={perform} apply={apply} onEditRoute={editRoute} onGoRoutes={() => setTab('routes')} />;
   else if (tab === 'routes')
     content = (
       <RoutesView

@@ -1,9 +1,8 @@
 import { MODEL } from './aircraft';
-import { replacePlane, replacementFor } from './advisor';
 import { bestTimes } from './ai';
 import { applyFares, recommendFares } from './fares';
 import { applyAction } from './rules';
-import { planeAge } from './simulate';
+import { applyRenew, fleetRenewPlan, type RenewItem } from './renew';
 import { truceFloorFor } from './relations';
 import type { Fares } from './simulate';
 import type { AirlineState } from './types';
@@ -57,28 +56,23 @@ export function applyTimesPlan(state: AirlineState, plan: BulkPlan<{ route: numb
   return s;
 }
 
-/** 낡은 비행기: 열여덟 해가 넘었거나 단종된 지 오래된 비행기 가운데, 새 리스기로 바꾸면 노선 이익이 느는 것 (많아야 max대) */
-export function renewPlan(state: AirlineState, ci: number, max = 6): BulkPlan<{ plane: number; from: string; to: string; gain: number }> {
-  const c = state.companies[ci];
-  const items: { plane: number; from: string; to: string; gain: number }[] = [];
-  const old = c.planes.filter((p) => p.legs.length > 0 && planeAge(state, p) >= 18).sort((a, b) => planeAge(state, b) - planeAge(state, a));
-  for (const p of old) {
-    if (items.length >= max) break;
-    const rep = replacementFor(state, ci, p.id);
-    if (rep && rep.gain > 0.3) items.push({ plane: p.id, from: p.model, to: rep.model, gain: rep.gain });
-  }
-  return { items, gain: items.reduce((s, x) => s + x.gain, 0) };
+/**
+ * 낡은 비행기: 노선을 나는 열여덟 해 넘은 비행기를 경영 비서와 같은 방법으로 바꾼다 (renew.ts).
+ * 급하면 새 리스기로 바로, 돈이 넉넉하면 새 비행기를 주문해 두고 오면 노선을 넘겨받는다 (많아야 max대)
+ */
+export function renewPlan(state: AirlineState, ci: number, max = 6): BulkPlan<RenewItem> {
+  const plan = fleetRenewPlan(state, ci, { look: max * 2, max });
+  return { items: plan.items, gain: plan.gain };
 }
 
-export function applyRenewPlan(state: AirlineState, ci: number, plan: BulkPlan<{ plane: number; to: string }>): AirlineState {
-  let s = state;
-  for (const it of plan.items) s = replacePlane(s, ci, it.plane, it.to);
-  return s;
+export function applyRenewPlan(state: AirlineState, ci: number, plan: BulkPlan<RenewItem>): AirlineState {
+  return applyRenew(state, ci, plan.items).state;
 }
 
 /** 바꿀 비행기 이름 요약 ('747-100 → 777-300 외 2대') */
-export function renewText(plan: BulkPlan<{ from: string; to: string }>): string {
+export function renewText(plan: BulkPlan<RenewItem>): string {
   if (plan.items.length === 0) return '';
   const first = plan.items[0];
-  return `${MODEL[first.from].name} → ${MODEL[first.to].name}${plan.items.length > 1 ? ` 외 ${plan.items.length - 1}대` : ''}`;
+  const orders = plan.items.filter((x) => x.how === 'order').length;
+  return `${MODEL[first.from].name} → ${MODEL[first.to ?? first.from].name}${plan.items.length > 1 ? ` 외 ${plan.items.length - 1}대` : ''}${orders ? `, 주문 ${orders}대는 오면 바꿔요` : ''}`;
 }

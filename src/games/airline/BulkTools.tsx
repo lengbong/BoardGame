@@ -11,7 +11,7 @@ type Kind = 'fares' | 'times' | 'renew';
 const TOOLS: { kind: Kind; icon: string; name: string; what: string }[] = [
   { kind: 'fares', icon: '🏷️', name: '운임 한꺼번에 맞추기', what: '노선마다 일반석·고급 좌석·화물 운임을 이번 달 이익이 가장 큰 값으로' },
   { kind: 'times', icon: '🕘', name: '시간표 한꺼번에 맞추기', what: '노선마다 아침·낮·저녁·밤 나누기를 손님에게 가장 맞게' },
-  { kind: 'renew', icon: '♻️', name: '낡은 비행기 바꾸기', what: '열여덟 해 넘은 비행기를 같은 노선에서 더 버는 새 리스기로 (한 번에 여섯 대까지)' },
+  { kind: 'renew', icon: '♻️', name: '낡은 비행기 바꾸기', what: '열여덟 해 넘은 비행기를 같은 노선에서 더 버는 새 비행기로: 급하면 리스, 돈이 넉넉하면 주문 (한 번에 여섯 대까지)' },
 ];
 
 interface Preview {

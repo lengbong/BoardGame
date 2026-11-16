@@ -400,9 +400,21 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
   }
 
   // 4½. 꽉 찬 노선에 리스로는 남는 게 적으면 새 비행기를 주문해 두기 (리스보다 싸고, 오면 그 노선에 넣는다)
-  if (fullRoutes.length > 0) {
-    const f = fullRoutes.sort((x, y) => y.gain - x.gain)[0];
+  // 이미 주문해 둔 비행기는 같은 기종을 바라는 꽉 찬 노선을 (남는 게 많은 곳부터) 하나씩 맡는다고 본다.
+  // 그래야 주문하고 나서도 같은 노선에 또 주문하라는 권유가 그대로 남아 거듭 사게 되지 않는다
+  const coming = new Map<string, number>();
+  for (const o of c.orders) coming.set(o.model, (coming.get(o.model) ?? 0) + 1);
+  const uncovered = [...fullRoutes]
+    .sort((x, y) => y.gain - x.gain)
+    .filter((x) => {
+      const n = coming.get(x.model) ?? 0;
+      if (n > 0) coming.set(x.model, n - 1);
+      return n === 0;
+    });
+  if (uncovered.length > 0) {
+    const f = uncovered[0];
     const m = MODEL[f.model];
+    const onWay = c.orders.filter((o) => o.model === m.id).length;
     const rep2 = state.report?.companies[ci];
     const costs = rep2 ? rep2.fuel + rep2.crew + rep2.airport + rep2.service + rep2.sales + rep2.lease + rep2.fleet + rep2.branch + rep2.ads + rep2.interest + rep2.staff : 0;
     const price = orderPrice(state, m, c);
@@ -410,10 +422,10 @@ export function advise(state: AirlineState, ci: number, max = 5): Advice[] {
     const waiting = c.orders.length;
     if (!idleOwnOf(c, m.id, keepIds) && lead <= 12 && waiting < 2 + Math.floor(c.planes.length / 8) && c.cash - price > costs * 2 + 150 && !buyBlocker(state, ci, m.id, false)) {
       out.push({
-        key: `orderfull-${m.id}`,
+        key: `orderfull-${m.id}-${f.route}`,
         icon: '🛒',
         title: `${m.name} 주문해서 ${routeName(c, f.route)}에 보태기`,
-        detail: `좌석이 꽉 찬 노선이 ${fullRoutes.length}개예요. 리스로는 남는 게 적지만, ${fmtMoney(price)}에 주문하면 ${lead}달 뒤에 와서 리스료 없이 손님을 더 태워요.${spareNote(keep, m.id)}`,
+        detail: `좌석이 꽉 찬 노선이 ${fullRoutes.length}개예요${onWay > 0 ? ` (주문한 ${m.name} ${onWay}대가 오고 있어요)` : ''}. 리스로는 남는 게 적지만, ${fmtMoney(price)}에 주문하면 ${lead}달 뒤에 와서 리스료 없이 손님을 더 태워요.${spareNote(keep, m.id)}`,
         label: '주문하기',
         apply: (s2) => afterAct(s2, ci, { type: 'buy', model: m.id }),
         weight: 180 + f.gain * 4,

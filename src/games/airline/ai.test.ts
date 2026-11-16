@@ -245,7 +245,8 @@ describe('컴퓨터끼리 끝까지', () => {
     }
     expect(bot / ai).toBeGreaterThan(0.6);
     expect(bot / ai).toBeLessThan(1.6);
-  }, 30000);
+    // 경영 비서를 따르는 회사가 비행기 150대 넘게 키우면 한 판에 20초쯤 걸린다 (30초는 빠듯했다)
+  }, 60000);
 
   it('도전 과제마다 컴퓨터가 도전해도 멈추지 않는다', () => {
     for (const def of CHALLENGES) {

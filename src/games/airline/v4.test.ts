@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { seededRandom } from '../../lib/random';
 import { MODEL } from './aircraft';
-import { advise } from './advisor';
+import { advise, applyAdvice } from './advisor';
 import { aiTurn, planTurn } from './ai';
 import { BIZ_CHANGE_MONTHS, CARGO_NAMES, LCC_NAMES, bizChangeCost, leisureStimulus } from './bizmodel';
 import { cabinStats } from './cabin';
@@ -438,4 +438,28 @@ describe('컴퓨터와 경영 비서', () => {
     }
     expect(pairDemand(s, 'seoul', 'tokyo').biz).toBeGreaterThan(0);
   });
+});
+
+describe('경영 비서: 새 비행기 주문 권유', () => {
+  it('주문하고 나면 같은 노선에 또 주문하라고 권하지 않는다 (오고 있는 비행기가 그 노선을 맡는다)', () => {
+    const rng = seededRandom(7);
+    let s = createGame(setup(['ai-normal', 'ai-normal', 'ai-normal', 'ai-normal'], { era: 1983, years: 20, money: 'normal' }), rng);
+    let checked = 0;
+    for (let turn = 0; turn < 300 && s.phase === 'manage' && checked < 3; turn++) {
+      const ci = actor(s);
+      const tip = advise(s, ci, 99).find((a) => a.key.startsWith('orderfull-'));
+      if (tip) {
+        const next = applyAdvice(tip, s);
+        expect(next.why).toBeNull();
+        expect(next.state.companies[ci].orders.length).toBe(s.companies[ci].orders.length + 1);
+        // 같은 노선(같은 열쇠)을 또 권하지 않는다: 다른 꽉 찬 노선이 남았으면 그 노선을 권한다
+        const again = advise(next.state, ci, 99).filter((a) => a.key.startsWith('orderfull-'));
+        expect(again.map((a) => a.key)).not.toContain(tip.key);
+        expect(again.map((a) => a.title)).not.toContain(tip.title);
+        checked++;
+      }
+      s = aiTurn(s, rng);
+    }
+    expect(checked).toBeGreaterThan(0);
+  }, 60000);
 });

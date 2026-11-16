@@ -450,6 +450,23 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
   );
   const canFocus = game.companies.length > 1;
 
+  // 마우스로 누른 단추: 누른 뒤에도 초점이 남지만, Enter가 그 단추를 또 누르게 하지 않으려고 기억해 둔다 (Tab으로 옮기면 잊는다)
+  const pointerBtn = useRef<Element | null>(null);
+  useEffect(() => {
+    const down = (e: PointerEvent) => {
+      pointerBtn.current = e.target instanceof Element ? e.target.closest('button, [role="button"]') : null;
+    };
+    const tab = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') pointerBtn.current = null;
+    };
+    window.addEventListener('pointerdown', down, true);
+    window.addEventListener('keydown', tab, true);
+    return () => {
+      window.removeEventListener('pointerdown', down, true);
+      window.removeEventListener('keydown', tab, true);
+    };
+  }, []);
+
   // 키보드
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -472,7 +489,10 @@ export function AirlineGame({ setup, initialState, settings, onSettings, onResta
         setTab(TABS[idx].id);
         return;
       }
-      if (e.key === 'Enter' && !onButton) {
+      // 마우스로 누른 단추에 초점이 남았을 뿐이면 Enter는 그 단추를 또 누르지 않고 차례를 마친다
+      // (경영 비서의 '주문하기'를 누른 뒤 Enter로 차례를 마치려다 비행기를 거듭 주문하던 일). 창(대화상자) 안의 단추는 예전처럼
+      const clicked = onButton && t === pointerBtn.current && !t.closest('[role="dialog"]');
+      if (e.key === 'Enter' && (!onButton || clicked)) {
         e.preventDefault();
         endTurn();
       } else if (e.key === 'Escape') {

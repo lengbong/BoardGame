@@ -3,7 +3,7 @@ import { seededRandom } from '../../lib/random';
 import { MODEL } from './aircraft';
 import { aiManage, aiTurn } from './ai';
 import { defaultCabin } from './cabin';
-import { HUMAN_CAP, MAX_HELD, buyCost, buyStakeBlocker, buyoutCost, heldTotal, issueBlocker, mergeBlocker, pricePerPct, stakeOf } from './stocks';
+import { HUMAN_CAP, MAX_HELD, buyCost, buyStakeBlocker, buyoutCost, heldTotal, issueBlocker, mergeBlocker, pricePerPct, shareholders, stakeOf } from './stocks';
 import { actor, applyAction, createGame, runMonth } from './rules';
 import { baseValue, companyValue, marketCap, slotCapacity, slotsUsed, valuationMult } from './simulate';
 import { isValidState } from './storage';
@@ -108,6 +108,26 @@ describe('주식과 인수합병', () => {
     expect(s.companies[0].cash).toBeGreaterThan(cash);
     expect(stakeOf(s, 0, 1)).toBeCloseTo(10, 1);
     expect(issueBlocker(s, 0)).toMatch(/한 해/);
+  });
+
+  it('주주 목록: 몫이 큰 회사부터, 자기 몫은 빼고, 나머지는 창업자·일반 주주', () => {
+    const s = {
+      stakes: [
+        [0, 4.5, 12, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
+      ],
+    };
+    expect(shareholders(s, 0)).toEqual({
+      holders: [
+        { j: 2, pct: 12 },
+        { j: 1, pct: 4.5 },
+      ],
+      founder: 83.5,
+    });
+    expect(shareholders(s, 1)).toEqual({ holders: [], founder: 100 });
+    expect(shareholders({}, 0)).toEqual({ holders: [], founder: 100 });
   });
 
   it('과반을 가진 컴퓨터 회사를 인수하면 노선·비행기·지점·현금·빚을 넘겨받고 그 회사는 빠진다', () => {

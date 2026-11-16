@@ -39,6 +39,15 @@ export function heldTotal(state: Pick<AirlineState, 'stakes'>, i: number): numbe
   return (state.stakes?.[i] ?? []).reduce((s, x, j) => s + (j === i ? 0 : x), 0);
 }
 
+/** 회사 i의 주주 회사들 (몫이 큰 순)과 창업자·일반 주주 몫 (%) */
+export function shareholders(state: Pick<AirlineState, 'stakes'>, i: number): { holders: { j: number; pct: number }[]; founder: number } {
+  const holders = (state.stakes?.[i] ?? [])
+    .map((pct, j) => ({ j, pct }))
+    .filter((h) => h.j !== i && h.pct > 0)
+    .sort((a, b) => b.pct - a.pct || a.j - b.j);
+  return { holders, founder: Math.max(0, Math.round((100 - heldTotal(state, i)) * 10) / 10) };
+}
+
 /** 1%의 지금 값 (억): 많이 사들일수록 비싸진다 */
 export function pricePerPct(state: ValueState, i: number): number {
   return (marketCap(state, i) / 100) * (1 + (0.5 * heldTotal(state, i)) / 100);

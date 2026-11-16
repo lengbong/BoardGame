@@ -468,6 +468,27 @@
 .al-own-rest {
   fill: var(--border);
 }
+/* 조각 사이에 얇은 틈: 비슷한 색의 주주가 붙어 있어도 갈라 보이게 */
+.al-own-part {
+  stroke: var(--surface);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.al-stock-self .al-own-part {
+  stroke: var(--surface-2);
+}
+.al-own-legend {
+  margin: 0 0 4px;
+}
+.al-own-legend .al-coname {
+  color: var(--text);
+}
+.al-own-sw-rest {
+  background: var(--border);
+}
+.al-own-sw-others {
+  background: var(--text-muted);
+}
 .al-own-mark {
   stroke: var(--text);
   stroke-width: 0.8;

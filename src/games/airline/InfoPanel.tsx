@@ -527,18 +527,22 @@ const ADVICE_SHOW = 5;
 const ADVICE_MAX = 10;
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
 
-/** 이번 달에 한 경영 비서 권유: 그 자리에 '✓ 했어요'로 남기고, 다음 달 숫자가 나올 때까지 다시 권하지 않는다 */
+/**
+ * 이번 달에 한 경영 비서 권유: 목록 아래에 '✓ 했어요'로 모아 두고, 다음 달 숫자가 나올 때까지 다시 권하지 않는다.
+ * 그 자리에 남기면 다음 권유가 한 칸씩 아래로 밀려, 거듭 누르려면 마우스를 계속 내려야 했다
+ */
 interface DoneTip {
   key: string;
   icon: string;
   title: string;
   detail: string;
-  /** 할 때 목록에서 몇 번째였는지 (그 자리에 남긴다) */
-  at: number;
 }
 
-/** 한 권유 기억 (탭을 옮겨 다시 그려도 남게 모듈에 둔다). 판·달·회사가 바뀌면 새로 */
-let doneMemo: { id: string; tips: DoneTip[] } | null = null;
+/**
+ * 한 권유 기억 (탭을 옮겨 다시 그려도 남게 모듈에 둔다). 판·달·회사가 바뀌면 새로.
+ * bar: 이번 달에 ‘한꺼번에 하기’ 줄이 보이던 중에 권유를 했는지 (그러면 그달엔 그 줄을 계속 둔다)
+ */
+let doneMemo: { id: string; tips: DoneTip[]; bar: boolean } | null = null;
 const NO_DONE: DoneTip[] = [];
 
 function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, onAuto, onSay }: Common) {
@@ -554,21 +558,19 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
   const me = state.companies[viewer];
   const [, redraw] = useState(0);
   const doneId = `${state.startT}:${state.t}:${viewer}:${me.name}`;
-  const done = doneMemo?.id === doneId ? doneMemo.tips : NO_DONE;
+  const memo = doneMemo?.id === doneId ? doneMemo : null;
+  const done = memo?.tips ?? NO_DONE;
   const all = useMemo(() => (canAct ? advise(state, viewer, ADVICE_MAX, done) : []), [state, viewer, canAct, done]);
   // 한 만큼 새 권유 자리는 줄이되 둘은 남긴다 (한 줄이 쌓여 목록이 끝없이 길어지지 않게)
   const tips = useMemo(() => (more ? all : topAdvice(all, Math.max(2, ADVICE_SHOW - done.length))), [all, more, done]);
   const hidden = all.length - tips.length;
-  // 한 줄은 할 때 자리에 끼워 넣는다
-  const rows = useMemo(() => {
-    const list: ({ done: false; t: Advice } | { done: true; d: DoneTip })[] = tips.map((t) => ({ done: false, t }));
-    if (canAct) for (const d of [...done].sort((x, y) => x.at - y.at)) list.splice(Math.min(d.at, list.length), 0, { done: true, d });
-    return list;
-  }, [tips, done, canAct]);
+  // 한 권유는 남은 권유 아래에 모은다 (방금 한 것이 위). 남은 권유는 위에서부터 그대로 올라오니,
+  // 같은 자리 단추를 거듭 눌러도 다음 권유가 된다
+  const doneRows = useMemo(() => [...done].reverse(), [done]);
   const markDone = (list: readonly Advice[]) => {
     if (list.length === 0) return;
-    const add = list.map((t) => ({ key: t.key, icon: t.icon, title: t.title, detail: t.detail, at: Math.max(0, rows.findIndex((r) => !r.done && r.t.key === t.key)) }));
-    doneMemo = { id: doneId, tips: [...done, ...add] };
+    const add = list.map((t) => ({ key: t.key, icon: t.icon, title: t.title, detail: t.detail }));
+    doneMemo = { id: doneId, tips: [...done, ...add], bar: (memo?.bar ?? false) || showBatch };
     redraw((n) => n + 1);
   };
   // 지금 적용할 수 없는 권유는 미리 해 보고 까닭을 적어 둔다 (버튼을 흐리게)
@@ -584,7 +586,8 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
   const doable = tips.filter((t) => batchable(t) && !blockedWhy.has(t.key));
   const chosen = doable.filter((t) => !off.has(t.key));
   const chosenGain = chosen.reduce((sum, t) => sum + Math.max(0, t.gain ?? 0), 0);
-  const showBatch = doable.length >= 2;
+  // 그달에 한 번 보인 ‘한꺼번에 하기’ 줄은 남은 권유가 하나뿐이어도 둔다: 줄이 사라지면 목록이 위로 올라가 누르던 자리가 바뀐다
+  const showBatch = doable.length >= 2 || (memo?.bar ?? false);
   const toggle = (key: string) =>
     setOff((cur) => {
       const next = new Set(cur);
@@ -618,7 +621,7 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
         </h3>
         {!canAct ? (
           <p className="al-muted">내 차례가 되면 할 만한 일을 골라 드릴게요. 그동안 지도와 보고서를 둘러보세요.</p>
-        ) : rows.length === 0 ? (
+        ) : tips.length === 0 && doneRows.length === 0 ? (
           <p className="al-muted">지금은 딱히 고칠 곳이 없어요. 지도에서 도시를 눌러 새 노선을 찾아보거나 차례를 마치세요.</p>
         ) : (
           <>
@@ -627,7 +630,8 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
                 <label className="al-advice-all">
                   <input
                     type="checkbox"
-                    checked={chosen.length === doable.length}
+                    disabled={doable.length === 0}
+                    checked={doable.length > 0 && chosen.length === doable.length}
                     ref={(el) => {
                       if (el) el.indeterminate = chosen.length > 0 && chosen.length < doable.length;
                     }}
@@ -643,44 +647,9 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
                 </button>
               </div>
             )}
-            {batch && batch.state === state && (
-              <div className={`al-advice-result${batch.failed.length ? ' al-has-fail' : ''}`} role="status" data-testid="al-advice-result">
-                <b>{batch.done > 0 ? `✓ ${batch.done}개를 했어요` : '하나도 못 했어요'}</b>
-                {batch.failed.length > 0 && (
-                  <ul>
-                    {batch.failed.map((f) => (
-                      <li key={f.title}>
-                        ⚠ {f.title}: {f.why}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
+            {tips.length === 0 && <p className="al-muted">이번 달에 권할 일은 다 했어요. 지도에서 도시를 눌러 새 노선을 찾아보거나 차례를 마치세요.</p>}
             <ul className="al-tips al-advice" data-testid="al-advice">
-              {rows.map((row) => {
-                if (row.done) {
-                  const d = row.d;
-                  const ic = adviceIcon(d.key);
-                  return (
-                    <li key={`done-${d.key}`} className="al-tip-done" data-testid="al-advice-done">
-                      {showBatch && <span className="al-tip-pick" />}
-                      <span className="al-tip-icon al-mp-tip-icon" aria-hidden="true">
-                        {ic ? <AnyIconView icon={ic} size={22} /> : d.icon}
-                      </span>
-                      <div className="al-tip-text">
-                        <b>{d.title}</b>
-                        <small>{d.detail}</small>
-                      </div>
-                      <div className="al-tip-acts">
-                        <span className="al-tip-done-mark" title="이번 달에 했어요. 다음 달 숫자가 나오면 다시 살펴볼게요">
-                          ✓ 했어요
-                        </span>
-                      </div>
-                    </li>
-                  );
-                }
-                const t = row.t;
+              {tips.map((t) => {
                 const canPick = showBatch && doable.includes(t);
                 return (
                   <li key={t.key} className={canPick && off.has(t.key) ? 'al-tip-off' : undefined}>
@@ -746,6 +715,50 @@ function Overview({ state, viewer, canAct, setState, onPlanRoute, onOpenChoice, 
               <button type="button" className="al-link al-advice-more" onClick={() => setMore(!more)} aria-expanded={more} data-testid="al-advice-more">
                 {more ? '▴ 접기' : `▾ 할 만한 일 ${hidden}개 더 보기`}
               </button>
+            )}
+            {/* 한꺼번에 한 결과도 아래에 둔다: 위에 두면 다음에 하나만 누를 때 사라지며 목록이 올라간다 */}
+            {batch && batch.state === state && (
+              <div className={`al-advice-result${batch.failed.length ? ' al-has-fail' : ''}`} role="status" data-testid="al-advice-result">
+                <b>{batch.done > 0 ? `✓ ${batch.done}개를 했어요` : '하나도 못 했어요'}</b>
+                {batch.failed.length > 0 && (
+                  <ul>
+                    {batch.failed.map((f) => (
+                      <li key={f.title}>
+                        ⚠ {f.title}: {f.why}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            {doneRows.length > 0 && (
+              <>
+                <p className="al-advice-done-h" data-testid="al-advice-done-h">
+                  이번 달에 한 일 {doneRows.length}개 <small>· 다음 달 숫자가 나오면 다시 살펴볼게요</small>
+                </p>
+                <ul className="al-tips al-advice al-advice-done-list">
+                  {doneRows.map((d) => {
+                    const ic = adviceIcon(d.key);
+                    return (
+                      <li key={`done-${d.key}`} className="al-tip-done" data-testid="al-advice-done">
+                        {showBatch && <span className="al-tip-pick" />}
+                        <span className="al-tip-icon al-mp-tip-icon" aria-hidden="true">
+                          {ic ? <AnyIconView icon={ic} size={22} /> : d.icon}
+                        </span>
+                        <div className="al-tip-text">
+                          <b>{d.title}</b>
+                          <small>{d.detail}</small>
+                        </div>
+                        <div className="al-tip-acts">
+                          <span className="al-tip-done-mark" title="이번 달에 했어요. 다음 달 숫자가 나오면 다시 살펴볼게요">
+                            ✓ 했어요
+                          </span>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
             )}
           </>
         )}
